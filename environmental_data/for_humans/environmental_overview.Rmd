@@ -1,0 +1,58 @@
+---
+title: "GEODES_environmental_data"
+author: "Alex Linz"
+date: "Thursday, September 22, 2016"
+output: html_document
+---
+
+```{r, setup, echo = F, warning  = F, message = F}
+data <- read.csv("C:/Users/Alex/Desktop/geodes/environmental_data/for_humans/compiled_field_data_for_R.csv", header = T)
+
+library(ggplot2)
+
+```
+
+
+```{r, dissolved_oxygen, echo = F}
+ggplot(data[which(data$Lake == "Mendota"), ], aes (x = Timepoint, y = Depth, fill = DO)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Lake Mendota") + scale_y_reverse() + scale_fill_gradient2(low = "darkblue", mid = "cornflowerblue", high = "cadetblue1", midpoint = 5) + geom_hline(aes(yintercept = 7), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "Sparkling"), ], aes (x = Timepoint, y = Depth, fill = DO)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Sparkling Lake") + scale_y_reverse() + scale_fill_gradient2(low = "darkblue", mid = "cornflowerblue", high = "cadetblue1", midpoint = 5) + geom_hline(aes(yintercept = 4), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "TroutBog"), ], aes (x = Timepoint, y = Depth, fill = DO)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Trout Bog") + scale_y_reverse() + scale_fill_gradient2(low = "darkblue", mid = "cornflowerblue", high = "cadetblue1", midpoint = 5) + geom_hline(aes(yintercept = 1), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "Mendota"), ], aes (x = Timepoint, y = Depth, fill = Temperature)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Lake Mendota") + scale_y_reverse() + scale_fill_gradient2(low = "yellow", mid = "orange", high = "red", midpoint = 17) + geom_hline(aes(yintercept = 7), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "Sparkling"), ], aes (x = Timepoint, y = Depth, fill = Temperature)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Sparkling Lake") + scale_y_reverse() + scale_fill_gradient2(low = "yellow", mid = "orange", high = "red", midpoint = 17) + geom_hline(aes(yintercept = 4), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "TroutBog"), ], aes (x = Timepoint, y = Depth, fill = Temperature)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Trout Bog") + scale_y_reverse() + scale_fill_gradient2(low = "yellow", mid = "orange", high = "red", midpoint = 17) + geom_hline(aes(yintercept = 1), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "Mendota"), ], aes (x = Timepoint, y = Depth, fill = pH)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Lake Mendota") + scale_y_reverse() + scale_fill_gradient2(low = "magenta", mid = "orchid3", high = "purple4", midpoint = 8) + geom_hline(aes(yintercept = 7), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "Sparkling"), ], aes (x = Timepoint, y = Depth, fill = pH)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Sparkling Lake") + scale_y_reverse() + scale_fill_gradient2(low = "magenta", mid = "orchid3", high = "purple4", midpoint = 7.3) + geom_hline(aes(yintercept = 4), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "TroutBog"), ], aes (x = Timepoint, y = Depth, fill = pH)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Trout Bog") + scale_y_reverse() + scale_fill_gradient2(low = "magenta", mid = "orchid3", high = "purple4", midpoint = 4.25) + geom_hline(aes(yintercept = 1), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "Mendota"), ], aes (x = Timepoint, y = Depth, fill = Conductivity)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Lake Mendota") + scale_y_reverse() + scale_fill_gradient2(low = "slategray1", mid = "dodgerblue", high = "steelblue", midpoint = 630) + geom_hline(aes(yintercept = 7), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "Sparkling"), ], aes (x = Timepoint, y = Depth, fill = Conductivity)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Sparkling Lake") + scale_y_reverse() + scale_fill_gradient2(low = "slategray1", mid = "dodgerblue", high = "steelblue", midpoint = 750) + geom_hline(aes(yintercept = 4), color = "black", size = 1)
+
+ggplot(data[which(data$Lake == "TroutBog"), ], aes (x = Timepoint, y = Depth, fill = Conductivity)) + theme_bw()  + geom_tile(stat = "identity") + labs(title = "Trout Bog") + scale_y_reverse() + scale_fill_gradient2(low = "slategray1", mid = "dodgerblue", high = "steelblue", midpoint = 30) + geom_hline(aes(yintercept = 1), color = "black", size = 1)
+
+```
+
+```{r, barplots, echo = F, warning = F, message = F}
+
+data2 <- data[which(data$Depth == 0), c(1, 2, 3, 7, 10, 11, 12)]
+
+ggplot(data = data2[which(data2$Lake == "Mendota"), ], aes(x = Timepoint, y = Light)) + geom_bar(stat = "identity", fill = "gold", color = "black") + theme_bw() + labs(title = "Lake Mendota - Surface PAR")
+ggplot(data = data2[which(data2$Lake == "Sparkling"), ], aes(x = Timepoint, y = Light)) + geom_bar(stat = "identity", fill = "gold", color = "black") + theme_bw() + labs(title = "Sparkling Lake - Surface PAR")
+ggplot(data = data2[which(data2$Lake == "TroutBog"), ], aes(x = Timepoint, y = Light)) + geom_bar(stat = "identity", fill = "gold", color = "black") + theme_bw() + labs(title = "TroutBog - Surface PAR")
+
+ggplot(data = data2[which(data2$Lake == "Mendota"), ], aes(x = Timepoint, y = Chlorophyll)) + geom_bar(stat = "identity", fill = "forestgreen", color = "black") + theme_bw() + labs(title = "Lake Mendota - Chlorophyll")
+ggplot(data = data2[which(data2$Lake == "Sparkling"), ], aes(x = Timepoint, y = Chlorophyll)) + geom_bar(stat = "identity", fill = "forestgreen", color = "black") + theme_bw() + labs(title = "Sparkling Lake - Chlorophyll")
+ggplot(data = data2[which(data2$Lake == "TroutBog"), ], aes(x = Timepoint, y = Chlorophyll)) + geom_bar(stat = "identity", fill = "forestgreen", color = "black") + theme_bw() + labs(title = "TroutBog - Chlorophyll")
+
+ggplot(data = data2[which(data2$Lake == "Mendota"), ], aes(x = Timepoint, y = Production)) + geom_bar(stat = "identity", fill = "darkred", color = "black") + theme_bw() + labs(title = "Lake Mendota - Protein Production")
+ggplot(data = data2[which(data2$Lake == "Sparkling"), ], aes(x = Timepoint, y = Production)) + geom_bar(stat = "identity", fill = "darkred", color = "black") + theme_bw() + labs(title = "Sparkling Lake - Protein Production")
+ggplot(data = data2[which(data2$Lake == "TroutBog"), ], aes(x = Timepoint, y = Production)) + geom_bar(stat = "identity", fill = "darkred", color = "black") + theme_bw() + labs(title = "TroutBog - Protein Production")
+```
