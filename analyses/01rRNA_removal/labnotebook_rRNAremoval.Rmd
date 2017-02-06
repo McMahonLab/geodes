@@ -1,0 +1,296 @@
+# rRNA removal
+
+####Goal of this analysis
+
+To remove ribosomal reads from the metatranscriptomes. We used an rRNA removal kit before sequencing, but 50-70% of the reads in the sample are still rRNA. We're not interested in these biased reads with little information about gene expression. Luckily the samples are big enough that 30-50% of reads is still plenty to look at non-rRNA expression.
+
+##### Approach
+
+Starting with the quality filtered fastq files provided by the JGI through the Genome Portal, I will use Sortmerna to separate rRNA and non-rRNA reads into two separate files. I'll save both, but use the non-rRNA reads for downstream analyses.
+
+#### Most recent workflow. Use this if you want to replicate our protocol.
+
+
+# Lab Notebook
+
+#### 2017-02-02
+
+I've downloaded the latest precompiled Linux binaries from here: http://bioinfo.lifl.fr/RNA/sortmerna/
+
+Now I want to know where the databases are kept and which ones come preloaded with the install. On my home folder in submit-3.chtc.wisc.edu, I entered:
+
+```{r, eval = F}
+tar -xvf sortmerna-2.1-linux-64.tar.gz
+```
+
+They are located in sortmerna/rRNA_databases/ , and looks everything I need.
+
+The steps my executable will need to perform are:
+
+1. Get a fastq file from gluster (the place to hold giant files on our high throughput computing system)
+2. Unzip the fastq file
+3. Unzip the sortmerna program file
+4. Index the databases
+5. Run sortmerna
+6. Transfer output files back to gluster
+7. Remove all files transferred from gluster
+
+Here's my first stab at the executable. Just running on one fastq file for now.
+```{r, eval = F}
+#!/bin/bash
+#Sort metatranscriptomic reads into rRNA and non-rRNA files
+#Starting with one fastq file for now
+
+#Transfer the fasta file from gluster
+cp /mnt/gluster/amlinz/GEODES_metaT/GEODES001.filter-MTF.fastq.gz ./
+
+#Unzip files
+gzip -d GEODES001.filter-MTF.fastq.gz
+tar -xvf sortmerna-2.1-linux-64.tar.gz
+
+cd sortmerna-2.1-linux-64
+
+#Index the rRNA databases
+./indexdb_rna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac$
+./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:\
+./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:\
+./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:\
+./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:\
+./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:\
+./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:\
+./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db
+
+#Run the sorting program
+./sortmerna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac-1$
+./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:\
+./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:\
+./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:\
+./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:\
+./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:\
+./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:\
+./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db\
+--reads ./GEODES001.filter-MTF.fastq  --fastx --aligned GEODES001_rRNA\
+--other GEODES002_nonrRNA --log -v -m 3
+
+#Let's unpack the parameters I've chosen. --ref refers to the databases I've just indexed. --reads says use the fastq file provided. --fastx means I would like a fastq file as output. --aligned is the name for rRNA reads, --other is the name for non-rRNA reads. --log says compute statistics about the run. -v means verbose. I've left the alignment setting at the default, --best. There's a faster setting, but I'm hoping I won't need it. And finally, -m tells sortmerna it can use 3GB of RAM to hold each piece of the fastq file as it processes. Hopefully that will give it a fighting chance
+
+#Move the output files back to gluster
+mv GEODES001_rRNA.fastq /mnt/gluster/amlinz/GEODES_rRNA
+mv GEODES001_nonrRNA.fastq /mnt/gluster/amlinz/GEODES_nonrRNA
+
+#Remove files
+cd ..
+rm GEODES001.filter-MTF.fastq
+rm GEODES001.filter-MTF.fastq.gz
+rm sortmerna-2.1-linux-64.tar.gz
+rm -f sortmerna-2.1-linux-64
+
+```
+
+Saved as 01rRNA_removal.sh
+Here's its associated submit file, 01rRNA_removal.sub:
+
+```{r, eval = F}
+# 01rRNA_removal.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 01rRNA_removal_$(Cluster).log
+error = 01rRNA_removal_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 01rRNA_removal.sh
+#arguments = $(fastqfile)
+output = 01rRNA_removal_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+#when_to_transfer_output = ON_EXIT
+transfer_input_files = sortmerna-2.1-linux-64.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 10GB
+#
+# Tell HTCondor to run every fasta file in the provided list:
+#queue fastafile from metagenome_list.txt
+queue 1
+
+```
+I've commented out the options I'll need later (arguments, queue)
+
+Now the moment of truth. By the way, I'm running things on HTCondor using
+
+```{r, eval = F}
+condor_submit 01rRNA_removal.sub
+#check status
+condor_q
+```
+
+Error thrown: I got the help page for sortmerna and the output files weren't generated, which the flags for that command are wrong. I also got that I can't remove a directory.
+
+I couldn't find anything wrong with sortmerna, so I move the commands for ./indexdb and ./sortmerna onto one line, instead of / at the end of each line (like what I copied off the manual). Maybe that doesn't work in bash scripts. I also changed the removal of the directory to "rm -rf".
+
+Error again: No help file from sortmerna, but no results either. I realized I was missing a dot in calling the reads file - it should be "--reads ../GEODESetc" instead lf "--reads ./GEODESetc". I also realized that gzip -d removes the .gz file, which is why I got the error that it didn't exist when I tried to remove it.
+
+Next run produced nothing - no errors, no writing to the screen, no output files. I think I need to run this on Zissou to do more testing. I need to get all my files up there anyway. Will come back to this later!
+
+#### 2017-02-03
+
+Well, the Zissou test worked great and ran for awhile (2 hours) before I killed it. It was 1/5 done. But everything seems to be in order in the bash script. I suspect it might have died because it was too greedy for RAM - on Zissou it used nearly 40GB, despite the "-m 3" setting, while I'd only requested 4. I'll also need double the hard drive space - 10GB is enough for the input file, but not the input file + output. I'll change my request settings and try again. I'm also going to add 10 threads in sortmerna using "-a 10"
+Request: 10 threads, 25GB RAM, 20GB drive space. No idea how many computers in the network meet that requirement.
+
+#### 2017-02-06
+
+Sucess! (ish) The first run I started last Friday was stuck in the queue for an hour, so I restarted with 5 threads, 10GB RAM, and 18GB drive space. That started right away and finished in about 11 hours. No errors were produced, and the right output ended up on Gluster.
+
+Fun fact: check how many computers can run your job with:
+
+```{r, eval = F}
+condor_q -analyze
+```
+
+HOWEVER. I'm going to need to run this on 108 metatranscriptomes, and there are not 108 servers that meet my requirements, and 11 hours is a long time. SortmeRNA broke up the files into nearly 1900 pieces, then ran them 5 at a time. In order to increase the number of computers meeting my requirements (and therefore increase speed), I need to split my fastq files into many smaller files. I'll do this on CHTC as well, and use Grace's script from https://github.com/dshrade1/Metagenomic-Time-Series-CHTC/blob/master/TE/preprocess/preprocess_fasta.sh
+as a model. Just doing one file to test for right now.
+
+```{r, eval = F}
+#!/bin/bash
+
+cp /mnt/gluster/amlinz/GEODES_metaT/GEODES001.filter-MTF.fastq.gz ./
+gzip -d GEODES001.filter-MTF.fastq.gz
+
+# make a folder for each metagenome
+code=`echo "$1" | cut -d'.' -f1`
+mkdir ${code}
+
+# Split by number of lines
+# Each takes up four lines - @HISEQ header, forward read, "+", reverse read. So make sure my line cutoff is a multiple of 4
+split -l 1000000 $1 ${code}/${code}
+
+# Grace includes a read file in the folder with the split files, but I don't think that makes sense for using with SortmeRNA
+# I'm also not going to zip up the file, because I'd just need to unzip back on gluster
+cp ${code} /mnt/amlinz/gluster/GEODES_metaT_split/${code}
+rm -r ${code}
+rm GEODES001.filter-MTF.fastq
+
+```
+
+And the submit file:
+
+```{r, eval = F}
+# 00split_fastq.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 00split_fastq_$(Cluster).log
+error = 00split_fastq_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 00split_fastq.sh
+#arguments = $(fastqfile)
+output = 00split_fastq_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = 
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# This gives me ~800 target computers
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 2GB
+request_disk = 12GB
+#
+# Just one job for testing
+queue 1
+```
+
+I did a little tweaking of naming the output files. Here's the final version of the executable. I'm debating adding a line to add .fastq to the end of the split files, but will see if sortmerna can figure it out first.
+
+```{r, eval = F}
+
+#!/bin/bash
+
+cp /mnt/gluster/amlinz/GEODES_metaT/GEODES001.filter-MTF.fastq.gz ./
+gzip -d GEODES001.filter-MTF.fastq.gz
+
+# make a folder for each metagenome
+code=`echo "GEODES001.filter-MTF.fastq" | cut -d'.' -f1`
+mkdir ${code}
+
+# Split by number of lines
+split -l 1000000 GEODES001.filter-MTF.fastq ${code}/${code}
+
+# Grace includes a read file in the folder with the split files, but I don't think that makes sense for using with SortmeRNA
+# I'm also not going to zip up the file, because I'd just need to unzip back on gluster
+mv ${code} /mnt/gluster/amlinz/GEODES_metaT_split/
+rm GEODES001.filter-MTF.fastq
+```
+
+
+Now to test sortmerna on one of the split files!
+
+New executable:
+```{r, eval = F}
+
+#!/bin/bash
+#Sort metatranscriptomic reads into rRNA and non-rRNA files
+#Starting with one fastq file for now
+
+#Transfer the fasta file from gluster
+cp /mnt/gluster/amlinz/GEODES_metaT_split/GEODES001/GEODES001aa ./
+
+#Unzip files
+#gzip -d GEODES001.filter-MTF.fastq.gz
+tar -xvf sortmerna-2.1-linux-64.tar.gz
+
+cd sortmerna-2.1-linux-64
+
+#Index the rRNA databases
+./indexdb_rna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac-16s-db:\./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db
+
+#Run the sorting program
+./sortmerna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac-16s-db:./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db --reads ../GEODES001aa  --fastx --aligned GEODES001_rRNA --other GEODES001_nonrRNA --log -v -m 3 -a 10
+
+#Let's unpack the parameters I've chosen. --ref refers to the databases I've just indexed. --reads says use the fastq file provided. --fastx means I would like a fastq file as output. --aligned is the name for rRNA reads, --other is the name for non-rRNA reads. --log says compute statistics about the run. -v means verbose. I've left the alignment setting at the default, --best. There's a faster setting, but I'm hoping I won't need it. And finally, -m tells sortmerna it can use 3GB of RAM to hold each piece of the fastq file as it processes. Hopefully that will give it a fighting chance.
+#Move the output files back to gluster
+mv GEODES001aa_rRNA.fastq /mnt/gluster/amlinz/GEODES_rRNA/
+mv GEODES001aa_nonrRNA.fastq /mnt/gluster/amlinz/GEODES_nonrRNA/
+
+#Remove files
+cd ..
+rm GEODES001aa
+rm sortmerna-2.1-linux-64.tar.gz
+rm -r sortmerna-2.1-linux-64
+
+
+```
+
+Submit file is the same except changed requirements - 10 threads, 3GB RAM, 5GB drive space
+
+Sortmerna has no problem running on the file without the fastq extension, but I'm having trouble moving the output to gluster. Moving to Zissou to find out what the output file names should be.
+
+Turns out the error was because there was no .fastq extension.
+
+I added:
+```{r, eval = F}
+# Rename files to include .fastq extension
+for file in ${code}/*;do mv "$file" "$file.fastq";done
+```
+
+Note: code will break if there's already a folder named GEODES001 in the sample place. Delete old run outputs before rerunning.
+
+Looks like everything worked! My next goal is to run the rRNA sorting script on all the pieces of GEODES001.
+
