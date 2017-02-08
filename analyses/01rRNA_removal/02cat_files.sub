@@ -1,0 +1,30 @@
+# 02cat_files.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02cat_files_$(Cluster).log
+error = 02cat_files_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02cat_files.sh
+arguments = $(sample)
+output = 02cat_files_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = 
+#transfer_output_files = $(sample)_rRNA_results.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 10GB
+request_disk = 10GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue sample from test_samplenames.txt
