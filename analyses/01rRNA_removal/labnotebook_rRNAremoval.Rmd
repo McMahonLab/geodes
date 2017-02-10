@@ -82,6 +82,8 @@ condor_q -run -nobatch
 condor_hold amlinz
 condor_release amlinz
 
+#On my full run, I ran 7,987 jobs from 85 original fastq files. 7,986 finished in 4.5 hours. 1 got stuck and produced error to that effect.
+
 # Check the output when all jobs have finished:
 ls -ltr /mnt/gluster/amlinz/GEODES_nonrRNA/
 ls -ltr /mnt/gluster/amlinz/GEODES_rRNA/
@@ -827,3 +829,13 @@ Off we go! Everything finished downloading around 10 this morning. Got the first
 2 got stuck, and produced errors that there was their output already existed in gluster, but everything looks fine so I'll carry on. For reference, those two errors were from GEODES050 and GEODES154. Total time: 3 hours.
 
 Moving on. 7897 jobs submitted - holy smokes!
+
+####2017-02-10
+
+7,986 finished in 4.5 hours. 1 got stuck and produced error to that effect. I restarted it this morning. I'm a bit concerned about the errors from the last step about output already existing, and that happening during the rRNA run as well. For a preliminary analysis, this doesn't matter too much, but I'll look into preventing clashing of jobs that needed a restart in the future. Is there a way to tell the "mv" command to overwrite an existing file of the same name?
+
+A quick Google search suggests either a cp and rm combo, or using rsync. I'll keep this in mind in the future.
+
+That last job from 01rRNA_removal finally finished! (9:30AM) I have 3 errors - one segmentation (likely the fault of a computer running the job) and two that say the fastq file has uneven lines. I'll need to look into this, too - maybe I can use a program for splitting fastq files specifically? Like the fastx-toolkit or something? Might be a question for lab meeting.
+
+
