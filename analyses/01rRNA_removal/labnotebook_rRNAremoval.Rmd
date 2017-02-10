@@ -47,7 +47,7 @@ condor_q
 # Something stuck or not going well? Remove jobs with:
 # condor_rm -all, or condor_rm -8222164 (job id)
 
-# All done! Time with 3 files = 23 minutes.
+# All done! Time with 3 files = 23 minutes. Time with 85 files = 3 hours, but 2 got stuck.
 # Check to see if there's anything in the error file
 ls -ltr 00*.err
 
@@ -132,7 +132,7 @@ On submit-3.chtc.wisc.edu:
 # The only files I need going forward are the nonrRNA files. Delete the rest!
 # Note: I'll keep the directories, in case I need to run a few more files in the future:
 
-rm * /mnt/gluster/amlinz/GEODES_metaT/
+rm /mnt/gluster/amlinz/GEODES_metaT/*
 rm -r /mnt/gluster/amlinz/GEODES_metaT_split/*
 rm /mnt/gluster/amlinz/GEODES_nonrRNA/*
 rm /mnt/gluster/amlinz/GEODES_rRNA/*
@@ -144,7 +144,7 @@ rm *.log
 rm *.out
 
 # Remove the sortmerna program and the rRNA ratios report
-rm GEODES_rRNA_ratios.txt
+rm *.txt
 rm sortmerna-2.1-linux-64.tar.gz
 
 # Move old scripts into their own folder
@@ -760,3 +760,70 @@ request_disk = 5GB
 queue fastqfile from path2splitfastqs.txt
 ```
 
+02cat_files.sh:
+```{r, eval = F}
+
+#!/bin/bash
+#Concatenate sortmerna output
+
+cp /mnt/gluster/amlinz/GEODES_nonrRNA/$1??_nonrRNA.fastq ./
+cat $1??_nonrRNA.fastq > $1_nonrRNA.fastq
+nonrRNAcount=$(wc -l $1_nonrRNA.fastq)
+gzip $1_nonrRNA.fastq
+mv $1_nonrRNA.fastq.gz /mnt/gluster/amlinz/GEODES_nonrRNA_concat/
+rm *_nonrRNA.fastq
+
+cp /mnt/gluster/amlinz/GEODES_rRNA/$1*??_rRNA.fastq ./
+cat $1??_rRNA.fastq > $1_rRNA.fastq
+rRNAcount=$(wc -l $1_rRNA.fastq)
+gzip $1_rRNA.fastq
+mv $1_rRNA.fastq.gz /mnt/gluster/amlinz/GEODES_rRNA_concat/
+rm *_rRNA.fastq
+
+echo ${nonrRNAcount},${rRNAcount} > $1_rRNA_results.txt
+```
+
+02cat_files.sub
+```{r, eval = F}
+
+# 02cat_files.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02cat_files_$(Cluster).log
+error = 02cat_files_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02cat_files.sh
+arguments = $(sample)
+output = 02cat_files_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files =
+#transfer_output_files = $(sample)_rRNA_results.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 10GB
+request_disk = 10GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue sample from samplenames.txt
+```
+
+Everything looks ready for the full run now! I'm just waiting on the file upload to gluster. It'll take at least the rest of the night, so I'll plan on starting in the morning.
+
+####2017-02-09
+
+Off we go! Everything finished downloading around 10 this morning. Got the first step started at 10:35. I'm currently running on 85 samples. (The remaining 23 are still being sequenced or processed)
+
+2 got stuck, and produced errors that there was their output already existed in gluster, but everything looks fine so I'll carry on. For reference, those two errors were from GEODES050 and GEODES154. Total time: 3 hours.
+
+Moving on. 7897 jobs submitted - holy smokes!
