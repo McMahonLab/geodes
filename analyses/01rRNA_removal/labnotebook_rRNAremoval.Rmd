@@ -17,7 +17,7 @@ First, a word on where all of our files are located:
 - Instead, we run things through UW-Madison's Center for High Throughput Computing, specifically on submit-3.chtc.wisc.edu. I submit jobs and store short-term, small files on this submit node in /home/amlinz/
 - BUT the actual data files are still way too large to be stored on the submit node. Instead, I have a gluster account where I keep the data files - from submit-3.chtc.wisc.edu, it is located at /mnt/gluster/amlinz. This means that instead of transferring data files with my executable in the submit node, I instead wrote a line in the executable that says "go to gluster and download this file." Therefore, I can only run my programs on computers with access to gluster. Also, please note that gluster is not for long-term storage - that is what Zissou is for!
 
-All the code below is run from my submit node, and frequently references my gluster account. Keep this in mind if you are trying to replicate the workflow!
+All the code below is run from my submit node, and frequently references my gluster account. Keep this in mind if you are trying to replicate the workflow! Also, if you copied the .sh and .sub files directly from this github repo, you'll need to run "dos2unix" on them to get rid of my silly Windows line endings before running.
 
 1. The first thing we need to do is split the giant fastq files into many smaller pieces. I'm starting with the reads that went through quality control at the JGI (extension .filter-MTF.fastq), located in /mnt/gluster/amlinz/GEODES_metaT.
 
@@ -121,8 +121,8 @@ cd /scratch/amlinz/GEODES
 mkdir GEODES_nonrRNA
 mkdir GEODES_rRNA
 
-rsync -av GEODES_nonrRNA amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_nonrRNA_concat/
-rsync -av GEODES_rRNA amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_rRNA_concat/
+rsync -av amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_nonrRNA_concat/ GEODES_nonrRNA 
+rsync -av amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_rRNA_concat/ GEODES_rRNA 
 ```
 
 On my computer:
@@ -838,4 +838,30 @@ A quick Google search suggests either a cp and rm combo, or using rsync. I'll ke
 
 That last job from 01rRNA_removal finally finished! (9:30AM) I have 3 errors - one segmentation (likely the fault of a computer running the job) and two that say the fastq file has uneven lines. I'll need to look into this, too - maybe I can use a program for splitting fastq files specifically? Like the fastx-toolkit or something? Might be a question for lab meeting.
 
+No errors on the 02cat_files script, hooray! Copying rRNA and nonrRNA zipped files over to Zissou now, and then over to my hard drive.
+
+####2017-02-13
+
+Happy Monday! I got everything back up on Zissou and my hard drive over the weekend. The last thing I want to do before closing out this analysis is check that my rRNA/mRNA ratios are similar to those measured by the JGI. I saved the number of lines in each file and will calculate that here.
+
+```{r, echo = T, fig.width = 4, fig.height = 10}
+library(ggplot2)
+rRNA_ratio <- read.table("C:/Users/Alex/Desktop/geodes/analyses/01rRNA_removal/GEODES_rRNA_ratios.txt", header = F, sep = ",", colClasses = c("character"))
+split1 <- strsplit(rRNA_ratio$V1, " ")
+split2 <- strsplit(rRNA_ratio$V2, " ")
+nonrRNA_count <- c()
+rRNA_count <- c()
+samplenames <- c()
+for(i in 1:length(split1)){
+  nonrRNA_count[i] <- split1[[i]][1]
+  rRNA_count[i] <- split2[[i]][1]
+  samplenames[i] <- substr(split2[[i]][2], start = 1, stop = 9)
+}
+nonrRNA_count <- as.numeric(nonrRNA_count)/4
+rRNA_count <- as.numeric(rRNA_count)/4
+percent_rRNA <- rRNA_count/(rRNA_count + nonrRNA_count) * 100
+rRNA_ratios <- data.frame(samplenames, percent_rRNA)
+ggplot(rRNA_ratios, aes(x = samplenames, y = percent_rRNA)) + theme_bw() + geom_bar(stat = "identity") + coord_flip()
+
+```
 

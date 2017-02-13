@@ -9,6 +9,7 @@ error = 00split_fastq_$(Cluster)_$(Process).err
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
 executable = 00split_fastq.sh
+arguments = $(sample)
 output = 00split_fastq_$(Cluster).out
 #
 # No files to transfer, since it's going to interact with Gluster instead of the submit node
@@ -25,4 +26,4 @@ request_memory = 2 GB
 request_disk = 12 GB
 #
 # Just one job for testing
-queue 1
+queue sample from samplenames.txt

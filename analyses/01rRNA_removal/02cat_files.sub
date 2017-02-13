@@ -27,4 +27,4 @@ request_memory = 10GB
 request_disk = 10GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
-queue sample from test_samplenames.txt
+queue sample from samplenames.txt

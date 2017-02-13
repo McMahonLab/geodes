@@ -27,4 +27,4 @@ request_memory = 2GB
 request_disk = 5GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
-queue fastqfile from test_path2splitfastqs.txt
+queue fastqfile from path2splitfastqs.txt
