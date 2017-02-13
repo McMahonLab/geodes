@@ -1,0 +1,100 @@
+# Mapping
+
+####Goal of this analysis
+
+Who's active in our samples? What genes are being expressed? We could try to classify and annotate each read in the metatranscriptomes, but that wouldn't be very accurate. Instead we're going to map the reads to a database of freshwater genomes to get the classification and  annotation of every read we can.
+
+##### Approach
+
+The input files are the output from the workflow in 01rRNA_removal. In that workflow, I took quality filter reads produced by the JGI and ran them through sortmerna to get only nonrRNA reads to map. The database I'm using is genomes assembled from metagenomes (MAGs) and single amplified genomes (SAGs) from the same lakes as my metatranscriptomes. It's been curated by both the JGI and our lab, and contains additional genomes generated from the metagenomes and single cell preservations we collected during the GEODES field campaign. We're hoping that we'll get the best mapping possible by using genomes from the same study sites. We're also mapping to an internal standard that we added during extraction to approximate the absolute read counts in our metatranscriptomes. I'm going to perform this mapping competitively using the program bwa, then summarize the results using samtools and htseq.
+
+## Most recent workflow. 
+####Use this if you want to replicate our protocol. Updated ...
+
+
+#Lab Notebook
+
+####2017-02-13
+
+There's quite a few programs involved in this step. I'm using:
+
+- bwa (Burrows-Wheeler Aligner, v0.7.12), https://sourceforge.net/projects/bio-bwa/files/ 
+- samtools (v1.3.1), https://sourceforge.net/projects/samtools/files/
+- htseq (v0.6.1), http://www-huber.embl.de/users/anders/HTSeq/doc/install.html#install
+- python (gzipped source tarball v2.7.13), https://www.python.org/downloads/release/python-2713/
+
+The general plan is to:
+- copy in the nonrRNA file of interest
+- run bwa
+- convert the output from .sam to .bam and index
+- count reads by feature with htseq
+- calculate RPKM and summarize results with a python script
+- save files back to gluster
+
+I'm basing this on Josh's script from OMD-TOIL found here https://github.com/alexlinz/OMD-TOILv2/tree/master/scripts/10_mapping/10c_competitive
+
+But the installation on CHTC is going to be a little tricky. First I need to build my own python tarball in interactive mode. I'm following the instructions here http://chtc.cs.wisc.edu/python-jobs.shtml
+
+First I need to start an interactive CHTC session.
+interactive.sub:
+```{r, eval = F}
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines. 
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = Python-2.7.13.tgz
+
+# It's still important to request enough computing resources. The below 
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+request_cpus = 1
+request_memory = 1GB
+request_disk = 1GB
+
+queue
+```
+
+Start the session with:
+```{r, eval = F}
+condor_submit -i interactive.sub
+```
+
+Here's what I'm typing in the interactive session:
+```{r, eval = F}
+mkdir python
+tar -xvf Python-2.7.13.tgz
+cd Python-2.7.13
+../configure --prefix=$(pwd)/../python
+make
+make install
+cd ..
+ls python
+ls python/bin
+# Maybe I can install htseq right in here?
+export PATH=$(pwd)/python/bin:$PATH
+wget https://bootstrap.pypa.io/get-pip.py
+python get-pip.py
+pip install numpy
+pip install matplotlib
+pip install htseq
+# hey, that worked!
+tar -czvf python.tar.gz python/
+exit
+
+```
+
+Wow, I feel like a real bioinformatician! +1 to CHTC for awesome tutorials. Now I have a tarball that I can transfer around with my jobs that includes both python and HTseq.
+
+CHTC is closing down my submit node for maintenance tomorrow, so I'm going to stop here for now. I'll possibly due some testing on Zissou and will download my installation packages for that, but I'm not sure how two different versions of python will agree on Zissou.
