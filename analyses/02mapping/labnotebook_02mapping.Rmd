@@ -97,4 +97,88 @@ exit
 
 Wow, I feel like a real bioinformatician! +1 to CHTC for awesome tutorials. Now I have a tarball that I can transfer around with my jobs that includes both python and HTseq.
 
-CHTC is closing down my submit node for maintenance tomorrow, so I'm going to stop here for now. I'll possibly due some testing on Zissou and will download my installation packages for that, but I'm not sure how two different versions of python will agree on Zissou.
+CHTC is closing down my submit node for maintenance tomorrow, so I'm going to stop here for now. I'll possibly do some testing on Zissou and will download my installation packages for that, but I'm not sure how two different versions of python will agree on Zissou.
+
+
+####2017-02-15
+
+We're back up and running! Today I'm going to write a script to map one metatranscriptome. I'm going to transfer all of the installs over, but examine the output and slowly add lines to the bash script as I go.
+
+First, get sample names and shorten to one metatranscriptome.
+
+```{r, eval = F}
+for file in /mnt/gluster/amlinz/GEODES_nonrRNA_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samplenames.txt
+head -1 samplenames.txt > test_samplenames.txt; mv test_samplenames.txt samplenames.txt
+```
+
+Here's my first stab at the submit file 02mapping.sub:
+```{r, eval = F}
+# 02mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02mapping_$(Cluster).log
+error = 02mapping_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02mapping.sh
+arguments = $(samplename)
+output = 02mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = python.tar.gz,bwa-0.7.12.tar.bz2,samtools-1.3.1.tar.bz2, mapping_database.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 2GB
+request_disk = 5GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samplenames.txt
+```
+
+I also need to build my reference genome database. Which means I need to go find and upload the internal standard fasta and gff. It also looks like the size is pretty small (< 1 GB) so I'll zip up this database after building and send it via the submit file
+
+Here's my database building:
+```{r, eval = F}
+cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna > mapping_database.fna
+cat /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff > mapping_database.gff
+tar -czvf mapping_database.tar.gz mapping_database.fna mapping_database.gff
+rm mapping_database.gff
+rm mapping_database.fna
+```
+
+Cool! I'm going to retroactively add that to the submit file above. Now for the executable. I'm going to be testing unzipping things so I know what to add to my path variable outside of this code.
+
+Gah. Looks like bwa and samtools also need to be installed via interactive session. Looking up source code installation directions now.
+
+02mapping.sh:
+```{r, eval = F}
+##!/bin/bash
+#Map metatranscriptome reads to my database of reference genomes
+
+#Unzip programs
+tar xzf python.tar.gz
+tar xvfj bwa-0.7.12.tar.bz2
+tar xvfj samtools-1.3.1.tar.bz2
+
+#Transfer metaT from gluster
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1.fastq.gz
+tar -xzf $1.fastq.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export PATH=$(pwd)/home
+
+
+
+```
