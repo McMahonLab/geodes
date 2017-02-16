@@ -227,7 +227,7 @@ output = 02mapping_$(Cluster).out
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = python.tar.gz,bwa-0.7.12.tar.bz2,samtools-1.3.1.tar.bz2, mapping_database.tar.gz
+transfer_input_files = python.tar.gz,bwa.tar.gz,samtools.tar.gz, mapping_database.tar.gz
 #transfer_output_files =
 #
 # Tell HTCondor what amount of compute resources
@@ -247,24 +247,210 @@ tar -czvf mapping_database.tar.gz mapping_database.fna mapping_database.gff
 rm mapping_database.gff
 rm mapping_database.fna</code></pre>
 <p>Cool! I’m going to retroactively add that to the submit file above. Now for the executable. I’m going to be testing unzipping things so I know what to add to my path variable outside of this code.</p>
-<p>Gah. Looks like bwa and samtools also need to be installed via interactive session. Looking up source code installation directions now.</p>
+<p>Gah. Looks like bwa and samtools also need to be installed via interactive session.</p>
+</div>
+<div id="section-2" class="section level4">
+<h4>2017-02-16</h4>
+<p>Yep, more interactive installs time. Let’s do this for bwa first. I’m modifying my interactive.sub to tranfer bwa instead of python.</p>
+<p>Here’s what I’m typing to install. Following instructions from the top of the README.md file in the bwa tarball, since I can’t find installation instructions anywhere on their website…</p>
+<pre class="r"><code>condor_submit -i interactive.sub
+# Wait for job to start
+tar xvfj bwa-0.7.12.tar.bz2
+cd bwa-0.7.12
+make
+cd ..
+ls bwa-0.7.12
+# bwa executable is in there!
+tar czvf bwa.tar.gz bwa-0.7.12/
+ls
+exit</code></pre>
+<p>Now do the same thing for samtools. Installation instructions here: <a href="http://www.htslib.org/download/" class="uri">http://www.htslib.org/download/</a> I’m modifying my interactive.sub to transfer the samtools tarball this time.</p>
+<pre class="r"><code>condor_submit -i interactive.sub
+# Wait for job to start
+tar xvfj samtools-1.3.1.tar.bz2
+cd samtools-1.3.1
+make
+make prefix=../samtools install
+cd ..
+ls samtools
+#I've got a nice bin file in there now!
+tar czvf samtools.tar.gz samtools/
+ls
+exit</code></pre>
+<p>Time to make my first executable. This is the homerun attempt - I’m expecting lots and lots of errors.</p>
 <p>02mapping.sh:</p>
 <pre class="r"><code>##!/bin/bash
 #Map metatranscriptome reads to my database of reference genomes
 
 #Unzip programs
 tar xzf python.tar.gz
-tar xvfj bwa-0.7.12.tar.bz2
-tar xvfj samtools-1.3.1.tar.bz2
+tar xvf bwa.tar.gz
+tar xvf samtools.tar.gz
+tar xvf mapping_database.gz
 
 #Transfer metaT from gluster
 cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1.fastq.gz
-tar -xzf $1.fastq.gz
+tar xzf $1.fastq.gz
 
 #Update the path variable
 mkdir home
-export PATH=$(pwd)/python/bin:$PATH
-export PATH=$(pwd)/home</code></pre>
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$(pwd)/bwa:$PATH
+export HOME=$(pwd)/home
+
+#Index the reference database
+bwa index mapping_database.fna
+
+#Run the mapping step - using 5 processors
+bwa mem -t 5 mapping_database $1.fastq &gt; $1.sam
+
+#Manipulate the output
+samtools view -b -S -o $1.bam $1.sam
+samtools sort -o $1.sorted.bam -O bam -T /temp/$1 $1.bam
+samtools index $1.sorted.bam
+rm $1.sam
+rm $1.bam
+
+#Count reads
+htseq-count -f bam -r pos -s no -a 0 -t feature -i locus_tag -m intersection-strict -o $1.feature.sam $1.sorted.bam mapping_database.gff &gt; $1.feature.out
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+cp $1.feature.out /mnt/gluster/amlinz/GEODES_mapping_results/
+rm $1.feature.out
+
+#Clean up
+rm -rf python
+rm -rf bwa
+rm -rf samtools
+rm $1.fastq
+rm *.sam
+rm *.bam
+rm mapping_database*
+rm *.tar.gz</code></pre>
+<p>and the submit file: 02mapping.sub</p>
+<pre class="r"><code># 02mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02mapping_$(Cluster).log
+error = 02mapping_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02mapping.sh
+arguments = $(samplename)
+output = 02mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = python.tar.gz,bwa.tar.gz,samtools.tar.gz, mapping_database.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 5
+request_memory = 5GB
+request_disk = 8GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samplenames.txt</code></pre>
+<p>Here goes nothing! I’m going to list errors here and revise the scripts below.</p>
+<ol style="list-style-type: decimal">
+<li>Job held. Events 007 and 012 - condor_shadow rejected my job (Exec format error), and the job was placed in holding. Google suggests a problem with line endings - will use dos2unix on both the sub and sh and try again.</li>
+<li>Still didn’t work. The other suggested issue could be with the !/bin/bash statement. Oh look, I’ve got an extra #. Removing and trying again. THAT WORKED!</li>
+<li>Several errors with a couple main causes. One, can’t find GEODES001_nonrRNA.fastq.gz. Two, can’t find bwa in the path. Three, can’t find python. Four, can’t find mapping_database.gz. Yikes. Solution 1, added ./ to the cp command so it knows where to put that. Solution 2, call bwa directly instead of via PATH. Solution 4, fix the typo in mapping_database.gz to mapping_database.tar.gz. Solution 3, add the requirements line to the sub script from CHTC’s python instructions. Sidenote 1, the python tarball is &gt; 50MB so transferring from gluster instead of via the submit file. Sidenote 2, increasing my disk usage space to 10GB, reducing memory to 3 GB and processors to 3. Still, only 12 computers meet these requirements, so I may need to split the job up into several steps to cut down on disk space.</li>
+<li>“This does not look like a tar archive” and “cannot find GEODES001_nonrRNA.fastq.gz”. Changing tar extraction to gzip extraction. Still can’t find python -adding “python” before I call htseq-count.</li>
+<li>Progress! the bwa index worked, but then bwa mem couldn’t find the index. Python got found this time but then couldn’t find htseq-count. But hey, at least things are running? And the diskspace is more reasonable - dropping down to 6. I’ll try calling the database with the .fna extension, and calling htseq-count directly.</li>
+<li>Well, that took an hour and a half but made it to the samtools step. Error was “failed to open file /temp/GEODES001_nonrRNA.0000.bam”. I’ll take the temp folder designation out. I’m not sure what that’s doing anyway.Also going to set samtools to use three threads, and going to save a copy of the mapping output to my home folder so I can rerun from after the mapping step next time. BTW, only 27 computers match my current job.</li>
+<li>Ooh, that’s interesting. Error occured due to failure to parse line 18699 of mapping_database.gff, specifically in the attribute column. Investigating with:</li>
+</ol>
+<pre class="r"><code>sed -n '18699{p;q}' mapping_database.gff</code></pre>
+<p>Only thing different is that it has parantheses</p>
+<p>02mapping.sh:</p>
+<pre class="r"><code>#!/bin/bash
+#Map metatranscriptome reads to my database of reference genomes
+
+#Transfer metaT from gluster
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1.fastq.gz .
+cp /mnt/gluster/amlinz/python.tar.gz .
+gzip -d $1.fastq.gz
+
+#Unzip programs
+tar xzf python.tar.gz
+tar xvf bwa.tar.gz
+tar xvf samtools.tar.gz
+tar xvf mapping_database.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
+export HOME=$(pwd)/home
+
+#Index the reference database
+./bwa-0.7.12/bwa index mapping_database.fna
+
+#Run the mapping step - using 5 processors
+./bwa-0.7.12/bwa mem -t 3 mapping_database.fna $1.fastq &gt; $1.sam
+cp $1.sam /mnt/gluster/amlinz/
+
+#Manipulate the output
+samtools view -b -S -o $1.bam $1.sam
+samtools sort -o $1.sorted.bam -O bam -T $1 -@ 3 $1.bam
+samtools index $1.sorted.bam
+rm $1.sam
+rm $1.bam
+
+#Count reads
+python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t feature -i locus_tag -m intersection-strict -o $1.feature.sam $1.sorted.bam mapping_database.gff &gt; $1.feature.out
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+cp $1.feature.out /mnt/gluster/amlinz/GEODES_mapping_results/
+rm $1.feature.out
+
+#Clean up
+rm -rf python
+rm -rf bwa
+rm -rf samtools
+rm $1.fastq
+rm *.sam
+rm *.bam
+rm mapping_database*
+rm *.tar.gz</code></pre>
+<p>02mapping.sub</p>
+<pre class="r"><code># 02mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02mapping_$(Cluster).log
+error = 02mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02mapping.sh
+arguments = $(samplename)
+output = 02mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = bwa.tar.gz,samtools.tar.gz, mapping_database.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 3
+request_memory = 3GB
+request_disk = 10GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samplenames.txt</code></pre>
 </div>
 </div>
 
