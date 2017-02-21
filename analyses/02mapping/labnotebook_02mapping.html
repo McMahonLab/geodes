@@ -183,7 +183,7 @@ queue</code></pre>
 <pre class="r"><code>mkdir python
 tar -xvf Python-2.7.13.tgz
 cd Python-2.7.13
-../configure --prefix=$(pwd)/../python
+./configure --prefix=$(pwd)/../python
 make
 make install
 cd ..
@@ -196,6 +196,7 @@ python get-pip.py
 pip install numpy
 pip install matplotlib
 pip install htseq
+pip install pysam
 # hey, that worked!
 tar -czvf python.tar.gz python/
 exit</code></pre>
@@ -368,7 +369,52 @@ queue samplename from samplenames.txt</code></pre>
 <li>Ooh, that’s interesting. Error occured due to failure to parse line 18699 of mapping_database.gff, specifically in the attribute column. Investigating with:</li>
 </ol>
 <pre class="r"><code>sed -n '18699{p;q}' mapping_database.gff</code></pre>
-<p>Only thing different is that it has parantheses</p>
+<p>Only thing different is that it has parantheses and a semicolon</p>
+</div>
+<div id="section-3" class="section level4">
+<h4>2017-02-20</h4>
+<p>I tried the code to below to remove the semicolon, since that’s also a column separator</p>
+<pre class="r"><code>sed -i 's|(IF-2; GTPase)|(IF-2 GTPase)|g' mapping_database.gff</code></pre>
+<p>But that didn’t work. Still get the error at line 18699. I’m going to try downloading the gff file (gzipped) and running it through an online validator <a href="http://genometools.org/cgi-bin/gff3validator.cgi" class="uri">http://genometools.org/cgi-bin/gff3validator.cgi</a> .</p>
+<p>Well it doesn’t like comment lines. Let’s remove those.</p>
+<pre class="r"><code>sed -i '/^#/d' mapping_database.gff</code></pre>
+<p>Ah. Apparently the first line needs to start with ##gff-version 3. Let’s add that back in.</p>
+<pre class="r"><code>echo '##gff-version 3' | cat - mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff</code></pre>
+<p>Now I get a parse error on line 22835. Looks like a CRISPR? Let’s remove that line. Actually let’s remove all lines that say CRISPR in them.</p>
+<pre class="r"><code>sed '/CRISPR/d' mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff</code></pre>
+<p>Oh good. Now I get the original error at line 18679. Josh’s github says according to the GFFv3 standard, semi-colons have a reserved meaning and must be escaped. The standard recommends using the URL escape %3B. How can I replace only product names with semicolons? It has a space - can I use that?</p>
+<pre class="r"><code>sed -i 's|; |%3B |g' mapping_database.gff</code></pre>
+<p>Technically it was validated, but got 40,000+ warnings about missing “##sequence-region” lines. I’m going to try coming back to this later, but will run as is for now since Josh didn’t seem to run into this problem.</p>
+<p>It read the gff file! Warning was “no features of type ‘feature’” produced. Odd. Now it says “no module named pysam found” Looks like I need to go back to the python installation and add that module. Going now.</p>
+<p>Got that module added to the install and tried again. It’s taking forever, is that a good sign? 2 hours later - still not done. It was on one of the spalding servers I’ve been having trouble with, so restarted… and it finished five minutes later. Darn spalding. And whatever that feature.out output is, it’s not what I want to use for RPKM counts. Although the mapped to unmapped ratio is nice.</p>
+<p>__no_feature 898225 __ambiguous 0 __too_low_aQual 0 __not_aligned 5279253 __alignment_not_unique 0</p>
+<p>What do I save to find out which genes/genomes it mapped to? Or are there supposed to be features in this file? I’m going to rerun and keep all the output this time.</p>
+<p>Actually the raw bwa output looks like what I need. Can I process this in R? It’s kind of large, but I could write my own script instead of the samtools/htseq combo to get exactly what I need out. Can I use samtools to parse down the size of that file?</p>
+<p>Let’s back up the train. Here’s the results I need out of the mapping:</p>
+<ul>
+<li>How many reads are mapped vs unmapped</li>
+<li>What genome and gene (name please) did each read map to? (could be condensed to a table of counts per gene/genome)</li>
+<li>A fasta file of the unmapped read sequences</li>
+</ul>
+<p>What exactly is in this output sam file from bwa? According to their manual:</p>
+<ul>
+<li>metaT read name</li>
+<li>flag about the mapping (includes unmapped)</li>
+<li>name of reference sequence it hit</li>
+<li>position of sequence</li>
+<li>mapping quality in Phred</li>
+<li>CIGAR?</li>
+<li>mate reference (for paired only)</li>
+<li>mate position</li>
+<li>inferred insert size</li>
+<li>which strant</li>
+<li>quailty of query seq in Phred</li>
+<li>optional fields</li>
+</ul>
+<p>Really I only need the read name, did it map or not, and what did it hit. But the bwa file is way too big. I’m running again using samtool idxstats, which should give me a tab-delimited file of reference sequence name, sequence length, # mapped reads and # unmapped reads.</p>
+<p>Next run technically worked, but produced all of the output to the screen and follows the format:</p>
+<p>TH03520DRAFT_TH03520_TBL_comb47_HYPODRAFT_10000124.2 95289 0 0 TH03520DRAFT_TH03520_TBL_comb47_HYPODRAFT_10000199.3 76284 8 0 TH03520DRAFT_TH03520_TBL_comb47_HYPODRAFT_10000209.4 75264 1 0 TH03520DRAFT_TH03520_TBL_comb47_HYPODRAFT_10000247.5 71296 0 0</p>
+<p>So I assume that’s genome/contig name, length of contig, number of reads and number of unmapped reads? Not so useful. HOw to I get the genes?</p>
 <p>02mapping.sh:</p>
 <pre class="r"><code>#!/bin/bash
 #Map metatranscriptome reads to my database of reference genomes
