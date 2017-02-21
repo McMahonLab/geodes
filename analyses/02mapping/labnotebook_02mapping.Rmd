@@ -1,0 +1,920 @@
+# Mapping
+
+####Goal of this analysis
+
+Who's active in our samples? What genes are being expressed? We could try to classify and annotate each read in the metatranscriptomes, but that wouldn't be very accurate. Instead we're going to map the reads to a database of freshwater genomes to get the classification and  annotation of every read we can.
+
+##### Approach
+
+The input files are the output from the workflow in 01rRNA_removal. In that workflow, I took quality filter reads produced by the JGI and ran them through sortmerna to get only nonrRNA reads to map. The database I'm using is genomes assembled from metagenomes (MAGs) and single amplified genomes (SAGs) from the same lakes as my metatranscriptomes. It's been curated by both the JGI and our lab, and contains additional genomes generated from the metagenomes and single cell preservations we collected during the GEODES field campaign. We're hoping that we'll get the best mapping possible by using genomes from the same study sites. We're also mapping to an internal standard that we added during extraction to approximate the absolute read counts in our metatranscriptomes. I'm going to perform this mapping competitively using the program bwa, then summarize the results using samtools and htseq.
+
+## Most recent workflow. 
+####Use this if you want to replicate our protocol. Updated 2017-02-21
+
+So far, we've removed rRNA reads from the metatranscriptomes (see ../01rRNA_removal/). What I need to do next is map those reads to our database of reference genomes.
+
+- We'll split the fastq files up again to reduce run time and disk space per job
+- Then map each piece of the metaT to the entire reference database (competitive mapping)
+- Put all the mapping results back together and save for the next steps.
+
+1. There's a few things we need to take care of before we can start the mapping.
+
+Make a list of samples to run:
+```{r, eval = F}
+for file in /mnt/gluster/amlinz/GEODES_nonrRNA_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samplenames.txt
+#Use the line below to make a shorter test file
+#head -3 samplenames.txt > test_samplenames.txt; mv test_samplenames.txt samplenames.txt
+```
+
+Set up folders in gluster for the outputs:
+```{r, eval = F}
+mkdir /mnt/gluster/amlinz/GEODES_nonrRNA_split/
+mkdir /mnt/gluster/amlinz/GEODES_mapping_split/
+mkdir /mnt/gluster/amlinz/GEODES_mapping_concat/
+```
+
+Build the reference genome database. You can put any genomes you want in this folder!
+```{r, eval = F}
+cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna > mapping_database.fna
+cat /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff > mapping_database.gff
+
+#We've got to fix some formatting issues in the gff file first
+#Remove comment lines
+sed -i '/^#/d' mapping_database.gff
+#Add back the first comment line
+echo '##gff-version 3' | cat - mapping_database.gff > temp && mv temp mapping_database.gff
+#Remove CRISPR arrays
+sed '/CRISPR/d' mapping_database.gff > temp && mv temp mapping_database.gff
+#Change semicolons in product names to a URL escape code
+sed -i 's|; |%3B |g' mapping_database.gff
+gzip mapping_database.gff 
+gzip mapping_database.fna 
+
+```
+
+Build a custom install of bwa using an interactive session. (You could use the ones I built, saved here in this repo, but I make no guarantees that they will work on your system). Here's my submit script:
+
+interactive1.sub:
+```{r, eval = F}
+#interactive2.sub
+#
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines. 
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = bwa-0.7.12.tar.bz2
+
+# It's still important to request enough computing resources. The below 
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+request_cpus = 1
+request_memory = 1GB
+request_disk = 1GB
+
+queue
+```
+
+
+And what I'm typing in the interactive session:
+```{r, eval = F}
+condor_submit -i interactive1.sub
+# Wait for job to start
+tar xvfj bwa-0.7.12.tar.bz2
+cd bwa-0.7.12
+make
+cd ..
+ls bwa-0.7.12
+# bwa executable is in there!
+tar czvf bwa.tar.gz bwa-0.7.12/
+ls
+exit
+
+```
+
+This produces a tarball named bwa.tar.gz that I can copy over, unzip, and start running. I also need one for samtools.
+
+interactive2.sub:
+```{r, eval = F}
+#interactive2.sub
+#
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines. 
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = samtools-1.3.1.tar.bz2
+
+# It's still important to request enough computing resources. The below 
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+request_cpus = 1
+request_memory = 1GB
+request_disk = 1GB
+
+queue
+```
+
+
+And what I'm typing in the interactive session:
+```{r, eval = F}
+condor_submit -i interactive2.sub
+# Wait for job to start
+tar xvfj samtools-1.3.1.tar.bz2
+cd samtools-1.3.1
+make
+make prefix=../samtools install
+cd ..
+ls samtools
+#I've got a nice bin file in there now!
+tar czvf samtools.tar.gz samtools/
+ls
+exit
+
+```
+
+
+
+2. We need to split up all those fastq files using the following submit script:
+```{r,eval = F}
+# 02split_fastq_mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02split_fastq_mapping_$(Cluster).log
+error = 02split_fastq_mapping_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02split_fastq_mapping.sh
+arguments = $(sample)
+output = 02split_fastq_mapping_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files =
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 1 GB
+request_disk = 6 GB
+#
+# Just one job for testing
+queue sample from samplenames.txt
+```
+
+And its companion executable, 02split_fastq_mapping.sh:
+```{r, eval = F}
+
+#!/bin/bash
+
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1.fastq.gz ./
+gzip -d $1.fastq.gz
+
+# make a folder for each metagenome
+mkdir $1
+
+# Split by number of lines
+split -l 1000000 $1.fastq $1/$1
+
+# Rename files to include .fastq extension
+for file in $1/*;do mv "$file" "$file.fastq";done
+
+# Grace includes a read file in the folder with the split files, but I don't think that makes sense for using with SortmeRNA
+# I'm also not going to zip up the file, because I'd just need to unzip back on gluster
+mv $1 /mnt/gluster/amlinz/GEODES_mapping_split/
+rm $1.fastq
+
+```
+
+Run and check to see if it worked:
+```{r, eval = F}
+condor_submit 02split_fastq_mapping.sub
+
+# Check to see if there's anything in the error file
+ls -ltr 02split*.err
+
+# Check to make sure the output is what you wanted:
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_split/
+find /mnt/gluster/amlinz/GEODES_mapping_split/ -type f
+```
+
+3. Do the mapping! We'll need a new list of the split files to queue.
+```{r, eval = F}
+find /mnt/gluster/amlinz/GEODES_mapping_split/ -type f > path2splitmappingfastqs.txt
+# Double check!
+cat path2splitmappingfastqs.txt
+
+```
+
+02mapping.sub:
+```{r, eval = F}
+# 02mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02mapping_$(Cluster).log
+error = 02mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02mapping.sh
+arguments = $(samplename)
+output = 02mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = bwa.tar.gz,mapping_database.fna.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 3
+request_memory = 3GB
+request_disk = 1GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2splitmappingfastqs.txt
+```
+
+
+02mapping.sh:
+```{r, eval = F}
+#!/bin/bash
+#Map metatranscriptome reads to my database of reference genomes
+
+#Transfer metaT from gluster
+cp $1 .
+name=$(basename $1 |cut -d'.' -f1)
+
+#Unzip program and database
+tar xvf bwa.tar.gz
+gzip -d mapping_database.fna.gz
+
+#Index the reference database
+./bwa-0.7.12/bwa index mapping_database.fna
+
+#Run the mapping step - using 5 processors
+./bwa-0.7.12/bwa mem -t 3 mapping_database.fna ${name}.fastq > ${name}.sam
+cp ${name}.sam /mnt/gluster/amlinz/GEODES_mapping_split/
+
+#Clean up
+rm -rf bwa
+rm ${name}.fastq
+rm *.sam
+rm mapping_database*
+rm *.tar.gz
+  
+```
+
+
+3. Concatenate the outputs. I'm going to use samtools merge for this. 
+
+02merge_mapped_results.sub:
+```{r, eval = F}
+# 02merge_mapped_results.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02merge_mapped_results_$(Cluster).log
+error = 02merge_mapped_results_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02merge_mapped_results.sh
+arguments = $(samplename)
+output = 02merge_mapped_results_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 3GB
+request_disk = 3GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samplenames.txt
+```
+
+02mapping.sh:
+```{r, eval = F}
+#!/bin/bash
+#Merge mapping results by sample
+
+#Transfer metaT from gluster
+cp /mnt/gluster/amlinz/GEODES_mapping_split/$1*.sam .
+
+#Unzip program
+tar xvf samtools.tar.gz
+
+#Convert to bam, sort, merge, and convert back to sam
+for file in *.sam; do samtools view -b -S -o $file.bam $file;done
+samtools merge -h $1aa.sam  $1.merged.bam *.bam
+samtools sort $1.merged.bam $1.sorted
+samtools index $1.sorted.bam
+samtools view $1.sorted.bam $1.all.sam
+
+#Copy back to gluster
+cp $1.all.sam /mnt/gluster/amlinz/GEODES_mapping_concat/
+
+#Clean up
+rm -rf samtools
+rm -rf tmp
+rm *.sam
+rm *.bam
+rm *.bai
+rm *.tar.gz
+```
+
+4. Clean up!
+From Zissou:
+```{r, eval = F}
+# Download files to Zissou. These will then be copied to /lakes_data/ 
+cd /home/amlinz/GEODES
+mkdir GEODES_mapping_results
+
+rsync -av amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_mapping_concat/ GEODES_mapping_results
+```
+
+On my computer:
+Open up WinSCP and log into submit-3.chtc.wisc.edu. Download the most recent versions of the scripts, programs, and text files
+
+On submit-3.chtc.wisc.edu:
+
+```{r, eval = F}
+# The only files I need going forward are the nonrRNA files. Delete the rest!
+# Note: I'll keep the directories, in case I need to run a few more files in the future:
+
+rm -r /mnt/gluster/amlinz/GEODES_nonrRNA_split/*
+rm /mnt/gluster/amlinz/GEODES_mapping_split/*
+
+# Delete all the .log, .out, and .err files in your home directory
+rm *.err
+rm *.log
+rm *.out
+
+# Remove programs. Keep the mapping database and samtools for next step
+rm *.txt
+rm bwa*
+
+# Move old scripts into their own folder
+#mkdir scripts #if necessary
+mv *.sh scripts/
+mv *.sub scripts/
+
+```
+
+Congratulations! You now have files of just nonrRNA reads from your metatranscriptomes, and are ready to run the next step.
+
+
+#Lab Notebook
+
+####2017-02-13
+
+There's quite a few programs involved in this step. I'm using:
+
+- bwa (Burrows-Wheeler Aligner, v0.7.12), https://sourceforge.net/projects/bio-bwa/files/ 
+- samtools (v1.3.1), https://sourceforge.net/projects/samtools/files/
+- htseq (v0.6.1), http://www-huber.embl.de/users/anders/HTSeq/doc/install.html#install
+- python (gzipped source tarball v2.7.13), https://www.python.org/downloads/release/python-2713/
+
+The general plan is to:
+- copy in the nonrRNA file of interest
+- run bwa
+- convert the output from .sam to .bam and index
+- count reads by feature with htseq
+- calculate RPKM and summarize results with a python script
+- save files back to gluster
+
+I'm basing this on Josh's script from OMD-TOIL found here https://github.com/alexlinz/OMD-TOILv2/tree/master/scripts/10_mapping/10c_competitive
+
+But the installation on CHTC is going to be a little tricky. First I need to build my own python tarball in interactive mode. I'm following the instructions here http://chtc.cs.wisc.edu/python-jobs.shtml
+
+First I need to start an interactive CHTC session.
+interactive.sub:
+```{r, eval = F}
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines. 
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = Python-2.7.13.tgz
+
+# It's still important to request enough computing resources. The below 
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+request_cpus = 1
+request_memory = 1GB
+request_disk = 1GB
+
+queue
+```
+
+Start the session with:
+```{r, eval = F}
+condor_submit -i interactive.sub
+```
+
+Here's what I'm typing in the interactive session:
+```{r, eval = F}
+mkdir python
+tar -xvf Python-2.7.13.tgz
+cd Python-2.7.13
+./configure --prefix=$(pwd)/../python
+make
+make install
+cd ..
+ls python
+ls python/bin
+# Maybe I can install htseq right in here?
+export PATH=$(pwd)/python/bin:$PATH
+wget https://bootstrap.pypa.io/get-pip.py
+python get-pip.py
+pip install numpy
+pip install matplotlib
+pip install htseq
+pip install pysam
+# hey, that worked!
+tar -czvf python.tar.gz python/
+exit
+
+```
+
+Wow, I feel like a real bioinformatician! +1 to CHTC for awesome tutorials. Now I have a tarball that I can transfer around with my jobs that includes both python and HTseq.
+
+CHTC is closing down my submit node for maintenance tomorrow, so I'm going to stop here for now. I'll possibly do some testing on Zissou and will download my installation packages for that, but I'm not sure how two different versions of python will agree on Zissou.
+
+
+####2017-02-15
+
+We're back up and running! Today I'm going to write a script to map one metatranscriptome. I'm going to transfer all of the installs over, but examine the output and slowly add lines to the bash script as I go.
+
+First, get sample names and shorten to one metatranscriptome.
+
+```{r, eval = F}
+for file in /mnt/gluster/amlinz/GEODES_nonrRNA_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samplenames.txt
+head -1 samplenames.txt > test_samplenames.txt; mv test_samplenames.txt samplenames.txt
+```
+
+Here's my first stab at the submit file 02mapping.sub:
+```{r, eval = F}
+# 02mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02mapping_$(Cluster).log
+error = 02mapping_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02mapping.sh
+arguments = $(samplename)
+output = 02mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = python.tar.gz,bwa.tar.gz,samtools.tar.gz, mapping_database.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 2GB
+request_disk = 5GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samplenames.txt
+```
+
+I also need to build my reference genome database. Which means I need to go find and upload the internal standard fasta and gff. It also looks like the size is pretty small (< 1 GB) so I'll zip up this database after building and send it via the submit file
+
+Here's my database building:
+```{r, eval = F}
+cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna > mapping_database.fna
+cat /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff > mapping_database.gff
+tar -czvf mapping_database.tar.gz mapping_database.fna mapping_database.gff
+rm mapping_database.gff
+rm mapping_database.fna
+```
+
+Cool! I'm going to retroactively add that to the submit file above. Now for the executable. I'm going to be testing unzipping things so I know what to add to my path variable outside of this code.
+
+Gah. Looks like bwa and samtools also need to be installed via interactive session.
+
+####2017-02-16
+
+Yep, more interactive installs time. Let's do this for bwa first. I'm modifying my interactive.sub to tranfer bwa instead of python.
+
+Here's what I'm typing to install. Following instructions from the top of the README.md file in the bwa tarball, since I can't find installation instructions anywhere on their website...
+```{r, eval = F}
+condor_submit -i interactive.sub
+# Wait for job to start
+tar xvfj bwa-0.7.12.tar.bz2
+cd bwa-0.7.12
+make
+cd ..
+ls bwa-0.7.12
+# bwa executable is in there!
+tar czvf bwa.tar.gz bwa-0.7.12/
+ls
+exit
+
+```
+
+Now do the same thing for samtools. Installation instructions here: http://www.htslib.org/download/
+I'm modifying my interactive.sub to transfer the samtools tarball this time.
+
+```{r, eval = F}
+condor_submit -i interactive.sub
+# Wait for job to start
+tar xvfj samtools-1.3.1.tar.bz2
+cd samtools-1.3.1
+make
+make prefix=../samtools install
+cd ..
+ls samtools
+#I've got a nice bin file in there now!
+tar czvf samtools.tar.gz samtools/
+ls
+exit
+
+```
+
+Time to make my first executable. This is the homerun attempt -  I'm expecting lots and lots of errors.
+
+02mapping.sh:
+```{r, eval = F}
+##!/bin/bash
+#Map metatranscriptome reads to my database of reference genomes
+
+#Unzip programs
+tar xzf python.tar.gz
+tar xvf bwa.tar.gz
+tar xvf samtools.tar.gz
+tar xvf mapping_database.gz
+
+#Transfer metaT from gluster
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1.fastq.gz
+tar xzf $1.fastq.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$(pwd)/bwa:$PATH
+export HOME=$(pwd)/home
+
+#Index the reference database
+bwa index mapping_database.fna
+
+#Run the mapping step - using 5 processors
+bwa mem -t 5 mapping_database $1.fastq > $1.sam
+
+#Manipulate the output
+samtools view -b -S -o $1.bam $1.sam
+samtools sort -o $1.sorted.bam -O bam -T /temp/$1 $1.bam
+samtools index $1.sorted.bam
+rm $1.sam
+rm $1.bam
+
+#Count reads
+htseq-count -f bam -r pos -s no -a 0 -t feature -i locus_tag -m intersection-strict -o $1.feature.sam $1.sorted.bam mapping_database.gff > $1.feature.out
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+cp $1.feature.out /mnt/gluster/amlinz/GEODES_mapping_results/
+rm $1.feature.out
+
+#Clean up
+rm -rf python
+rm -rf bwa
+rm -rf samtools
+rm $1.fastq
+rm *.sam
+rm *.bam
+rm mapping_database*
+rm *.tar.gz
+  
+```
+
+and the submit file:
+02mapping.sub
+```{r, eval = F}
+# 02mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02mapping_$(Cluster).log
+error = 02mapping_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02mapping.sh
+arguments = $(samplename)
+output = 02mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = python.tar.gz,bwa.tar.gz,samtools.tar.gz, mapping_database.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 5
+request_memory = 5GB
+request_disk = 8GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samplenames.txt
+```
+
+Here goes nothing! I'm going to list errors here and revise the scripts below.
+
+1. Job held. Events 007 and 012 - condor_shadow rejected my job (Exec format error), and the job was placed in holding. Google suggests a problem with line endings - will use dos2unix on both the sub and sh and try again.
+2. Still didn't work. The other suggested issue could be with the !/bin/bash statement. Oh look, I've got an extra #. Removing and trying again. THAT WORKED!
+3. Several errors with a couple main causes. One, can't find GEODES001_nonrRNA.fastq.gz. Two, can't find bwa in the path. Three, can't find python. Four, can't find mapping_database.gz. Yikes. Solution 1, added ./ to the cp command so it knows where to put that. Solution 2, call bwa directly instead of via PATH. Solution 4, fix the typo in mapping_database.gz to mapping_database.tar.gz. Solution 3, add the requirements line to the sub script from CHTC's python instructions. Sidenote 1, the python tarball is > 50MB so transferring from gluster instead of via the submit file. Sidenote 2, increasing my disk usage space to 10GB, reducing memory to 3 GB and processors to 3. Still, only 12 computers meet these requirements, so I may need to split the job up into several steps to cut down on disk space.
+4. "This does not look like a tar archive" and "cannot find GEODES001_nonrRNA.fastq.gz". Changing tar extraction to gzip extraction. Still can't find python -adding "python" before I call htseq-count.
+5. Progress! the bwa index worked, but then bwa mem couldn't find the index. Python got found this time but then couldn't find htseq-count. But hey, at least things are running? And the diskspace is more reasonable - dropping down to 6. I'll try calling the database with the .fna extension, and calling htseq-count directly.
+6. Well, that took an hour and a half but made it to the samtools step. Error was "failed to open file /temp/GEODES001_nonrRNA.0000.bam". I'll take the temp folder designation out. I'm not sure what that's doing anyway.Also going to set samtools to use three threads, and going to save a copy of the mapping output to my home folder so I can rerun from after the mapping step next time. BTW, only 27 computers match my current job.
+7. Ooh, that's interesting. Error occured due to failure to parse line 18699 of mapping_database.gff, specifically in the attribute column. Investigating with:
+```{r, eval = F}
+sed -n '18699{p;q}' mapping_database.gff
+```
+Only thing different is that it has parantheses and a semicolon
+
+####2017-02-20
+
+I tried the code to below to remove the semicolon, since that's also a column separator
+```{r, eval = F}
+sed -i 's|(IF-2; GTPase)|(IF-2 GTPase)|g' mapping_database.gff
+```
+
+But that didn't work. Still get the error at line 18699. I'm going to try downloading the gff file (gzipped) and running it through an online validator http://genometools.org/cgi-bin/gff3validator.cgi . 
+
+Well it doesn't like comment lines. Let's remove those.
+```{r, eval = F}
+sed -i '/^#/d' mapping_database.gff
+```
+
+Ah. Apparently the first line needs to start with ##gff-version 3. Let's add that back in.
+
+```{r, eval = F}
+echo '##gff-version 3' | cat - mapping_database.gff > temp && mv temp mapping_database.gff
+```
+
+Now I get a parse error on line 22835. Looks like a CRISPR? Let's remove that line. Actually let's remove all lines that say CRISPR in them.
+
+```{r, eval = F}
+sed '/CRISPR/d' mapping_database.gff > temp && mv temp mapping_database.gff
+```
+
+Oh good. Now I get the original error at line 18679. Josh's github says according to the GFFv3 standard, semi-colons have a reserved meaning and must be escaped. The standard recommends using the URL escape %3B. How can I replace only product names with semicolons? It has a space - can I use that?
+
+```{r, eval = F}
+sed -i 's|; |%3B |g' mapping_database.gff
+```
+
+Technically it was validated, but got 40,000+ warnings about missing "##sequence-region" lines. I'm going to try coming back to this later, but will run as is for now since Josh didn't seem to run into this problem.
+
+It read the gff file! Warning was "no features of type 'feature'" produced. Odd. Now it says "no module named pysam found" Looks like I need to go back to the python installation and add that module. Going now.
+
+Got that module added to the install and tried again. It's taking forever, is that a good sign?
+2 hours later - still not done. It was on one of the spalding servers I've been having trouble with, so restarted... and it finished five minutes later. Darn spalding. And whatever that feature.out output is, it's not what I want to use for RPKM counts. Although the mapped to unmapped ratio is nice.
+
+__no_feature    898225
+__ambiguous     0
+__too_low_aQual 0
+__not_aligned   5279253
+__alignment_not_unique  0
+
+What do I save to find out which genes/genomes it mapped to? Or are there supposed to be features in this file? I'm going to rerun and keep all the output this time.
+
+Actually the raw bwa output looks like what I need. Can I process this in R? It's kind of large, but I could write my own script instead of the samtools/htseq combo to get exactly what I need out. Can I use samtools to parse down the size of that file?
+
+Let's back up the train. Here's the results I need out of the mapping:
+
+- How many reads are mapped vs unmapped
+- What genome and gene (name please) did each read map to? (could be condensed to a table of counts per gene/genome)
+- A fasta file of the unmapped read sequences
+
+What exactly is in this output sam file from bwa? According to their manual:
+
+- metaT read name
+- flag about the mapping (includes unmapped)
+- name of reference sequence it hit
+- position of sequence
+- mapping quality in Phred
+- CIGAR?
+- mate reference (for paired only)
+- mate position
+- inferred insert size
+- which strant
+- quailty of query seq in Phred
+- optional fields
+
+Really I only need the read name, did it map or not, and what did it hit. But the bwa file is way too big. I'm running again using samtool idxstats, which should give me a tab-delimited file of reference sequence name, sequence length, # mapped reads and # unmapped reads.
+
+Next run technically worked, but produced all of the output to the screen and follows the format: 
+
+TH03520DRAFT_TH03520_TBL_comb47_HYPODRAFT_10000124.2    95289   0       0
+TH03520DRAFT_TH03520_TBL_comb47_HYPODRAFT_10000199.3    76284   8       0
+TH03520DRAFT_TH03520_TBL_comb47_HYPODRAFT_10000209.4    75264   1       0
+TH03520DRAFT_TH03520_TBL_comb47_HYPODRAFT_10000247.5    71296   0       0
+
+So I assume that's genome/contig name, length of contig, number of reads and number of unmapped reads? Not so useful. HOw to I get the genes?
+
+
+####2017-02-21
+
+I did some reading on HTseq, and it should be able to count reads that hit genes. At the very least, it could at least open my gff file and show me if there's something wrong with the features. I'm going start an interactive session sending over python and samtools, and try to follow the instructions here: http://www-huber.embl.de/users/anders/HTSeq/doc/tour.html#tour
+
+Here's what I'm typing in the interactive session:
+```{r, eval = F}
+condor_submit -i interactive.sub
+#Wait
+cp /mnt/gluster/amlinz/GEODES001_nonrRNA.sam .
+tar xzf python.tar.gz
+tar xvf samtools.tar.gz
+tar xvf mapping_database.tar.gz
+
+samtools view -b -S -o GEODES001_nonrRNA.bam GEODES001_nonrRNA.sam
+#Had some trouble with the command below - command flags have changed since Josh wrote his script. This is the correct format. Could this be why I have no features at the end?
+samtools sort GEODES001_nonrRNA.bam -o GEODES001_nonrRNA.sorted.bam
+samtools index GEODES001_nonrRNA.sorted.bam
+samtools idxstats GEODES001_nonrRNA.sorted.bam
+#That command works, but still goes by contig rather than by gene.
+# Update the python path
+
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
+export HOME=$(pwd)/home
+
+#Check the original htseq count command to see if fixing the sort line results in feature:
+python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t CDS -i locus_tag -m intersection-strict -o GEODES001_nonrRNA.feature.sam GEODES001_nonrRNA.sorted.bam mapping_database.gff > GEODES001_nonrRNA.feature.out
+
+# I think CDS and locus tag should work! I'll need to paste each feature.out as a column in a dataframe for DESeq, and I'll use the gff file as a metadata file
+# How can I get a fast file of unmapped reads?
+samtools view -f 4 GEODES001_nonrRNA.sam > GEODES001_nonrRNA.unaligned.sam 
+samtools view -b -S -o GEODES001_nonrRNA.unaligned.bam GEODES001_nonrRNA.unaligned.sam
+samtools bam2fq -nO GEODES001_nonrRNA.unaligned.bam > GEODES001_nonrRNA.unaligned.fastq 
+
+
+```
+
+That should do it! I've got unique identifiers and counts of reads that mapped, and I'll just need a metadata file to process those. I've also got a fastq file of unmapped reads, which should work for kraken. I've also realized that since both of these steps stem from the bwa output, I should split this into three separate scripts. This will cut down on space needed and hopefully speed up run time.  I could probably split up the input files for mapping, too, then put them back together with samtools merge.
+
+Keeping the scripts below, but going to the current workflow section for this final pass! Should be pretty simple - I'll modify splitfastqs from the rRNA removal step, then run just the mapping on this step, then put it together. The processing and kraken results will be in a different folder.
+
+02mapping.sh:
+```{r, eval = F}
+#!/bin/bash
+#Map metatranscriptome reads to my database of reference genomes
+
+#Transfer metaT from gluster
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1.fastq.gz .
+cp /mnt/gluster/amlinz/python.tar.gz .
+gzip -d $1.fastq.gz
+
+#Unzip programs
+tar xzf python.tar.gz
+tar xvf bwa.tar.gz
+tar xvf samtools.tar.gz
+tar xvf mapping_database.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
+export HOME=$(pwd)/home
+
+#Index the reference database
+./bwa-0.7.12/bwa index mapping_database.fna
+
+#Run the mapping step - using 5 processors
+./bwa-0.7.12/bwa mem -t 3 mapping_database.fna $1.fastq > $1.sam
+cp $1.sam /mnt/gluster/amlinz/
+
+#Manipulate the output
+samtools view -b -S -o $1.bam $1.sam
+samtools sort -o $1.sorted.bam -O bam -T $1 -@ 3 $1.bam
+samtools index $1.sorted.bam
+rm $1.sam
+rm $1.bam
+
+#Count reads
+python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t feature -i locus_tag -m intersection-strict -o $1.feature.sam $1.sorted.bam mapping_database.gff > $1.feature.out
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+cp $1.feature.out /mnt/gluster/amlinz/GEODES_mapping_results/
+rm $1.feature.out
+
+#Clean up
+rm -rf python
+rm -rf bwa
+rm -rf samtools
+rm $1.fastq
+rm *.sam
+rm *.bam
+rm mapping_database*
+rm *.tar.gz
+  
+```
+
+02mapping.sub
+```{r, eval = F}
+# 02mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02mapping_$(Cluster).log
+error = 02mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 02mapping.sh
+arguments = $(samplename)
+output = 02mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = bwa.tar.gz,samtools.tar.gz, mapping_database.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 3
+request_memory = 3GB
+request_disk = 10GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samplenames.txt
+```
+
+
+I've got everything copied up top, split fastqs modified, and a new script for merging at the end. I'll probably run that last one in interactive mode to check it first. Cleaning up my folder and leaving notes here as I test 3 metaTs.
+
+Split fastqs started at 10:23, finished at 10:27. No errors. modified requests in submit file.
+Mapping started at 10:39. At 11:13, most jobs were done but 13 were held. Why? Some jobs are going above the memory limit. Adjust and try again. Restarted at 11:17, finished at 12:09.
+
+Did some futzing with samtools on the interactive sub and got something working. Started at 1:10, finished at 1:30, no errors. Looking good! I'll hold off running all of the mapping until I get the downsteam stuff working.
