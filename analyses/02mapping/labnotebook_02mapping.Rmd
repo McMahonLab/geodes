@@ -331,7 +331,7 @@ transfer_input_files = samtools.tar.gz
 Requirements = (Target.HasGluster == true)
 request_cpus = 1
 request_memory = 3GB
-request_disk = 3GB
+request_disk = 1GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
 queue samplename from samplenames.txt
@@ -349,11 +349,12 @@ cp /mnt/gluster/amlinz/GEODES_mapping_split/$1*.sam .
 tar xvf samtools.tar.gz
 
 #Convert to bam, sort, merge, and convert back to sam
-for file in *.sam; do samtools view -b -S -o $file.bam $file;done
+#for file in *.sam; do samtools view -b -S -o $file.bam $file;samtools sort $file.bam $file.sorted.bam;done
+for file in *.sam; do samtools view -b -S -o $file.bam $file;;done
 samtools merge -h $1aa.sam  $1.merged.bam *.bam
 samtools sort $1.merged.bam $1.sorted
 samtools index $1.sorted.bam
-samtools view $1.sorted.bam $1.all.sam
+samtools view -h -0 $1.all.sam $1.sorted.bam 
 
 #Copy back to gluster
 cp $1.all.sam /mnt/gluster/amlinz/GEODES_mapping_concat/
