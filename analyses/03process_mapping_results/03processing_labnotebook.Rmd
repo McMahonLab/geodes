@@ -11,6 +11,7 @@ I'm going to use htseq to count up to reads mapping to the same thing in each me
 ## Most recent workflow. 
 ####Use this if you want to replicate our protocol. Updated ...
 
+1. Setup
 Set up folders in gluster for the outputs:
 ```{r, eval = F}
 mkdir /mnt/gluster/amlinz/GEODES_mapping_summaries/
@@ -86,7 +87,7 @@ cat samfiles.txt
 
 ```
 
-Run 03processing:
+2. Run 03processing:
 ```{r, eval = F}
 
 # 03processing.sub
@@ -163,6 +164,76 @@ rm *.bai
 rm mapping_database*
 rm *.tar.gz
 ```
+
+
+Check the results
+
+```{r, eval = F}
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_summaries/
+```
+
+3. Compile the result into a single table using the scripts 03maketable:
+
+03maketable.sub:
+```{r, eval = F}
+# 03maketable.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03maketable_$(Cluster).log
+error = 03maketable_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 03maketable.sh
+#arguments = 
+output = 03maketable_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = 
+transfer_output_files = GEODES_genes_2017-02-22.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 1GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue
+```
+
+03maketable.sh
+```{r, eval = F}
+#!/bin/bash
+#Combine htseq-count results into one table
+cp /mnt/gluster/amlinz/GEODES_mapping_summaries/* .
+
+awk '{print $1}' GEODES001_nonrRNA.CDS.out > rownames.txt
+for file in *.out;do awk '{print $2}' $file > temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt > temp2.txt && mv temp2.txt $file;done
+echo "\t" | cat - rownames.txt > temp3.txt && mv temp3.txt rownames.txt
+files=$(echo *.out)
+paste rownames.txt $files > GEODES_genes_2017-02-27.txt
+
+rm *.out
+rm rownames.txt
+rm temp*.txt
+
+```
+
+4. Make a metadata file
+
+You'll need a custom file with information about each locus tag in the table - what genome did it come from and what gene product does it encode? Make this with make_metadata_file.R from your mapping_database.gff file. Use the commented bash code to get contig names from your gff file first. Then change your file paths and go ahead and source it. I like to do this with Rstudio on my desktop, so I downloaded the file first. 
+
+5. Cleanup
+
+The only thing I want to save is the table itself, which I downloaded onto my computer with WinSCP. Once you've checked the table to make sure it works. No more downstream files needed! Delete  
 
 #Lab Notebook
 
@@ -404,3 +475,6 @@ Beautiful! Everything seems to be in working order. Time to put this aside for n
 
 I got some weird errors about truncated files when trying to get a fastq file out of samtools, so I'm going back to all scripts, testing samtools in interactive mode, and then running. I'll do the same here, while also updating the "current workflow" section.
 
+####2017-02-27
+
+Ran the processing and didn't get any errors but about 10 samples produced empty output files. I'll come back and fix this if I have time before lab meeting. Moving on to making the metadata file now. 

@@ -5,7 +5,8 @@ gff <- read.csv("C:/Users/Alex/Desktop/geodes/analyses/02mapping/mapping_databas
 
 # Read in data table to interpret
 
-metaT_table <- read.table("C:/Users/Alex/Desktop/geodes/analyses/03process_mapping_results/GEODES_genes_2017-02-22.txt", row.names=1, header = T)
+metaT_table <- read.table("C:/Users/Alex/Desktop/geodes/analyses/03process_mapping_results/GEODES_genes_2017-02-27.txt", row.names=1, header = T, fill = NA)
+metaT_table <- metaT_table[, 1:72]
 metaT_table <- metaT_table[which(rowSums(metaT_table) > 0), ]
 
 # The rownames in the table are the locus_tag field. I want the contig the gene was on (so I can figure out what genome) and gene product it encodes.
@@ -46,3 +47,4 @@ for(i in 1:dim(genome_data)[1]){
 
 z <- match(rowkey$Genome, genome_data$IMG.OID)
 rowkey$Phylogeny <- phylogeny[z]
+write.csv(rowkey, "C:/Users/Alex/Desktop/geodes/analyses/05R_calculations/gene_metadata_2017-02-28.csv")
