@@ -191,6 +191,77 @@ cp python.tar.gz /mnt/gluster/amlinz/</code></pre>
 <p>Make a list of files to run:</p>
 <pre class="r"><code>for file in /mnt/gluster/amlinz/GEODES_mapping_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; samfiles.txt
 cat samfiles.txt</code></pre>
+<p>Run 03processing:</p>
+<pre class="r"><code># 03processing.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03processing_$(Cluster).log
+error = 03processing_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 03processing.sh
+arguments = $(samplename)
+output = 03processing_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = samtools.tar.gz,mapping_database.gff.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 3GB
+request_disk = 5GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samplenames.txt</code></pre>
+<p>Here’s its executable, 03processing.sh:</p>
+<pre class="r"><code>#!/bin/bash
+#Make a count table of mapped reads
+
+#Transfer data from gluster
+cp /mnt/gluster/amlinz/GEODES_mapping_concat/$1.all.sam .
+cp /mnt/gluster/amlinz/python.tar.gz .
+
+
+#Unzip programs
+tar xzf python.tar.gz
+tar xvf samtools.tar.gz
+gzip -d mapping_database.gff.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
+export HOME=$(pwd)/home
+
+#Manipulate the output
+samtools view -b -S $1.all.sam &gt; $1.bam 
+samtools sort -o $1.sorted $1.bam 
+samtools index $1.sorted.bam
+
+#Count reads
+python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t CDS -i locus_tag -m intersection-strict -o $1.CDS.sam $1.sorted.bam mapping_database.gff &gt; $1.CDS.out
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+cp $1.CDS.out /mnt/gluster/amlinz/GEODES_mapping_summaries/
+rm $1.CDS.out
+
+#Clean up
+rm -rf python
+rm -rf samtools
+rm *.sam
+rm *.bam
+rm *.bai
+rm mapping_database*
+rm *.tar.gz</code></pre>
 </div>
 </div>
 </div>
@@ -254,8 +325,8 @@ export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
 export HOME=$(pwd)/home
 
 #Manipulate the output
-samtools view -o $1.bam $1.all.sam
-samtools sort $1.bam $1.sorted
+samtools view -b -S $1.all.sam &gt; $1.bam 
+samtools sort $1.bam $1.sorted 
 samtools index $1.sorted.bam
 
 #Count reads
@@ -277,6 +348,109 @@ rm *.tar.gz</code></pre>
 <p>Fixed the issue - left out the -h flag in samtools view that leaves the header in output. Rerun 02merge script and 03processing, and got the following error:</p>
 <p>Error occured when processing SAM input (record #285895 in file GEODES002_nonrRNA.all.sam): object of type ‘NoneType’ has no len() [Exception type: TypeError, raised in _HTSeq.pyx:771]</p>
 <p>It happened in all three files, although in different lines. The only thing I can find online is here? <a href="https://sourceforge.net/p/htseq/bugs/12/" class="uri">https://sourceforge.net/p/htseq/bugs/12/</a> Doesn’t seem helpful because many of my lines have *. Will sleep on this and come back tomorrow.</p>
+</div>
+<div id="section-1" class="section level4">
+<h4>2017-02-22</h4>
+<p>Back to the googling. In regular old python, you can get this error when measuring the length of “None” because that is a protected variable. Does “None” appear in my sam files?</p>
+<pre class="r"><code>grep -n None /mnt/gluster/amlinz/GEODES_mapping_concat/GEODES001_nonrRNA.all.sam</code></pre>
+<p>Nothing. Replaced search term with * and nearly every line has that symbol. I didn’t get this error before I split and merged files - what is different now? Not sure, but I realized I wasn’t including header in the line count. So record #341922 is actually line 382861, which does have an asterix in a weird place - after the sequence. Is this my error? let’s change that * to “None” and see what happens.</p>
+<pre class="r"><code>awk '{gsub(/\*/,&quot;None&quot;,$11)}1' /mnt/gluster/amlinz/GEODES_mapping_concat/GEODES001_nonrRNA.all.sam &gt; /mnt/gluster/amlinz/GEODES_mapping_concat/test.sam</code></pre>
+<p>Now I get an error that says “truncated file” right at that same line. There are only 18 lines with no Phred score out of 500,000+ , so I’ll just remove these and address it later.</p>
+<pre class="r"><code>#Count phred scores with &quot;*&quot;
+ awk '{print $11}' /mnt/gluster/amlinz/GEODES_mapping_concat/GEODES001_nonrRNA.all.sam | grep \* |wc -l
+#Remove these lines
+awk '{ if ( $11 != &quot;\*&quot; ) { print $0; } }' /mnt/gluster/amlinz/GEODES_mapping_concat/GEODES001_nonrRNA.all.sam &gt; /mnt/gluster/amlinz/GEODES_mapping_concat/test.all.sam</code></pre>
+<p>Looks like that removed the right lines! I get an warning about the escape character, but I think that’s what I want. Testing 03processing again.</p>
+<p>It made a feature.out file! I’m just going to look up a couple “features” in the gff file to make sure I can use that as metadata.</p>
+<pre class="r"><code>gzip -d mapping_database.gff.gz
+grep scaffold_01090 mapping_database.gff
+grep YUCDRAFT_00363 mapping_database.gff
+gzip mapping_database.gff</code></pre>
+<p>Looking good! Those both produce unique lines. I’m going to add the awk lines (including printing how many * lines were removed) and run both the merging and processing on all three files. (make sure to clean up dud files first)</p>
+<p>I’m still getting this error occasionally in the merge step: [sam_header_line_parse] expected <a href="mailto:'@XY'">'@XY'</a>, got <span class="citation">[@BFFGGGGGGGGGGGDGGGGD&gt;FGGCGGGGGGGGGGGGGGGGEGGGGGBGFGGGDGGGGGGGEAGGGGGGGGGGEGCGGGFGGGGCGGGGGGBGGGGG:CGGGGGGGGGEGBEG&lt;BGGEG/DDEGGGGGDD=EGEGD&gt;GGGGGGGGG 4 * 0 0 * * 0 0* AS:i:0 XS:i:0]</span> Hint: The header tags must be tab-separated. [samopen] no <span class="citation">@SQ</span> lines in the header. [sam_read1] missing header? Abort!</p>
+<p>Ran the merging and processing, and everything looks great! Now I need a script to combine all of the output files into a single table. I’m going to start an interactive session for testing this.</p>
+<pre class="r"><code>condor_submit -i testinteractive.sub
+
+cp /mnt/gluster/amlinz/GEODES_mapping_summaries/* .
+
+#Are all files the same length?
+for file in *.out;do wc -l $file;done
+
+#Yes - presumably the rownames are the same.
+#Add a header of sample name to each of the files
+for file in *.out;do sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - $file &gt; temp &amp;&amp; mv temp $file;done
+
+#That worked!
+#Now try join to combine
+
+join GEODES002_nonrRNA.CDS.out GEODES001_nonrRNA.CDS.out 
+# Worked, but gave me an warning about sorting and didn't keep the headers.
+
+#Let's try paste instead:
+paste -d' ' GEODES001_nonrRNA.CDS.out GEODES002_nonrRNA.CDS.out
+
+#Keeps the headers but prints every rowname (with the header on the rowname)
+#Can I 1. make a separeate file of rownames 2. remove rownames from the out files 3. add the header 4. paste everything together?
+
+awk '{print $1}' GEODES001_nonrRNA.CDS.out &gt; rownames.txt
+for file in *.out;do awk '{print $2}' $file &gt; temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt &gt; temp2.txt &amp;&amp; mv temp2.txt $file;done
+echo &quot;/t&quot; | cat - rownames.txt &gt; temp3.txt &amp;&amp; mv temp3.txt rownames.txt
+files=$(echo *.out)
+paste rownames.txt $files &gt; GEODES_genes_all.txt
+
+#Looking good! exit and download to file to make sure I can open it in Rstudio
+exit</code></pre>
+<p>Write this up as a script and test again: 03maketable.sub:</p>
+<pre class="r"><code># 03maketable.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03maketable_$(Cluster).log
+error = 03maketable_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 03maketable.sh
+#arguments = 
+output = 03maketable_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = 
+transfer_output_files = GEODES_genes_2017-02-22.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 1GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue</code></pre>
+<p>03maketable.sh</p>
+<pre class="r"><code>#!/bin/bash
+#Combine htseq-count results into one table
+cp /mnt/gluster/amlinz/GEODES_mapping_summaries/* .
+
+awk '{print $1}' GEODES001_nonrRNA.CDS.out &gt; rownames.txt
+for file in *.out;do awk '{print $2}' $file &gt; temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt &gt; temp2.txt &amp;&amp; mv temp2.txt $file;done
+echo &quot;\t&quot; | cat - rownames.txt &gt; temp3.txt &amp;&amp; mv temp3.txt rownames.txt
+files=$(echo *.out)
+paste rownames.txt $files &gt; GEODES_genes_2017-02-22.txt
+
+rm *.out
+rm rownames.txt
+rm temp*.txt</code></pre>
+<p>Beautiful! Everything seems to be in working order. Time to put this aside for now and move over to the kraken classification workflow.</p>
+</div>
+<div id="section-2" class="section level4">
+<h4>2017-02-23</h4>
+<p>I got some weird errors about truncated files when trying to get a fastq file out of samtools, so I’m going back to all scripts, testing samtools in interactive mode, and then running. I’ll do the same here, while also updating the “current workflow” section.</p>
 </div>
 </div>
 

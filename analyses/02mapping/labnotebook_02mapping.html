@@ -408,7 +408,7 @@ request_disk = 1GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
 queue samplename from samplenames.txt</code></pre>
-<p>02mapping.sh:</p>
+<p>02merge_mapped_results.sh:</p>
 <pre class="r"><code>#!/bin/bash
 #Merge mapping results by sample
 
@@ -420,11 +420,16 @@ tar xvf samtools.tar.gz
 
 #Convert to bam, sort, merge, and convert back to sam
 #for file in *.sam; do samtools view -b -S -o $file.bam $file;samtools sort $file.bam $file.sorted.bam;done
-for file in *.sam; do samtools view -b -S -o $file.bam $file;;done
-samtools merge -h $1aa.sam  $1.merged.bam *.bam
+for file in *.sam; do samtools view -b -S $file &gt; $file.bam;done
+samtools merge -u $1.merged.bam *.bam
 samtools sort $1.merged.bam $1.sorted
 samtools index $1.sorted.bam
-samtools view -h -0 $1.all.sam $1.sorted.bam 
+samtools view -h $1.sorted.bam &gt; $1.all.sam
+
+#Count and remove lines with no Phred score
+awk '{print $11}' $1.all.sam | grep \* |wc -l
+awk '{ if ( $11 != &quot;\*&quot; ) { print $0; } }' $1.all.sam &gt; tmp.sam
+mv tmp.sam $1.all.sam
 
 #Copy back to gluster
 cp $1.all.sam /mnt/gluster/amlinz/GEODES_mapping_concat/
@@ -436,6 +441,7 @@ rm *.sam
 rm *.bam
 rm *.bai
 rm *.tar.gz</code></pre>
+<p>You might get an error about truncated bam files and missing EOF. This is a bug, it doesn’t apply to uncompressed bam files (which we specified with -u). Some of the split .sam files are also giving errors during conversion to .bam and aborting. I’ll come back and fix this once I’ve got the pipeline as a whole working.</p>
 <ol start="4" style="list-style-type: decimal">
 <li>Clean up! From Zissou:</li>
 </ol>
@@ -867,6 +873,12 @@ queue samplename from samplenames.txt</code></pre>
 <p>I’ve got everything copied up top, split fastqs modified, and a new script for merging at the end. I’ll probably run that last one in interactive mode to check it first. Cleaning up my folder and leaving notes here as I test 3 metaTs.</p>
 <p>Split fastqs started at 10:23, finished at 10:27. No errors. modified requests in submit file. Mapping started at 10:39. At 11:13, most jobs were done but 13 were held. Why? Some jobs are going above the memory limit. Adjust and try again. Restarted at 11:17, finished at 12:09.</p>
 <p>Did some futzing with samtools on the interactive sub and got something working. Started at 1:10, finished at 1:30, no errors. Looking good! I’ll hold off running all of the mapping until I get the downsteam stuff working.</p>
+</div>
+<div id="section-5" class="section level4">
+<h4>2017-02-23</h4>
+<p>Coming back to the merging of files since I think I figure out my samtools issues. There was a major update in the past year, and this is the current documentation: <a href="http://www.htslib.org/doc/samtools.html" class="uri">http://www.htslib.org/doc/samtools.html</a> . Josh is using the older version in his scripts.</p>
+<p>I’ve rewritten the the samtools portion of merging and will try running it interactive mode first, then in script mode. Hopefully this will solve my issues with “truncated files” downstream.</p>
+<p>After much fiddling and crashing an execute node once, I’ve got it working. On to redo-ing 03processing.</p>
 </div>
 </div>
 

@@ -205,7 +205,7 @@ mkdir $1
 split -l 1000000 $1.fastq $1/$1
 
 # Rename files to include .fastq extension
-for file in $1/*;do mv "$file" "$file.fastq";done
+for file in $1/*;do mv $file $file.fastq;done
 
 # Grace includes a read file in the folder with the split files, but I don't think that makes sense for using with SortmeRNA
 # I'm also not going to zip up the file, because I'd just need to unzip back on gluster
@@ -299,6 +299,13 @@ rm *.tar.gz
   
 ```
 
+Check the output!
+```{r, eval = F}
+ls -ltr 02mapping*.err
+# It should be just bwa output, but cat one to check
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_split/
+```
+
 
 3. Concatenate the outputs. I'm going to use samtools merge for this. 
 
@@ -337,7 +344,7 @@ request_disk = 1GB
 queue samplename from samplenames.txt
 ```
 
-02mapping.sh:
+02merge_mapped_results.sh:
 ```{r, eval = F}
 #!/bin/bash
 #Merge mapping results by sample
@@ -350,11 +357,16 @@ tar xvf samtools.tar.gz
 
 #Convert to bam, sort, merge, and convert back to sam
 #for file in *.sam; do samtools view -b -S -o $file.bam $file;samtools sort $file.bam $file.sorted.bam;done
-for file in *.sam; do samtools view -b -S -o $file.bam $file;;done
-samtools merge -h $1aa.sam  $1.merged.bam *.bam
+for file in *.sam; do samtools view -b -S $file > $file.bam;done
+samtools merge -u $1.merged.bam *.bam
 samtools sort $1.merged.bam $1.sorted
 samtools index $1.sorted.bam
-samtools view -h -0 $1.all.sam $1.sorted.bam 
+samtools view -h $1.sorted.bam > $1.all.sam
+
+#Count and remove lines with no Phred score
+awk '{print $11}' $1.all.sam | grep \* |wc -l
+awk '{ if ( $11 != "\*" ) { print $0; } }' $1.all.sam > tmp.sam
+mv tmp.sam $1.all.sam
 
 #Copy back to gluster
 cp $1.all.sam /mnt/gluster/amlinz/GEODES_mapping_concat/
@@ -367,6 +379,15 @@ rm *.bam
 rm *.bai
 rm *.tar.gz
 ```
+You might get an error about truncated bam files and missing EOF. This is a bug, it doesn't apply to uncompressed bam files (which we specified with -u).
+Some of the split .sam files are also giving errors during conversion to .bam and aborting. I'll come back and fix this once I've got the pipeline as a whole working.
+
+Check the results!
+```{r, eval = F}
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_concat/
+ls -ltr 02merge*.err
+```
+
 
 4. Clean up!
 From Zissou:
@@ -919,3 +940,12 @@ Split fastqs started at 10:23, finished at 10:27. No errors. modified requests i
 Mapping started at 10:39. At 11:13, most jobs were done but 13 were held. Why? Some jobs are going above the memory limit. Adjust and try again. Restarted at 11:17, finished at 12:09.
 
 Did some futzing with samtools on the interactive sub and got something working. Started at 1:10, finished at 1:30, no errors. Looking good! I'll hold off running all of the mapping until I get the downsteam stuff working.
+
+####2017-02-23
+
+Coming back to the merging of files since I think I figure out my samtools issues. There was a major update in the past year, and this is the current documentation: http://www.htslib.org/doc/samtools.html . Josh is using the older version in his scripts.
+
+I've rewritten the the samtools portion of merging and will try running it interactive mode first, then in script mode. Hopefully this will solve my issues with "truncated files" downstream.
+
+After much fiddling and crashing an execute node once, I've got it working. On to redo-ing 03processing.
+
