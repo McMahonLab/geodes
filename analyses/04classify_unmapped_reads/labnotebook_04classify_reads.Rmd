@@ -11,6 +11,7 @@ I'm starting with the output of 02mapping - the merged .sam files. Using samtool
 ## Most recent workflow. 
 ####Use this if you want to replicate our protocol. Updated ...
 
+1. Setup. Make directories to save results, and make a text file of samples to run.
 ```{r, eval = F}
 mkdir /mnt/gluster/amlinz/GEODES_kraken_split/
 mkdir /mnt/gluster/amlinz/GEODES_kraken_results/
@@ -18,10 +19,247 @@ mkdir /mnt/gluster/amlinz/GEODES_kraken_concat/
   
 for file in /mnt/gluster/amlinz/GEODES_mapping_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samfiles.txt
 cat samfiles.txt
+```
 
+Build a custom kraken install - I'm using the same interactive.sub that I used for the previous builds, but changing the transfer_input line to include kraken-0.10.5-beta.tgz and minikraken.tgz.
+
+Here's what I'm typing:
+```{r, eval = F}
+condor_submit -i interactive.sub
+# Wait for job
+tar zxvf  minikraken.tgz
+tar zxvf kraken-0.10.5-beta.tgz
+
+#Install kraken
+cd kraken-0.10.5-beta
+./install_kraken.sh kraken_scripts
+
+cd ..
+tar czvf kraken.tar.gz kraken-0.10.5-beta minikraken_20141208
+ls -ltrh
+rm -r kraken-0.10.5-beta*
+rm -r minikraken*
+exit
+# Back in my home folder, move the kraken install to gluster since it's so huge
+
+mv kraken.tar.gz /mnt/gluster/amlinz/
+
+```
+
+
+2. Convert .sam to .fastq and split the files
+
+04sam2fastq.sub
+```{r, eval = F}
+# 04sam2fastq.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04sam2fastq_$(Cluster).log
+error = 04sam2fastq_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 04sam2fastq.sh
+arguments = $(samplename)
+output = 04sam2fastq_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 3GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samfiles.txt
+```
+
+04sam2fastq.sh
+```{r, eval = F}
+#!/bin/bash
+#Convert to sam and split
+tar xvf samtools.tar.gz
+
+#Copy file from gluster
+cp /mnt/gluster/amlinz/GEODES_mapping_concat/$1.all.sam .
+
+#Extract fastq file of unmapped reads
+samtools view -S -b -f 4 $1.all.sam > $1.unaligned.bam 
+samtools bam2fq $1.unaligned.bam > $1.unaligned.fastq
+
+mkdir $1
+
+# Split by number of lines
+split -l 100000 $1.unaligned.fastq $1/$1
+
+# Rename files to include .fastq extension
+for file in $1/*;do mv $file $file.unaligned.fastq;done
+
+cp $1* /mnt/gluster/amlinz/GEODES_kraken_split/
+rm $1.unaligned.fastq
+rm *sam
+rm *bam
+rm -r $1
+rm -r samtools
+rm samtools.tar.gz
+```
+
+
+3. Run kraken classification in each split file
+
+```{r, eval = F}
 find /mnt/gluster/amlinz/GEODES_kraken_split/ -type f > path2splitkrakenfastqs.txt
 # Double check!
 cat path2splitkrakenfastqs.txt
+```
+
+Run the kraken submit and executable here. We're only classifying right now - we'll make the human readable report in the next step.
+
+04classify.sub:
+```{r, eval = F}
+# 04classify.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04classify_$(Cluster).log
+error = 04classify_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 04classify.sh
+arguments = $(samplename)
+output = 04classify_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = 
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 3
+request_memory = 6GB
+request_disk = 5GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2splitkrakenfastqs.txt
+```
+
+04classify.sh
+```{r, eval = F}
+#!/bin/bash
+#Classify unmapped reads using kraken
+
+#Copy files from gluster
+cp $1 .
+name=$(basename $1 |cut -d'.' -f1)
+cp /mnt/gluster/amlinz/kraken.tar.gz .
+
+#Unzip programs and files
+tar zxvf  kraken.tar.gz
+
+#Run kraken
+cd kraken-0.10.5-beta/kraken_scripts
+./kraken --threads 3 --preload --db ../../minikraken_20141208/ ../../$name.unaligned.fastq > $name.output
+
+cp $name.output /mnt/gluster/amlinz/GEODES_kraken_results/
+
+cd ../..
+rm -r kraken-0.10.5-beta
+rm -r minikraken_20141208
+rm $name.unaligned.fastq
+rm kraken.tar.gz
+
+```
+
+Check to make sure it worked:
+```{r, eval = F}
+ls -ltr /mnt/gluster/amlinz/GEODEs_kraken_results/
+```
+
+4. Combine and summarize the results.
+Because kraken takes awhile on large files, I split the fastq samples into smaller pieces. The current "output" files are lists of all of reads and their classifications. I'll concatenate these by sample, then run them through the kraken script ./kraken-report, which makes a table of counts by classification.
+
+04mergekraken.sub
+```{r, eval = F}
+# 04mergekraken.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04mergekraken_$(Cluster).log
+error = 04mergekraken_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 04mergekraken.sh
+arguments = $(samplename)
+output = 04mergekraken_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = 
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 6GB
+request_disk = 5GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from samfiles.txt
+```
+
+04mergekraken.sh
+```{r, eval = F}
+#!/bin/bash
+#Concatenate and summarize kraken outputs
+
+cp /mnt/gluster/amlinz/GEODES_kraken_results/$1* .
+cp /mnt/gluster/amlinz/kraken.tar.gz .
+
+#Unzip programs and files
+tar zxvf  kraken.tar.gz
+
+cat $1* > $1.output
+cd kraken-0.10.5-beta/kraken_scripts
+
+./kraken-report --db ../../minikraken_20141208/ ../../$1.output > ../../$1_kraken.report
+cd ../..
+
+#Remove spaces in the 6th column of the kraken report
+awk '{gsub(" ","",$6)}1' $1.report > temp.txt && mv temp.txt $1.report
+
+#Copy the output file to gluster
+cp $1.report /mnt/gluster/amlinz/GEODES_kraken_concat/
+
+#Cleanup
+rm -r kraken-0.10.5-beta
+rm -r minikraken_20141208
+rm $1.output
+rm $1.report
+rm kraken.tar.gz
+
 ```
 
 
@@ -369,3 +607,10 @@ rm -r minikraken_20141208
 rm -r mnt/gluster/amlinz/GEODES_kraken_split/GEODES001_nonrRNAdo.unaligned.fastq
 
 ```
+
+####2017-02-28
+
+I'm still having trouble with the installation of kraken in parallel. Tried adding is.Build == true to my submit file to no avail, and then tried building an install package of kraken just like python, bwa, and samtools. That last one seemed to work, but produced a new error:
+Use of uninitialized value in concatenation (.) or string at ./kraken line 38.
+And it can't find the fastq file. Going into interactive mode to troubleshoot.
+

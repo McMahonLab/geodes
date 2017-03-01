@@ -133,7 +133,9 @@ $(document).ready(function () {
 <h2>Most recent workflow.</h2>
 <div id="use-this-if-you-want-to-replicate-our-protocol.-updated" class="section level4">
 <h4>Use this if you want to replicate our protocol. Updated …</h4>
-<p>Set up folders in gluster for the outputs:</p>
+<ol style="list-style-type: decimal">
+<li>Setup Set up folders in gluster for the outputs:</li>
+</ol>
 <pre class="r"><code>mkdir /mnt/gluster/amlinz/GEODES_mapping_summaries/</code></pre>
 <p>Build python install interactive.sub:</p>
 <pre class="r"><code>universe = vanilla
@@ -191,7 +193,9 @@ cp python.tar.gz /mnt/gluster/amlinz/</code></pre>
 <p>Make a list of files to run:</p>
 <pre class="r"><code>for file in /mnt/gluster/amlinz/GEODES_mapping_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; samfiles.txt
 cat samfiles.txt</code></pre>
-<p>Run 03processing:</p>
+<ol start="2" style="list-style-type: decimal">
+<li>Run 03processing:</li>
+</ol>
 <pre class="r"><code># 03processing.sub
 #
 #
@@ -262,6 +266,65 @@ rm *.bam
 rm *.bai
 rm mapping_database*
 rm *.tar.gz</code></pre>
+<p>Check the results</p>
+<pre class="r"><code>ls -ltr /mnt/gluster/amlinz/GEODES_mapping_summaries/</code></pre>
+<ol start="3" style="list-style-type: decimal">
+<li>Compile the result into a single table using the scripts 03maketable:</li>
+</ol>
+<p>03maketable.sub:</p>
+<pre class="r"><code># 03maketable.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03maketable_$(Cluster).log
+error = 03maketable_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 03maketable.sh
+#arguments = 
+output = 03maketable_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = 
+transfer_output_files = GEODES_genes_2017-02-22.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 1GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue</code></pre>
+<p>03maketable.sh</p>
+<pre class="r"><code>#!/bin/bash
+#Combine htseq-count results into one table
+cp /mnt/gluster/amlinz/GEODES_mapping_summaries/* .
+
+awk '{print $1}' GEODES001_nonrRNA.CDS.out &gt; rownames.txt
+for file in *.out;do awk '{print $2}' $file &gt; temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt &gt; temp2.txt &amp;&amp; mv temp2.txt $file;done
+echo &quot;\t&quot; | cat - rownames.txt &gt; temp3.txt &amp;&amp; mv temp3.txt rownames.txt
+files=$(echo *.out)
+paste rownames.txt $files &gt; GEODES_genes_2017-02-27.txt
+
+rm *.out
+rm rownames.txt
+rm temp*.txt</code></pre>
+<ol start="4" style="list-style-type: decimal">
+<li>Make a metadata file</li>
+</ol>
+<p>You’ll need a custom file with information about each locus tag in the table - what genome did it come from and what gene product does it encode? Make this with make_metadata_file.R from your mapping_database.gff file. Use the commented bash code to get contig names from your gff file first. Then change your file paths and go ahead and source it. I like to do this with Rstudio on my desktop, so I downloaded the file first.</p>
+<ol start="5" style="list-style-type: decimal">
+<li>Cleanup</li>
+</ol>
+<p>The only thing I want to save is the table itself, which I downloaded onto my computer with WinSCP. Once you’ve checked the table to make sure it works. No more downstream files needed! Delete</p>
 </div>
 </div>
 </div>
@@ -451,6 +514,10 @@ rm temp*.txt</code></pre>
 <div id="section-2" class="section level4">
 <h4>2017-02-23</h4>
 <p>I got some weird errors about truncated files when trying to get a fastq file out of samtools, so I’m going back to all scripts, testing samtools in interactive mode, and then running. I’ll do the same here, while also updating the “current workflow” section.</p>
+</div>
+<div id="section-3" class="section level4">
+<h4>2017-02-27</h4>
+<p>Ran the processing and didn’t get any errors but about 10 samples produced empty output files. I’ll come back and fix this if I have time before lab meeting. Moving on to making the metadata file now.</p>
 </div>
 </div>
 
