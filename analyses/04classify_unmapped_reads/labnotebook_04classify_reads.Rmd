@@ -121,9 +121,12 @@ rm samtools.tar.gz
 find /mnt/gluster/amlinz/GEODES_kraken_split/ -type f > path2splitkrakenfastqs.txt
 # Double check!
 cat path2splitkrakenfastqs.txt
+
+split -l 9999 path2splitkrakenfastqs.txt splitfastqs
+
 ```
 
-Run the kraken submit and executable here. We're only classifying right now - we'll make the human readable report in the next step.
+Run the kraken submit and executable here. We're only classifying right now - we'll make the human readable report in the next step. Since there's so many jobs, I'm modifying the list of files to run and submitting multiple times. Start them all up one after the other and they'll start automatically once the previous list of files is done.
 
 04classify.sub:
 ```{r, eval = F}
@@ -157,7 +160,7 @@ request_memory = 6GB
 request_disk = 5GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
-queue samplename from path2splitkrakenfastqs.txt
+queue samplename from splitfastqsaa
 ```
 
 04classify.sh
@@ -244,11 +247,11 @@ tar zxvf  kraken.tar.gz
 cat $1* > $1.output
 cd kraken-0.10.5-beta/kraken_scripts
 
-./kraken-report --db ../../minikraken_20141208/ ../../$1.output > ../../$1_kraken.report
+./kraken-report --db ../../minikraken_20141208/ ../../$1.output > ../../$1.report
 cd ../..
 
 #Remove spaces in the 6th column of the kraken report
-awk '{gsub(" ","",$6)}1' $1.report > temp.txt && mv temp.txt $1.report
+awk '{gsub(" ","",$0)}1' $1.report > temp.txt && mv temp.txt $1.report
 
 #Copy the output file to gluster
 cp $1.report /mnt/gluster/amlinz/GEODES_kraken_concat/
@@ -256,7 +259,7 @@ cp $1.report /mnt/gluster/amlinz/GEODES_kraken_concat/
 #Cleanup
 rm -r kraken-0.10.5-beta
 rm -r minikraken_20141208
-rm $1.output
+rm $1*.output
 rm $1.report
 rm kraken.tar.gz
 
@@ -613,4 +616,23 @@ rm -r mnt/gluster/amlinz/GEODES_kraken_split/GEODES001_nonrRNAdo.unaligned.fastq
 I'm still having trouble with the installation of kraken in parallel. Tried adding is.Build == true to my submit file to no avail, and then tried building an install package of kraken just like python, bwa, and samtools. That last one seemed to work, but produced a new error:
 Use of uninitialized value in concatenation (.) or string at ./kraken line 38.
 And it can't find the fastq file. Going into interactive mode to troubleshoot.
+
+Problem seems to be in the linux OS version. Changed to the requirments in the interactive file and ran with no problems.
+
+####2017-03-01
+
+The kraken finished this afternoon after running all night! Kind of slow, but it did run 540 jobs... I fixed a couple naming/awk bugs in the merge script and that works great, too. Starting the full run now!
+
+Ran the sam2fastq, got the following error in a handful of runs:
+
+[samopen] SAM header is present: 40937 sequences.
+[sam_read1] reference '0' is recognized as '*'.
+Parse warning at line 9613409: mapped sequence without CIGAR
+Parse error at line 9613409: sequence and quality are inconsistent
+/var/lib/condor/execute/slot1/dir_1099948/condor_exec.exe: line 9: 1155015 Aborted                 samtools view -S -b -f 4 $1.all.sam > $1.unaligned.bam
+[bam_header_read] EOF marker is absent. The input is probably truncated.
+
+Tried to submit the classification step, and was denied for exceeding max jobs. Apparently 35000 is too many jobs. Oops.
+
+
 

@@ -336,11 +336,11 @@ tar zxvf  kraken.tar.gz
 cat $1* &gt; $1.output
 cd kraken-0.10.5-beta/kraken_scripts
 
-./kraken-report --db ../../minikraken_20141208/ ../../$1.output &gt; ../../$1_kraken.report
+./kraken-report --db ../../minikraken_20141208/ ../../$1.output &gt; ../../$1.report
 cd ../..
 
 #Remove spaces in the 6th column of the kraken report
-awk '{gsub(&quot; &quot;,&quot;&quot;,$6)}1' $1.report &gt; temp.txt &amp;&amp; mv temp.txt $1.report
+awk '{gsub(&quot; &quot;,&quot;&quot;,$0)}1' $1.report &gt; temp.txt &amp;&amp; mv temp.txt $1.report
 
 #Copy the output file to gluster
 cp $1.report /mnt/gluster/amlinz/GEODES_kraken_concat/
@@ -348,7 +348,7 @@ cp $1.report /mnt/gluster/amlinz/GEODES_kraken_concat/
 #Cleanup
 rm -r kraken-0.10.5-beta
 rm -r minikraken_20141208
-rm $1.output
+rm $1*.output
 rm $1.report
 rm kraken.tar.gz</code></pre>
 </div>
@@ -656,6 +656,11 @@ rm -r mnt/gluster/amlinz/GEODES_kraken_split/GEODES001_nonrRNAdo.unaligned.fastq
 <div id="section-3" class="section level4">
 <h4>2017-02-28</h4>
 <p>I’m still having trouble with the installation of kraken in parallel. Tried adding is.Build == true to my submit file to no avail, and then tried building an install package of kraken just like python, bwa, and samtools. That last one seemed to work, but produced a new error: Use of uninitialized value in concatenation (.) or string at ./kraken line 38. And it can’t find the fastq file. Going into interactive mode to troubleshoot.</p>
+<p>Problem seems to be in the linux OS version. Changed to the requirments in the interactive file and ran with no problems.</p>
+</div>
+<div id="section-4" class="section level4">
+<h4>2017-03-01</h4>
+<p>The kraken finished this afternoon after running all night! Kind of slow, but it did run 540 jobs… I fixed a couple naming/awk bugs in the merge script and that works great, too. Starting the full run now!</p>
 </div>
 </div>
 
