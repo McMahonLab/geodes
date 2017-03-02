@@ -20,6 +20,9 @@ The aims of this project are:
 
 Copyright Katherine McMahon, Alex Linz, and friends (2017)
 
+Want more background about GEODES? Check out these blog posts! https://uwmcmahonlab.wordpress.com/2016/05/04/introducing-geodes/ & https://uwmcmahonlab.wordpress.com/2016/11/14/geodes-data-preview/
+
+
 ####Where do I get the data?
 
 Are you in the McMahon Lab or one of our collaborators?
@@ -48,3 +51,5 @@ __BE WARNED__ We're not making this data available on Github because it would fa
     - 02mapping
     - 03process_mapping_results
     - 04classify_unmapped_reads
+    - 05R_calculations
+      - Each of the directories in analyses/ contains a markdown document called "labnotebook_etc.Rmd". This file includes a description of the analysis being performed, the most recent workflow to run this analysis, and my notes from previous testing. You'll also find the shell executable and submit scripts, lists of the samples run, and small input/output files.
