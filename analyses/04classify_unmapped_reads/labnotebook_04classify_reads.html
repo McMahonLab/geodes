@@ -131,8 +131,8 @@ $(document).ready(function () {
 </div>
 <div id="most-recent-workflow." class="section level2">
 <h2>Most recent workflow.</h2>
-<div id="use-this-if-you-want-to-replicate-our-protocol.-updated" class="section level4">
-<h4>Use this if you want to replicate our protocol. Updated …</h4>
+<div id="use-this-if-you-want-to-replicate-our-protocol.-updated-2017-03-02" class="section level4">
+<h4>Use this if you want to replicate our protocol. Updated 2017-03-02</h4>
 <ol style="list-style-type: decimal">
 <li>Setup. Make directories to save results, and make a text file of samples to run.</li>
 </ol>
@@ -229,8 +229,11 @@ rm samtools.tar.gz</code></pre>
 </ol>
 <pre class="r"><code>find /mnt/gluster/amlinz/GEODES_kraken_split/ -type f &gt; path2splitkrakenfastqs.txt
 # Double check!
-cat path2splitkrakenfastqs.txt</code></pre>
-<p>Run the kraken submit and executable here. We’re only classifying right now - we’ll make the human readable report in the next step.</p>
+cat path2splitkrakenfastqs.txt
+
+#I had too many to run at once, so splitting into multiple submit files
+split -l 9999 path2splitkrakenfastqs.txt splitfastqs</code></pre>
+<p>Run the kraken submit and executable here. We’re only classifying right now - we’ll make the human readable report in the next step. Since there’s so many jobs, I’m modifying the list of files to run and submitting multiple times. Start them all up one after the other and they’ll start automatically once the previous list of files is done.</p>
 <p>04classify.sub:</p>
 <pre class="r"><code># 04classify.sub
 #
@@ -262,7 +265,7 @@ request_memory = 6GB
 request_disk = 5GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
-queue samplename from path2splitkrakenfastqs.txt</code></pre>
+queue samplename from splitfastqsaa</code></pre>
 <p>04classify.sh</p>
 <pre class="r"><code>#!/bin/bash
 #Classify unmapped reads using kraken
@@ -351,6 +354,10 @@ rm -r minikraken_20141208
 rm $1*.output
 rm $1.report
 rm kraken.tar.gz</code></pre>
+<ol start="5" style="list-style-type: decimal">
+<li>Cleanup</li>
+</ol>
+<p>Using WinSCP, download the .report files to my desktop and process using the R script I wrote for the time series metagenomes kraken classification. Go ahead and delete the err, out, and log files once you’re sure you have everything downstream working.</p>
 </div>
 </div>
 </div>
@@ -661,6 +668,9 @@ rm -r mnt/gluster/amlinz/GEODES_kraken_split/GEODES001_nonrRNAdo.unaligned.fastq
 <div id="section-4" class="section level4">
 <h4>2017-03-01</h4>
 <p>The kraken finished this afternoon after running all night! Kind of slow, but it did run 540 jobs… I fixed a couple naming/awk bugs in the merge script and that works great, too. Starting the full run now!</p>
+<p>Ran the sam2fastq, got the following error in a handful of runs:</p>
+<p>[samopen] SAM header is present: 40937 sequences. [sam_read1] reference ‘0’ is recognized as ’*’. Parse warning at line 9613409: mapped sequence without CIGAR Parse error at line 9613409: sequence and quality are inconsistent /var/lib/condor/execute/slot1/dir_1099948/condor_exec.exe: line 9: 1155015 Aborted samtools view -S -b -f 4 $1.all.sam &gt; $1.unaligned.bam [bam_header_read] EOF marker is absent. The input is probably truncated.</p>
+<p>Tried to submit the classification step, and was denied for exceeding max jobs. Apparently 35000 is too many jobs. Oops.</p>
 </div>
 </div>
 

@@ -9,7 +9,7 @@ In the last step, we formatted the mapping output to get the genome and gene tha
 I'm starting with the output of 02mapping - the merged .sam files. Using samtools, I'll extract a fastq file of unmapped reads from each sample and classify that using kraken. Finally, I'll send it back to my desktop for processing in R using the same script I wrote for kraken results from our lake metagenomes.
 
 ## Most recent workflow. 
-####Use this if you want to replicate our protocol. Updated ...
+####Use this if you want to replicate our protocol. Updated 2017-03-02
 
 1. Setup. Make directories to save results, and make a text file of samples to run.
 ```{r, eval = F}
@@ -122,6 +122,7 @@ find /mnt/gluster/amlinz/GEODES_kraken_split/ -type f > path2splitkrakenfastqs.t
 # Double check!
 cat path2splitkrakenfastqs.txt
 
+#I had too many to run at once, so splitting into multiple submit files
 split -l 9999 path2splitkrakenfastqs.txt splitfastqs
 
 ```
@@ -264,6 +265,10 @@ rm $1.report
 rm kraken.tar.gz
 
 ```
+
+5. Cleanup
+
+Using WinSCP, download the .report files to my desktop and process using the R script I wrote for the time series metagenomes kraken classification. Go ahead and delete the err, out, and log files once you're sure you have everything downstream working.
 
 
 #Lab Notebook

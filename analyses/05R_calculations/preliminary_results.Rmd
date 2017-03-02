@@ -5,7 +5,7 @@ date: "March 1, 2017"
 output: html_document
 ---
 
-As of March 1, I've analyzed 80 metatranscriptomes using the time series MAGs and SAGs from Trout Bog and Lake Mendota. This is not an ideal analysis, but works as a first pass. This file gives a quick overview of the prelimnary results produced by this analysis.
+As of March 1, I've analyzed 80 metatranscriptomes using the time series MAGs and SAGs from Trout Bog and Lake Mendota. This is not an ideal analysis, but works as a first pass. This file gives a quick overview of the prelimnary results.
 
 As a reminder, here are the initial hypotheses of GEODES:
 
@@ -16,7 +16,9 @@ As a reminder, here are the initial hypotheses of GEODES:
 - Identify new pathways and potential functions based on co-expression of genes
 - Look at genes of interest from previous studies, such as actinorhodopsin
 
-But let's start a little more basic. In the marine study that inspired GEODES, bacteria were observed to become most active at certain times of the day. Let's take a look at that.
+But let's start a little more basic. In the marine study that inspired GEODES, bacteria were observed to become most active at certain times of the day. Let's take a look at that. I'm using a table of read counts normalized by the number of counts mapping to the internal standard. 
+
+Timepoint 0 = 5AM on Day 1, continuing every 4 hours until 1AM 44 hours later. So read it as 5AM, 9AM, 1PM, 5PM, 9PM, 1AM, repeat.
 
 ```{r, setup, echo = F, warning = F, message = F}
 library(ggplot2)
@@ -91,15 +93,78 @@ ggplot(data = sum_mendota, aes(x = Timepoint, y = Classification, fill = value))
 ```
 
 
-What about genes? There's an overwhelming number of them (300018), so I'm going to take the most abundant groups in each lake, cluster them, and analyze their trends/functions. Below are the products and trends of each cluster with multiple genes in it.
+What about genes? What are the most expressed genes in each lake?
 
-```{r, echo = F, message = F, warning = F, fig.width = 10, eval = F}
+In Sparkling Lake, the top 30 include mostly Cyanobacteria, plus one Verrucomicrobia, 4 acI, one Sphingomonadales, 2 Burkholderiales, and one alfIV. Seems to be largely hitting Mendota genomes. The genes in the top 30 are: photosynthesis for the Cyanos, IG-like domain, hypothetical, sorbital phosphotransferase, and sugar transport for acI, hypothetical for Sphingo, elongation factor and chaperonin GroL for Burkholderiales, and cytochrome c for alfIV.
+
+
+```{r, echo = F, message = F, warning = F}
 spark <- norm_table[, which(lakekey == "Sparkling") ]
 trout <- norm_table[, which(lakekey == "Trout") ]
 mendota <- norm_table[, which(lakekey == "Mendota") ]
 
-# Sparkling first - only keep genes above 100 normalized reads/sample
+spark_genes <- rownames(spark)[order(rowSums(spark), decreasing = T)]
+spark_genekey <- gene_metadata[match(spark_genes, gene_metadata$Hits),]
+test_spark_diel <- spark[as.numeric(rownames(spark_genekey)[2:11]), ]
+test_spark_diel$gene <- rownames(test_spark_diel)
+test_spark_diel <- melt(test_spark_diel)
+test_spark_diel$Time <- sample_metadata$Timepoint[match(test_spark_diel$variable, sample_metadata$Sample)]
+test_spark_diel2 <- aggregate(test_spark_diel["value"], by = test_spark_diel[c("gene", "Time")], FUN = mean)
+ggplot(data = test_spark_diel2, aes(x = Time, y = value, fill = gene, group = gene)) + geom_bar( stat = "identity") + labs(title = "Sparkling Lake Top 10 Genes")
 
+```
+
+The top 10 expressed genes in Sparkling Lake show a strong diel trend, with maximum at 1PM and minimum at 1AM. This what I expected for photosynthetic organisms! There's something funky about 1AM on day 2, but that might be because it was actually sampled on day 3. There were massive thunderstorms on the night of day 2, so we collected the 1AM sample the following night. Was this sampling error or did the weather conditions change something in the lake? Either way, we could probably justify removing this point as an outlier.
+
+Let's repeat this analysis in Trout Bog.
+
+The top 10 most expressed genes in Trout Bog are from 9 cyanos and one Verrucomicrobia. All the cyano genomes are from Mendota. In the top 30 genes, lots more cyanos, acI x2, Methylophilales x2, Verrucomicrobiales x5, and Burkholderiales. Genes in the top 30: photosystemes in the cyanos, Ig-like domain (acI), PQQ-dep-dehydrogenase(ethanol/methanol)(Methylophilales), RNApol (Verucco), ribonucleoside-diphosphate-reductase(Verruco), elongation factor(Burkholderiales), beta-glucosidase(Verruco).
+
+```{r, echo = F, message = F, warning = F}
+trout_genes <- rownames(trout)[order(rowSums(trout), decreasing = T)]
+trout_genekey <- gene_metadata[match(trout_genes, gene_metadata$Hits),]
+test_trout_diel <- trout[as.numeric(rownames(trout_genekey)[2:11]), ]
+test_trout_diel$gene <- rownames(test_trout_diel)
+test_trout_diel <- melt(test_trout_diel)
+test_trout_diel$Time <- sample_metadata$Timepoint[match(test_trout_diel$variable, sample_metadata$Sample)]
+test_trout_diel2 <- aggregate(test_trout_diel["value"], by = test_trout_diel[c("gene", "Time")], FUN = mean)
+ggplot(data = test_trout_diel2, aes(x = Time, y = value, fill = gene, group = gene)) + geom_bar( stat = "identity") + labs(title = "Trout Bog Top 10 Genes")
+
+```
+
+Admittedly, we've got a bit of an issue with Trout Bog in that all the filters from timepoints 36 and 40 failed extraction (tubing leak or some other equipment failure?). The trend here is different from Sparkling Lake - the Cyanos seem most active at 5AM, and least active at 5PM - 1AM. Proportions of the three Cyano genomes hit change over the timeperiod. The one non-Cyano gene in the top 10 (Verrucomicrobial, hypothetical protein) peaks at 9PM with an increase and decrease on either side.
+
+Finally, Mendota.
+
+The top 10 genes in Mendota are from 9 cyanos and 1 acI. In the top 30, more Cyanos, Methylophilales, 1 Bacteroidetes, and acI. The top 30 genes: photosystems in cyanos, PQQ-dependent methanol/ethanol dehydrogenases in Methylophilales, and in acI: Ig-like domain, hypothetical, sugar transport, nucleoside-binding, and RNA polymerase.
+
+```{r, echo = F, message = F, warning = F}
+
+mendota_genes <- rownames(mendota)[order(rowSums(mendota), decreasing = T)]
+mendota_genekey <- gene_metadata[match(mendota_genes, gene_metadata$Hits),]
+test_mendota_diel <- mendota[as.numeric(rownames(mendota_genekey)[2:11]), ]
+test_mendota_diel$gene <- rownames(test_mendota_diel)
+test_mendota_diel <- melt(test_mendota_diel)
+test_mendota_diel$Time <- sample_metadata$Timepoint[match(test_mendota_diel$variable, sample_metadata$Sample)]
+test_mendota_diel2 <- aggregate(test_mendota_diel["value"], by = test_mendota_diel[c("gene", "Time")], FUN = mean)
+ggplot(data = test_mendota_diel2, aes(x = Time, y = value, fill = gene, group = gene)) + geom_bar( stat = "identity") + labs(title = "Mendota Lake Top 10 Genes")
+```
+
+So far only the 1st 6 timepoints have been sequenced from Mendota (and about 10 of those that were sequenced failed at the ht-seq count program, still trying to figure out why). 5AM and 9AM are the most expressed times, although that seems largely driven by the IG-like domain in acI, a photosynthetic reaction center (gold color) and photosystem II (aqua color).
+
+#### Some thoughts on the data so far
+
+- There are diel trends! 
+- These trends may be different in each lake
+- Cyanobacteria and photosynthesis dominate in expression
+- Why is an IG-like domain the most expressed acI gene in all three lakes? A quick search suggests that bacterial IG-like domains could be used for adhesion to other cells or lysogenic phage infection, but it seems like there's no concensus.
+
+#### A more in-depth analysis.
+
+I'm going to a quick clustering analysis on Sparkling Lake, which has the most datapoints. There's an overwhelming number of them (300018), so I'm going to take the most abundant groups in each lake, cluster them, and analyze their trends/functions. Below are the products and trends of each cluster with multiple genes in it.
+
+```{r, echo = F, message = F, warning = F, fig.width = 10, eval = F}
+# Sparkling first - only keep genes above 100 normalized reads/sample
 spark_genes <- spark[which(rowSums(spark) > 100), ]
 sp_kmeans <- kmeans(spark_genes, centers = 20)
 sp_clusters <- data.frame(sp_kmeans$cluster)
@@ -143,7 +208,9 @@ For Sparkling Lake:
 19. Lysophospholipase/esterase, PQQ-dependent dehyrogenase (methanol/ethanol), RNA pol. Trend = nearly only see at 1AM day 2.
 20. Photosystem II, photosynthetic reaction center, ATP synthase. Trend = small day/night cycle, peaks at 1AM day 2.
 
+#### Thoughts on clustering
 
+This is pretty difficult to intrepret - some groups have 100s of genes, while others have one or two. Many clusters seem to have similar trends. I'm open to other methods of how to identify cohorts of expressed genes! 
 
 
 

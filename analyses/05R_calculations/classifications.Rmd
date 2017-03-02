@@ -31,7 +31,7 @@ library(cowplot)
 
 ```
 
-```{r, make_genome_table, echo = F, warning = F}
+```{r, make_genome_table, echo = F, warning = F, message = F}
 metaT_table <- read.table("C:/Users/Alex/Desktop/geodes/analyses/03process_mapping_results/GEODES_genes_2017-02-27.txt", row.names=1, header = T, fill = NA)
 metaT_table <- metaT_table[, 1:72]
 metaT_table <- metaT_table[which(rowSums(metaT_table) > 0), ]
@@ -65,8 +65,9 @@ sum_table <- aggregate(genome_table["value"], by = genome_table[c("Classificatio
 
 ```
 
-```{r, plot_mapped, echo = F, fig.height = 10}
+```{r, plot_mapped, echo = F, fig.height = 10, fig.width = 8, warning = F, message = F}
 ggplot(data = sum_table, aes(x = Lake, y = Classification, fill = value)) + geom_tile() + scale_fill_gradient2(low = "white", mid = "seagreen3", high = "black", midpoint = 5) 
 
 ```
 
+Kraken results coming soon!

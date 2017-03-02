@@ -9,7 +9,7 @@ The mapping in the last step produced a .sam file where each line is a read in t
 I'm going to use htseq to count up to reads mapping to the same thing in each metaT. I'll need samtools again to reformat the mapping output. Once I get an htseq-count summary file for each sample, I'll combine them into a table for DESEQ. While I'm here, I'll also create metadata files from the gff file (reproducibly!) so I can redo it for any genomes in my database.
 
 ## Most recent workflow. 
-####Use this if you want to replicate our protocol. Updated ...
+####Use this if you want to replicate our protocol. Updated 2017-03-02
 
 1. Setup
 Set up folders in gluster for the outputs:
@@ -233,7 +233,7 @@ You'll need a custom file with information about each locus tag in the table - w
 
 5. Cleanup
 
-The only thing I want to save is the table itself, which I downloaded onto my computer with WinSCP. Once you've checked the table to make sure it works. No more downstream files needed! Delete  
+The only thing I want to save is the table itself, which I downloaded onto my computer with WinSCP. Once you've checked the table to make sure it works, delete all /*.err, /*.out, and /*.log files. Move onto the 05R_analyses directory, where you'll link those locus tags to genomes and gene products.
 
 #Lab Notebook
 
