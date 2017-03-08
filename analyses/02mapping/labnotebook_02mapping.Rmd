@@ -158,7 +158,7 @@ exit
 
 
 2. We need to split up all those fastq files using the following submit script:
-```{r,eval = F}
+```{bash,eval = F}
 # 02split_fastq_mapping.sub
 #
 #
