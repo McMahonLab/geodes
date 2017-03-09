@@ -143,15 +143,15 @@ $(document).ready(function () {
 <li>There’s a few things we need to take care of before we can start the mapping.</li>
 </ol>
 <p>Make a list of samples to run:</p>
-<pre class="r"><code>for file in /mnt/gluster/amlinz/GEODES_nonrRNA_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; samplenames.txt
+<pre class="bash"><code>for file in /mnt/gluster/amlinz/GEODES_nonrRNA_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; samplenames.txt
 #Use the line below to make a shorter test file
 #head -3 samplenames.txt &gt; test_samplenames.txt; mv test_samplenames.txt samplenames.txt</code></pre>
 <p>Set up folders in gluster for the outputs:</p>
-<pre class="r"><code>mkdir /mnt/gluster/amlinz/GEODES_nonrRNA_split/
+<pre class="bash"><code>mkdir /mnt/gluster/amlinz/GEODES_nonrRNA_split/
 mkdir /mnt/gluster/amlinz/GEODES_mapping_split/
 mkdir /mnt/gluster/amlinz/GEODES_mapping_concat/</code></pre>
 <p>Build the reference genome database. You can put any genomes you want in this folder!</p>
-<pre class="r"><code>cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna &gt; mapping_database.fna
+<pre class="bash"><code>cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna &gt; mapping_database.fna
 cat /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff &gt; mapping_database.gff
 
 #We've got to fix some formatting issues in the gff file first
@@ -164,10 +164,11 @@ sed '/CRISPR/d' mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_databa
 #Change semicolons in product names to a URL escape code
 sed -i 's|; |%3B |g' mapping_database.gff
 gzip mapping_database.gff 
-gzip mapping_database.fna </code></pre>
+gzip mapping_database.fna 
+</code></pre>
 <p>Build a custom install of bwa using an interactive session. (You could use the ones I built, saved here in this repo, but I make no guarantees that they will work on your system). Here’s my submit script:</p>
 <p>interactive1.sub:</p>
-<pre class="r"><code>#interactive2.sub
+<pre class="bash"><code>#interactive2.sub
 #
 universe = vanilla
 # Name the log file:
@@ -196,7 +197,7 @@ request_disk = 1GB
 
 queue</code></pre>
 <p>And what I’m typing in the interactive session:</p>
-<pre class="r"><code>condor_submit -i interactive1.sub
+<pre class="bash"><code>condor_submit -i interactive1.sub
 # Wait for job to start
 tar xvfj bwa-0.7.12.tar.bz2
 cd bwa-0.7.12
@@ -206,10 +207,11 @@ ls bwa-0.7.12
 # bwa executable is in there!
 tar czvf bwa.tar.gz bwa-0.7.12/
 ls
-exit</code></pre>
+exit
+</code></pre>
 <p>This produces a tarball named bwa.tar.gz that I can copy over, unzip, and start running. I also need one for samtools.</p>
 <p>interactive2.sub:</p>
-<pre class="r"><code>#interactive2.sub
+<pre class="bash"><code>#interactive2.sub
 #
 universe = vanilla
 # Name the log file:
@@ -238,7 +240,7 @@ request_disk = 1GB
 
 queue</code></pre>
 <p>And what I’m typing in the interactive session:</p>
-<pre class="r"><code>condor_submit -i interactive2.sub
+<pre class="bash"><code>condor_submit -i interactive2.sub
 # Wait for job to start
 tar xvfj samtools-1.3.1.tar.bz2
 cd samtools-1.3.1
@@ -249,11 +251,12 @@ ls samtools
 #I've got a nice bin file in there now!
 tar czvf samtools.tar.gz samtools/
 ls
-exit</code></pre>
+exit
+</code></pre>
 <ol start="2" style="list-style-type: decimal">
 <li>We need to split up all those fastq files using the following submit script:</li>
 </ol>
-<pre class="r"><code># 02split_fastq_mapping.sub
+<pre class="bash"><code># 02split_fastq_mapping.sub
 #
 #
 # Specify the HTCondor Universe
@@ -283,7 +286,8 @@ request_disk = 6 GB
 # Just one job for testing
 queue sample from samplenames.txt</code></pre>
 <p>And its companion executable, 02split_fastq_mapping.sh:</p>
-<pre class="r"><code>#!/bin/bash
+<pre class="bash"><code>
+#!/bin/bash
 
 cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1.fastq.gz ./
 gzip -d $1.fastq.gz
@@ -295,14 +299,15 @@ mkdir $1
 split -l 1000000 $1.fastq $1/$1
 
 # Rename files to include .fastq extension
-for file in $1/*;do mv &quot;$file&quot; &quot;$file.fastq&quot;;done
+for file in $1/*;do mv $file $file.fastq;done
 
 # Grace includes a read file in the folder with the split files, but I don't think that makes sense for using with SortmeRNA
 # I'm also not going to zip up the file, because I'd just need to unzip back on gluster
 mv $1 /mnt/gluster/amlinz/GEODES_mapping_split/
-rm $1.fastq</code></pre>
+rm $1.fastq
+</code></pre>
 <p>Run and check to see if it worked:</p>
-<pre class="r"><code>condor_submit 02split_fastq_mapping.sub
+<pre class="bash"><code>condor_submit 02split_fastq_mapping.sub
 
 # Check to see if there's anything in the error file
 ls -ltr 02split*.err
@@ -313,11 +318,12 @@ find /mnt/gluster/amlinz/GEODES_mapping_split/ -type f</code></pre>
 <ol start="3" style="list-style-type: decimal">
 <li>Do the mapping! We’ll need a new list of the split files to queue.</li>
 </ol>
-<pre class="r"><code>find /mnt/gluster/amlinz/GEODES_mapping_split/ -type f &gt; path2splitmappingfastqs.txt
+<pre class="bash"><code>find /mnt/gluster/amlinz/GEODES_mapping_split/ -type f &gt; path2splitmappingfastqs.txt
 # Double check!
-cat path2splitmappingfastqs.txt</code></pre>
+cat path2splitmappingfastqs.txt
+</code></pre>
 <p>02mapping.sub:</p>
-<pre class="r"><code># 02mapping.sub
+<pre class="bash"><code># 02mapping.sub
 #
 #
 # Specify the HTCondor Universe
@@ -349,7 +355,7 @@ request_disk = 1GB
 # Tell HTCondor to run every fastq file in the provided list:
 queue samplename from path2splitmappingfastqs.txt</code></pre>
 <p>02mapping.sh:</p>
-<pre class="r"><code>#!/bin/bash
+<pre class="bash"><code>#!/bin/bash
 #Map metatranscriptome reads to my database of reference genomes
 
 #Transfer metaT from gluster
@@ -372,12 +378,17 @@ rm -rf bwa
 rm ${name}.fastq
 rm *.sam
 rm mapping_database*
-rm *.tar.gz</code></pre>
+rm *.tar.gz
+  </code></pre>
+<p>Check the output!</p>
+<pre class="bash"><code>ls -ltr 02mapping*.err
+# It should be just bwa output, but cat one to check
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_split/</code></pre>
 <ol start="3" style="list-style-type: decimal">
 <li>Concatenate the outputs. I’m going to use samtools merge for this.</li>
 </ol>
 <p>02merge_mapped_results.sub:</p>
-<pre class="r"><code># 02merge_mapped_results.sub
+<pre class="bash"><code># 02merge_mapped_results.sub
 #
 #
 # Specify the HTCondor Universe
@@ -409,7 +420,7 @@ request_disk = 1GB
 # Tell HTCondor to run every fastq file in the provided list:
 queue samplename from samplenames.txt</code></pre>
 <p>02merge_mapped_results.sh:</p>
-<pre class="r"><code>#!/bin/bash
+<pre class="bash"><code>#!/bin/bash
 #Merge mapping results by sample
 
 #Transfer metaT from gluster
@@ -442,17 +453,20 @@ rm *.bam
 rm *.bai
 rm *.tar.gz</code></pre>
 <p>You might get an error about truncated bam files and missing EOF. This is a bug, it doesn’t apply to uncompressed bam files (which we specified with -u). Some of the split .sam files are also giving errors during conversion to .bam and aborting. I’ll come back and fix this once I’ve got the pipeline as a whole working.</p>
+<p>Check the results!</p>
+<pre class="bash"><code>ls -ltr /mnt/gluster/amlinz/GEODES_mapping_concat/
+ls -ltr 02merge*.err</code></pre>
 <ol start="4" style="list-style-type: decimal">
 <li>Clean up! From Zissou:</li>
 </ol>
-<pre class="r"><code># Download files to Zissou. These will then be copied to /lakes_data/ 
+<pre class="bash"><code># Download files to Zissou. These will then be copied to /lakes_data/ 
 cd /home/amlinz/GEODES
 mkdir GEODES_mapping_results
 
 rsync -av amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_mapping_concat/ GEODES_mapping_results</code></pre>
 <p>On my computer: Open up WinSCP and log into submit-3.chtc.wisc.edu. Download the most recent versions of the scripts, programs, and text files</p>
 <p>On submit-3.chtc.wisc.edu:</p>
-<pre class="r"><code># The only files I need going forward are the nonrRNA files. Delete the rest!
+<pre class="bash"><code># The only files I need going forward are the nonrRNA files. Delete the rest!
 # Note: I'll keep the directories, in case I need to run a few more files in the future:
 
 rm -r /mnt/gluster/amlinz/GEODES_nonrRNA_split/*
@@ -470,7 +484,8 @@ rm bwa*
 # Move old scripts into their own folder
 #mkdir scripts #if necessary
 mv *.sh scripts/
-mv *.sub scripts/</code></pre>
+mv *.sub scripts/
+</code></pre>
 <p>Congratulations! You now have files of just nonrRNA reads from your metatranscriptomes, and are ready to run the next step.</p>
 </div>
 </div>
@@ -490,7 +505,7 @@ mv *.sub scripts/</code></pre>
 <p>I’m basing this on Josh’s script from OMD-TOIL found here <a href="https://github.com/alexlinz/OMD-TOILv2/tree/master/scripts/10_mapping/10c_competitive" class="uri">https://github.com/alexlinz/OMD-TOILv2/tree/master/scripts/10_mapping/10c_competitive</a></p>
 <p>But the installation on CHTC is going to be a little tricky. First I need to build my own python tarball in interactive mode. I’m following the instructions here <a href="http://chtc.cs.wisc.edu/python-jobs.shtml" class="uri">http://chtc.cs.wisc.edu/python-jobs.shtml</a></p>
 <p>First I need to start an interactive CHTC session. interactive.sub:</p>
-<pre class="r"><code>universe = vanilla
+<pre class="bash"><code>universe = vanilla
 # Name the log file:
 log = interactive.log
 
@@ -517,9 +532,9 @@ request_disk = 1GB
 
 queue</code></pre>
 <p>Start the session with:</p>
-<pre class="r"><code>condor_submit -i interactive.sub</code></pre>
+<pre class="bash"><code>condor_submit -i interactive.sub</code></pre>
 <p>Here’s what I’m typing in the interactive session:</p>
-<pre class="r"><code>mkdir python
+<pre class="bash"><code>mkdir python
 tar -xvf Python-2.7.13.tgz
 cd Python-2.7.13
 ./configure --prefix=$(pwd)/../python
@@ -538,7 +553,8 @@ pip install htseq
 pip install pysam
 # hey, that worked!
 tar -czvf python.tar.gz python/
-exit</code></pre>
+exit
+</code></pre>
 <p>Wow, I feel like a real bioinformatician! +1 to CHTC for awesome tutorials. Now I have a tarball that I can transfer around with my jobs that includes both python and HTseq.</p>
 <p>CHTC is closing down my submit node for maintenance tomorrow, so I’m going to stop here for now. I’ll possibly do some testing on Zissou and will download my installation packages for that, but I’m not sure how two different versions of python will agree on Zissou.</p>
 </div>
@@ -546,10 +562,10 @@ exit</code></pre>
 <h4>2017-02-15</h4>
 <p>We’re back up and running! Today I’m going to write a script to map one metatranscriptome. I’m going to transfer all of the installs over, but examine the output and slowly add lines to the bash script as I go.</p>
 <p>First, get sample names and shorten to one metatranscriptome.</p>
-<pre class="r"><code>for file in /mnt/gluster/amlinz/GEODES_nonrRNA_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; samplenames.txt
+<pre class="bash"><code>for file in /mnt/gluster/amlinz/GEODES_nonrRNA_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; samplenames.txt
 head -1 samplenames.txt &gt; test_samplenames.txt; mv test_samplenames.txt samplenames.txt</code></pre>
 <p>Here’s my first stab at the submit file 02mapping.sub:</p>
-<pre class="r"><code># 02mapping.sub
+<pre class="bash"><code># 02mapping.sub
 #
 #
 # Specify the HTCondor Universe
@@ -581,7 +597,7 @@ request_disk = 5GB
 queue samplename from samplenames.txt</code></pre>
 <p>I also need to build my reference genome database. Which means I need to go find and upload the internal standard fasta and gff. It also looks like the size is pretty small (&lt; 1 GB) so I’ll zip up this database after building and send it via the submit file</p>
 <p>Here’s my database building:</p>
-<pre class="r"><code>cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna &gt; mapping_database.fna
+<pre class="bash"><code>cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna &gt; mapping_database.fna
 cat /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff &gt; mapping_database.gff
 tar -czvf mapping_database.tar.gz mapping_database.fna mapping_database.gff
 rm mapping_database.gff
@@ -593,7 +609,7 @@ rm mapping_database.fna</code></pre>
 <h4>2017-02-16</h4>
 <p>Yep, more interactive installs time. Let’s do this for bwa first. I’m modifying my interactive.sub to tranfer bwa instead of python.</p>
 <p>Here’s what I’m typing to install. Following instructions from the top of the README.md file in the bwa tarball, since I can’t find installation instructions anywhere on their website…</p>
-<pre class="r"><code>condor_submit -i interactive.sub
+<pre class="bash"><code>condor_submit -i interactive.sub
 # Wait for job to start
 tar xvfj bwa-0.7.12.tar.bz2
 cd bwa-0.7.12
@@ -603,9 +619,10 @@ ls bwa-0.7.12
 # bwa executable is in there!
 tar czvf bwa.tar.gz bwa-0.7.12/
 ls
-exit</code></pre>
+exit
+</code></pre>
 <p>Now do the same thing for samtools. Installation instructions here: <a href="http://www.htslib.org/download/" class="uri">http://www.htslib.org/download/</a> I’m modifying my interactive.sub to transfer the samtools tarball this time.</p>
-<pre class="r"><code>condor_submit -i interactive.sub
+<pre class="bash"><code>condor_submit -i interactive.sub
 # Wait for job to start
 tar xvfj samtools-1.3.1.tar.bz2
 cd samtools-1.3.1
@@ -616,10 +633,11 @@ ls samtools
 #I've got a nice bin file in there now!
 tar czvf samtools.tar.gz samtools/
 ls
-exit</code></pre>
+exit
+</code></pre>
 <p>Time to make my first executable. This is the homerun attempt - I’m expecting lots and lots of errors.</p>
 <p>02mapping.sh:</p>
-<pre class="r"><code>##!/bin/bash
+<pre class="bash"><code>##!/bin/bash
 #Map metatranscriptome reads to my database of reference genomes
 
 #Unzip programs
@@ -665,9 +683,10 @@ rm $1.fastq
 rm *.sam
 rm *.bam
 rm mapping_database*
-rm *.tar.gz</code></pre>
+rm *.tar.gz
+  </code></pre>
 <p>and the submit file: 02mapping.sub</p>
-<pre class="r"><code># 02mapping.sub
+<pre class="bash"><code># 02mapping.sub
 #
 #
 # Specify the HTCondor Universe
@@ -707,22 +726,22 @@ queue samplename from samplenames.txt</code></pre>
 <li>Well, that took an hour and a half but made it to the samtools step. Error was “failed to open file /temp/GEODES001_nonrRNA.0000.bam”. I’ll take the temp folder designation out. I’m not sure what that’s doing anyway.Also going to set samtools to use three threads, and going to save a copy of the mapping output to my home folder so I can rerun from after the mapping step next time. BTW, only 27 computers match my current job.</li>
 <li>Ooh, that’s interesting. Error occured due to failure to parse line 18699 of mapping_database.gff, specifically in the attribute column. Investigating with:</li>
 </ol>
-<pre class="r"><code>sed -n '18699{p;q}' mapping_database.gff</code></pre>
+<pre class="bash"><code>sed -n '18699{p;q}' mapping_database.gff</code></pre>
 <p>Only thing different is that it has parantheses and a semicolon</p>
 </div>
 <div id="section-3" class="section level4">
 <h4>2017-02-20</h4>
 <p>I tried the code to below to remove the semicolon, since that’s also a column separator</p>
-<pre class="r"><code>sed -i 's|(IF-2; GTPase)|(IF-2 GTPase)|g' mapping_database.gff</code></pre>
+<pre class="bash"><code>sed -i 's|(IF-2; GTPase)|(IF-2 GTPase)|g' mapping_database.gff</code></pre>
 <p>But that didn’t work. Still get the error at line 18699. I’m going to try downloading the gff file (gzipped) and running it through an online validator <a href="http://genometools.org/cgi-bin/gff3validator.cgi" class="uri">http://genometools.org/cgi-bin/gff3validator.cgi</a> .</p>
 <p>Well it doesn’t like comment lines. Let’s remove those.</p>
-<pre class="r"><code>sed -i '/^#/d' mapping_database.gff</code></pre>
+<pre class="bash"><code>sed -i '/^#/d' mapping_database.gff</code></pre>
 <p>Ah. Apparently the first line needs to start with ##gff-version 3. Let’s add that back in.</p>
-<pre class="r"><code>echo '##gff-version 3' | cat - mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff</code></pre>
+<pre class="bash"><code>echo '##gff-version 3' | cat - mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff</code></pre>
 <p>Now I get a parse error on line 22835. Looks like a CRISPR? Let’s remove that line. Actually let’s remove all lines that say CRISPR in them.</p>
-<pre class="r"><code>sed '/CRISPR/d' mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff</code></pre>
+<pre class="bash"><code>sed '/CRISPR/d' mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff</code></pre>
 <p>Oh good. Now I get the original error at line 18679. Josh’s github says according to the GFFv3 standard, semi-colons have a reserved meaning and must be escaped. The standard recommends using the URL escape %3B. How can I replace only product names with semicolons? It has a space - can I use that?</p>
-<pre class="r"><code>sed -i 's|; |%3B |g' mapping_database.gff</code></pre>
+<pre class="bash"><code>sed -i 's|; |%3B |g' mapping_database.gff</code></pre>
 <p>Technically it was validated, but got 40,000+ warnings about missing “##sequence-region” lines. I’m going to try coming back to this later, but will run as is for now since Josh didn’t seem to run into this problem.</p>
 <p>It read the gff file! Warning was “no features of type ‘feature’” produced. Odd. Now it says “no module named pysam found” Looks like I need to go back to the python installation and add that module. Going now.</p>
 <p>Got that module added to the install and tried again. It’s taking forever, is that a good sign? 2 hours later - still not done. It was on one of the spalding servers I’ve been having trouble with, so restarted… and it finished five minutes later. Darn spalding. And whatever that feature.out output is, it’s not what I want to use for RPKM counts. Although the mapped to unmapped ratio is nice.</p>
@@ -759,7 +778,7 @@ queue samplename from samplenames.txt</code></pre>
 <h4>2017-02-21</h4>
 <p>I did some reading on HTseq, and it should be able to count reads that hit genes. At the very least, it could at least open my gff file and show me if there’s something wrong with the features. I’m going start an interactive session sending over python and samtools, and try to follow the instructions here: <a href="http://www-huber.embl.de/users/anders/HTSeq/doc/tour.html#tour" class="uri">http://www-huber.embl.de/users/anders/HTSeq/doc/tour.html#tour</a></p>
 <p>Here’s what I’m typing in the interactive session:</p>
-<pre class="r"><code>condor_submit -i interactive.sub
+<pre class="bash"><code>condor_submit -i interactive.sub
 #Wait
 cp /mnt/gluster/amlinz/GEODES001_nonrRNA.sam .
 tar xzf python.tar.gz
@@ -785,11 +804,12 @@ python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t CDS -i locus_tag -m 
 # How can I get a fast file of unmapped reads?
 samtools view -f 4 GEODES001_nonrRNA.sam &gt; GEODES001_nonrRNA.unaligned.sam 
 samtools view -b -S -o GEODES001_nonrRNA.unaligned.bam GEODES001_nonrRNA.unaligned.sam
-samtools bam2fq -nO GEODES001_nonrRNA.unaligned.bam &gt; GEODES001_nonrRNA.unaligned.fastq </code></pre>
+samtools bam2fq -nO GEODES001_nonrRNA.unaligned.bam &gt; GEODES001_nonrRNA.unaligned.fastq 
+</code></pre>
 <p>That should do it! I’ve got unique identifiers and counts of reads that mapped, and I’ll just need a metadata file to process those. I’ve also got a fastq file of unmapped reads, which should work for kraken. I’ve also realized that since both of these steps stem from the bwa output, I should split this into three separate scripts. This will cut down on space needed and hopefully speed up run time. I could probably split up the input files for mapping, too, then put them back together with samtools merge.</p>
 <p>Keeping the scripts below, but going to the current workflow section for this final pass! Should be pretty simple - I’ll modify splitfastqs from the rRNA removal step, then run just the mapping on this step, then put it together. The processing and kraken results will be in a different folder.</p>
 <p>02mapping.sh:</p>
-<pre class="r"><code>#!/bin/bash
+<pre class="bash"><code>#!/bin/bash
 #Map metatranscriptome reads to my database of reference genomes
 
 #Transfer metaT from gluster
@@ -837,9 +857,10 @@ rm $1.fastq
 rm *.sam
 rm *.bam
 rm mapping_database*
-rm *.tar.gz</code></pre>
+rm *.tar.gz
+  </code></pre>
 <p>02mapping.sub</p>
-<pre class="r"><code># 02mapping.sub
+<pre class="bash"><code># 02mapping.sub
 #
 #
 # Specify the HTCondor Universe
@@ -876,9 +897,165 @@ queue samplename from samplenames.txt</code></pre>
 </div>
 <div id="section-5" class="section level4">
 <h4>2017-02-23</h4>
-<p>Coming back to the merging of files since I think I figure out my samtools issues. There was a major update in the past year, and this is the current documentation: <a href="http://www.htslib.org/doc/samtools.html" class="uri">http://www.htslib.org/doc/samtools.html</a> . Josh is using the older version in his scripts.</p>
+<p>Coming back to the merging of files since I think I figured out my samtools issues. There was a major update in the past year, and this is the current documentation: <a href="http://www.htslib.org/doc/samtools.html" class="uri">http://www.htslib.org/doc/samtools.html</a> . Josh is using the older version in his scripts.</p>
 <p>I’ve rewritten the the samtools portion of merging and will try running it interactive mode first, then in script mode. Hopefully this will solve my issues with “truncated files” downstream.</p>
 <p>After much fiddling and crashing an execute node once, I’ve got it working. On to redo-ing 03processing.</p>
+</div>
+<div id="section-6" class="section level4">
+<h4>2017-03-09</h4>
+<p>Welcome back! Since I last worked on the mapping step, I’ve written code for the downstream steps - counting the mapped reads, classifying the unmapped reads, and compiling/plotting the results in R. I finished my preliminary pass for lab meeting on the 6th and got some feedback on how to improve my workflow.</p>
+<p>There’s a few things to change to generally improve the programming:</p>
+<ul>
+<li>Use a fastq splitting program instead of dividing total number of lines by 4. Sarah recommends getreads.sh from bbtools.</li>
+<li>Use a gff validation program instead of my awk/sed commands to get the mapping_database.gff file in the proper format.</li>
+<li>Switch bwa out for bbmap (strongly recommended by multiple lab members)</li>
+<li>Store output files as bam instead of sam (saves space and has more info)</li>
+</ul>
+<p>There’s also some scientific changes to make. I’m going to try several different versions of the mapping database on a subset of the data to determine what works best. This mean I need to a) define what makes one database better than another and b) come up with a way to run several mapping databases at once and compare the results.</p>
+<p>I’m not quite sure how to approach that yet, so let’s start with the easy stuff first - splitting fastq files. Before that, I should clean up my CHTC home folder and gluster account.</p>
+<pre class="bash"><code>#Make separate folders for sub and sh files
+mkdir submits
+mkdir executables
+mv *.sub submits
+mv *.sh executables
+mv scripts/*.sub submits
+mv scripts/*.sh executables
+rm -r scripts
+
+#Make a separate folder for programs and tarballs
+mkdir zipped
+mv *gz zipped
+mv *bz2 zipped
+
+#Make a folder for old output files that I want to save
+mkdir output
+rm temp.txt
+rm test.txt
+mv *.txt output
+rm splitfastqsa*
+
+#Now clean up in gluster. Remove intermediate kraken files
+cd /mnt/gluster/amlinz/
+rm -r GEODES_kraken_split
+rm -r GEODES_kraken_results
+rm -r GEODES_mapping_split/*
+rm -r GEODES_mapping_results</code></pre>
+<p>I’ve downloaded BBMap here: <a href="https://sourceforge.net/projects/bbmap/?source=typ_redirect" class="uri">https://sourceforge.net/projects/bbmap/?source=typ_redirect</a> The user guide is here: <a href="http://jgi.doe.gov/data-and-tools/bbtools/bb-tools-user-guide/bbmap-guide/" class="uri">http://jgi.doe.gov/data-and-tools/bbtools/bb-tools-user-guide/bbmap-guide/</a></p>
+<p>The file is BBMap_36.99.tar.gz. I’ve uploaded into to my “zipped” folder on CHTC. I’m going to start off with an interactive session to make sure the installation works and to figure out where the scripts I need are located.</p>
+<pre class="bash"><code>#Change my go-to interactive sub to tranfer BBMap
+nano submits/testinteractive.sub
+
+condor_submit -i submits/testinteractive.sub
+
+#Wait for session to start
+
+#Unzip to install
+tar -xvzf BBMap_36.99.tar.gz
+#Run the installation test from the user guide
+bbmap/stats.sh in=bbmap/resources/phix174_ill.ref.fa.gz
+#Works! Now where is my getreads.sh?
+bbmap/getreads.sh
+#The help file pops up, so that must be the location.
+
+#Copy an input file in from gluster to test.
+
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/GEODES001_nonrRNA.fastq.gz .
+
+#How can I count how many sequences are in this file?
+#Do my lines wrap?
+
+# I got this code from biostars
+zcat GEODES001_nonrRNA.fastq.gz | ruby -e'
+skip_line = false
+last_char = &quot;+&quot;
+while gets
+ if skip_line
+  skip_line = false
+  next
+end
+if $_ =~ /^@/ and last_char == &quot;+&quot;
+ last_char = &quot;@&quot;
+elsif $_ =~ /&amp;@/ and last_char == &quot;@&quot;
+ last_char = &quot;+&quot;
+else
+ STDERR.puts &quot;WARNING: fastq lines wrap at line #{$.}&quot;
+ exit(1)
+end
+skip_line = true
+end
+STDERR.puts &quot;fastq lines do not wrap&quot;
+'
+
+#&quot;fastq lines wrap at line 3&quot;
+
+#I wonder what happens if you give getreads.sh an output that's out of range.
+
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=0-3 #prints output to screen nicely
+wc -l GEODES001_nonrRNA.fastq
+#24675059 lines, so no fewer than 6143765 reads (# if no wrapping)
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=7000000-7000003 out=out_of_range.fastq overwrite=T
+#Produces an empty output file.
+#Trying several ranges to try and find the end of the file
+
+#Didn't find the exact end, but when you're out of it, you get an empty output file.
+
+#Can I make a bunch of predefined files, then delete ones that are empty?
+
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=0-999999 out=GEODES001_nonrRNA1.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1000000-1999999 out=GEODES001_nonrRNA2.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=2000000-2999999 out=GEODES001_nonrRNA3.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=3000000-3999999 out=GEODES001_nonrRNA4.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=4000000-4999999 out=GEODES001_nonrRNA5.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=5000000-5999999 out=GEODES001_nonrRNA6.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=6000000-6999999 out=GEODES001_nonrRNA7.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=7000000-7999999 out=GEODES001_nonrRNA8.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=8000000-8999999 out=GEODES001_nonrRNA9.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=9000000-9999999 out=GEODES001_nonrRNA10.fastq
+
+#Error at line 10138059 in the second command - is this this end of file?
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=0-99999 out=GEODES001_nonrRNA1.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=100000-199999 out=GEODES001_nonrRNA2.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=200000-299999 out=GEODES001_nonrRNA3.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=300000-399999 out=GEODES001_nonrRNA4.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=400000-499999 out=GEODES001_nonrRNA5.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=500000-599999 out=GEODES001_nonrRNA6.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=600000-699999 out=GEODES001_nonrRNA7.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=700000-799999 out=GEODES001_nonrRNA8.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=800000-899999 out=GEODES001_nonrRNA9.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=900000-999999 out=GEODES001_nonrRNA10.fastq
+
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1000000-1099999 out=GEODES001_nonrRNA11.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1100000-1199999 out=GEODES001_nonrRNA12.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1200000-1299999 out=GEODES001_nonrRNA13.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1300000-1399999 out=GEODES001_nonrRNA14.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1400000-1499999 out=GEODES001_nonrRNA15.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1500000-1599999 out=GEODES001_nonrRNA16.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1600000-1699999 out=GEODES001_nonrRNA17.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1700000-1799999 out=GEODES001_nonrRNA18.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1800000-1899999 out=GEODES001_nonrRNA19.fastq
+bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=1900000-1999999 out=GEODES001_nonrRNA20.fastq
+
+#Very weird - 11 is empty, 12 is normal, 13 gives the error. IDs 1300000 to 1399999?
+#11 was missing a digit. My bad.
+#Line 10138059 must be in ids 1300000-1399999
+
+#Can I count unique line headers somehow? I know I can't use &quot;@&quot; because it's also a quality score, but maybe something longer?
+
+grep @HISEQ GEODES001_nonrRNA.fastq | wc -l
+#6168763 - that's right in my lines/4 range
+grep + GEODES001_nonrRNA.fastq | wc -l
+#Same number - but that doesn't match with where my error pops up.
+
+#Let's look at that line specifically
+sed '1{10138055;10138060}' GEODES001_nonrRNA.fastq
+</code></pre>
+<p>I looked at the code in getreads.sh, and it’s using “@” to split sequences. THAT’S WHAT I WAS TRYING TO AVOID IN THE FIRST PLACE. It breaks on that particular line because there’s a “@” in the quality sequence.</p>
+<p>I wonder if I can manually change that in the script? Nope. Still breaks. @ seems to have another meeting for java.</p>
+<p>What about removing @ from the quality scores?</p>
+<pre class="bash"><code> awk '!/HISEQ/{gsub(/@/, &quot;?&quot;)}; 1' GEODES001_nonrRNA.fastq &gt; mod.fastq
+</code></pre>
+<p>Nope, error at same line. Definitely does not have @.</p>
+<p>What about converting to fasta and then splitting? Would you believe it, there’s the same error at the same line. WTF. I’ll come back to this later.</p>
 </div>
 </div>
 
