@@ -865,3 +865,66 @@ ggplot(rRNA_ratios, aes(x = samplenames, y = percent_rRNA)) + theme_bw() + geom_
 
 ```
 
+####2017-03-10
+
+I found that some of my fastq files had blank lines in the mapping step, and wrote a new splitting script using getreads.sh instead of splitting by line number. See the mapping lab notebook for details. Here's the new submit and executable files.
+
+```{bash, eval = F}
+# 00split_fastq.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 00split_fastq_$(Cluster).log
+error = 00split_fastq_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 00split_fastq.sh
+arguments = $(sample)
+output = 00split_fastq_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of th$
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 2 GB
+request_disk = 12 GB
+#
+# Just one job for testing
+queue sample from samplenames.txt
+
+
+```
+
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_metaT/$1.filter-MTF.fastq.gz .
+gzip -d $1.filter-MTF.fastq.gz
+
+sed -i '/^$/d' $1.filter-MTF.fastq
+
+maxreads=$((`wc -l < $1.filter-MTF.fastq` / 8 - 1))
+startpoints=$(seq 0 500000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 499999));
+  bbmap/getreads.sh in=$1.filter-MTF.fastq id=$num-$endpoint out=$1.filter-MTF_$endpoint.fastq overwrite=T;
+  done
+
+rm $1.filter-MTF.fastq 
+gzip $1*
+cp $1 /mnt/gluster/amlinz/GEODES_metaT_split
+rm $1
+rm BBmap_36.99.tar.gz
+rm -r bbmap
+
+```

@@ -1128,3 +1128,67 @@ Nope, error at same line. Definitely does not have @.
 What about converting to fasta and then splitting?
 Would you believe it, there's the same error at the same line. WTF.
 I'll come back to this later.
+
+####2017-03-10
+
+I've downloaded a fastq validator from here: http://genome.sph.umich.edu/wiki/FastQValidator
+Running this in interactive mode on GEODES001 to see if it can diagnose the problem.
+
+```{bash, eval = F}
+#In interactive mode
+tar -xvzf FastQValidatorLibStatGen.0.1.1a.tgz
+cd fastQValidatorLibStatGen.0.1.1a
+make all
+
+cd ..
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/GEODES001_nonrRNA.fastq.gz .
+gzip -d GEODES001_nonrRNA.fastq.gz
+./fastQValidator_0.1.1a/fastQValidator/bin/fastQValidator --file GEODES001_nonrRNA.fastq.gz
+
+#FASTQ INVALID. Lots of repeated sequence identifiers, but not much I can do about that and I don't think that's causing the problem in one particular line. There are 6168721 sequences - a few less than I found with grep. I'd trust this program more. There are 2947696 errors. I'll turn off sequence ID matching and try again.
+./fastQValidator_0.1.1a/fastQValidator/bin/fastQValidator --file GEODES001_nonrRNA.fastq.gz --disableSeqIDCheck
+
+#Alright! Line 10138057, the sequence identifier lin was too short. Everything after that reads as an invalid character. What can I do about this
+sed -n 10138057p GEODES001_nonrRNA.fastq
+
+```
+
+I've found the problem. Line 10138057 is a blank line. THANKS JGI. How do I remove blank lines from a file?
+
+```{bash, eval = F}
+sed '/^$/d' GEODES001_nonrRNA.fastq > mod.fastq
+./fastQValidator_0.1.1a/fastQValidator/bin/fastQValidator --file mod.fastq --disableSeqIDCheck
+
+#FASTQ SUCCESS. WOOHOO!
+#Can I now accurately calculate the number of fastq seqs in my file from the number of lines? 
+#Yes! 24675052/4 = 6168763, which is what the fastq validator reports
+```
+
+No errors reported in the fastq after I removed blank links, so let's try getreads.sh again.
+
+In an interactive session:
+```{bash, eval = F}
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/GEODES001_nonrRNA.fastq.gz .
+gzip -d GEODES001_nonrRNA.fastq.gz
+
+sed -i '/^$/d' GEODES001_nonrRNA.fastq
+
+maxreads=$((`wc -l < GEODES001_nonrRNA.fastq` / 8 - 1))
+startpoints=$(seq 0 500000 $maxreads)
+
+#That's some funky math up there. The first command counts the number of lines, then divides by 4, giving 6168763. But each sequence is paired - when I give getreads.sh IDS from 0-100000, it reads 2000000 reads and quits between 3000000 and 4000000. So I want to divide this by 2 again, or in other words, divide the line count by 8 to get the max reads. Also, getreads.sh starts counting at 0, so I subtract by 1.
+#The next line counts in increments from 500000 to the number of reads in the file. This should give me one million reads (paired) per file.
+
+for num in $startpoints;
+  do endpoint=$(($num + 499999));
+  bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=$num-$endpoint out=GEODES001_nonrRNA_$endpoint.fastq overwrite=T;
+  done
+
+#That worked! I even have exactly 168762 reads left in the last file.
+```
+
+
+
+```
