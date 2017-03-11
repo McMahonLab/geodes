@@ -848,7 +848,7 @@ error = 00split_fastq_$(Cluster)_$(Process).err
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
-executable = 00split_fastq.sh
+executable = executables/00split_fastq.sh
 arguments = $(sample)
 output = 00split_fastq_$(Cluster).out
 #
@@ -886,8 +886,8 @@ for num in $startpoints;
 
 rm $1.filter-MTF.fastq 
 gzip $1*
-cp $1 /mnt/gluster/amlinz/GEODES_metaT_split
-rm $1
+cp $1* /mnt/gluster/amlinz/GEODES_metaT_split
+rm $1*
 rm BBmap_36.99.tar.gz
 rm -r bbmap
 </code></pre>
