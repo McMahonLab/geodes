@@ -7,7 +7,7 @@ name=$(basename $1 |cut -d'.' -f1)
 
 #Unzip files
 tar -xvf sortmerna-2.1-linux-64.tar.gz
-
+gzip -d $name.fastq
 cd sortmerna-2.1-linux-64
 
 #Index the rRNA databases
@@ -18,8 +18,8 @@ cd sortmerna-2.1-linux-64
 
 #Let's unpack the parameters I've chosen. --ref refers to the databases I've just indexed. --reads says use the fastq file provided. --fastx means I would like a fastq file as output. --aligned is the name for rRNA reads, --other is the name for non-rRNA reads. --log says compute statistics about the run. -v means verbose. I've left the alignment setting at the default, --best. There's a faster setting, but I'm hoping I won't need it. And finally, -m tells sortmerna it can use 3GB of RAM to hold each piece of the fastq file as it processes. Hopefully that will give it a fighting chance.
 #Move the output files back to gluster
-mv ${name}_rRNA.fastq /mnt/gluster/amlinz/GEODES_rRNA/
-mv ${name}_nonrRNA.fastq /mnt/gluster/amlinz/GEODES_nonrRNA/
+mv ${name}_rRNA.fastq /mnt/gluster/amlinz/GEODES_rRNA_split/
+mv ${name}_nonrRNA.fastq /mnt/gluster/amlinz/GEODES_nonrRNA_split/
 
 #Remove files
 cd ..

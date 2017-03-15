@@ -8,7 +8,7 @@ error = 02cat_files_$(Cluster)_$(Process).err
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
-executable = 02cat_files.sh
+executable = executables/02cat_files.sh
 arguments = $(sample)
 output = 02cat_files_$(Cluster).out
 #

@@ -8,7 +8,7 @@ error = 01rRNA_removal_$(Cluster)_$(Process).err
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
-executable = 01rRNA_removal.sh
+executable = executables/01rRNA_removal.sh
 arguments = $(fastqfile)
 output = 01rRNA_removal_$(Cluster).out
 #
@@ -16,7 +16,7 @@ output = 01rRNA_removal_$(Cluster).out
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = sortmerna-2.1-linux-64.tar.gz
+transfer_input_files = zipped/sortmerna-2.1-linux-64.tar.gz
 #transfer_output_files = 
 #
 # Tell HTCondor what amount of compute resources
