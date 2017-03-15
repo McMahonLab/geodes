@@ -449,7 +449,7 @@ rsync -av amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_rRNA_concat/ 
 <pre class="bash"><code># The only files I need going forward are the nonrRNA files.
 # Note: I'll keep the directories, in case I need to run a few more files in the future:
 
-rm -r /mnt/gluster/amlinz/GEODES_metaT_split/*
+rm /mnt/gluster/amlinz/GEODES_metaT_split/*
 rm /mnt/gluster/amlinz/GEODES_nonrRNA_split/*
 rm /mnt/gluster/amlinz/GEODES_rRNA_split/*
 
@@ -459,7 +459,7 @@ rm *.err
 rm *.log
 rm *.out
 
-# Remove the rRNA ratios report
+# Remove the rRNA ratios report and the sample name files
 rm *.txt
 </code></pre>
 <p>Congratulations! You now have files of just nonrRNA reads from your metatranscriptomes, and are ready to run the next step.</p>
