@@ -9,7 +9,7 @@ To remove ribosomal reads from the metatranscriptomes. We used an rRNA removal k
 Starting with the quality filtered fastq files provided by the JGI through the Genome Portal, I will use Sortmerna to separate rRNA and non-rRNA reads into two separate files. I'll save both, but use the non-rRNA reads for downstream analyses.
 
 ## Most recent workflow. 
-####Use this if you want to replicate our protocol. Updated 2017-02-07
+####Use this if you want to replicate our protocol. Updated 2017-03-15
 
 First, a word on where all of our files are located:
 
@@ -318,8 +318,10 @@ request_disk = 10GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
 queue sample from samplenames.txt
-[amlinz@submit-3 ~]$ ^C
-[amlinz@submit-3 ~]$ cat executables/02cat_files.sh
+```
+
+02cat_files.sh
+```{bash, eval = F}
 #!/bin/bash
 #Concatenate sortmerna output
 
@@ -361,28 +363,21 @@ Open up WinSCP and log into submit-3.chtc.wisc.edu. Download the GEODES_rRNA_rat
 On submit-3.chtc.wisc.edu:
 
 ```{bash, eval = F}
-# The only files I need going forward are the nonrRNA files. Delete the rest!
+# The only files I need going forward are the nonrRNA files.
 # Note: I'll keep the directories, in case I need to run a few more files in the future:
 
-rm /mnt/gluster/amlinz/GEODES_metaT/*
 rm -r /mnt/gluster/amlinz/GEODES_metaT_split/*
-rm /mnt/gluster/amlinz/GEODES_nonrRNA/*
-rm /mnt/gluster/amlinz/GEODES_rRNA/*
-rm /mnt/gluster/amlinz/GEODES_rRNA_concat/*
+rm /mnt/gluster/amlinz/GEODES_nonrRNA_split/*
+rm /mnt/gluster/amlinz/GEODES_rRNA_split/*
+
   
 # Delete all the .log, .out, and .err files in your home directory
 rm *.err
 rm *.log
 rm *.out
 
-# Remove the sortmerna program and the rRNA ratios report
+# Remove the rRNA ratios report
 rm *.txt
-rm sortmerna-2.1-linux-64.tar.gz
-
-# Move old scripts into their own folder
-mkdir scripts #if necessary
-mv *.sh scripts/
-mv *.sub scripts/
 
 ```
 
@@ -1074,7 +1069,9 @@ No errors on the 02cat_files script, hooray! Copying rRNA and nonrRNA zipped fil
 
 Happy Monday! I got everything back up on Zissou and my hard drive over the weekend. The last thing I want to do before closing out this analysis is check that my rRNA/mRNA ratios are similar to those measured by the JGI. I saved the number of lines in each file and will calculate that here.
 
-```{r, echo = T, fig.width = 4, fig.height = 10}
+NOTE: removed this plot after I reran the rRNA removal on 3/15. Check that entry in the lab notebook.
+
+```{r, echo = F, fig.width = 4, fig.height = 10, eval = F}
 library(ggplot2)
 rRNA_ratio <- read.table("C:/Users/Alex/Desktop/geodes/analyses/01rRNA_removal/GEODES_rRNA_ratios.txt", header = F, sep = ",", colClasses = c("character"))
 split1 <- strsplit(rRNA_ratio$V1, " ")
@@ -1164,3 +1161,30 @@ rm -r bbmap
 The scripts above seemed to be actually running, but not saving the output in the right place. I'm going to try it in interactive mode to work out the issue.
 
 Got that worked out, plus a directory error in 02catfiles.sh. Going to start the full run now.
+
+####2017-03-15
+
+All done! The fastq splitting ran overnight on the 13th, the rRNA sorting ran during the day yesterday, and the file concatenation ran overnight last night.  Everything looks good - full files, right number of files, and no errors! I'm confident in this analysis and will move on to the mapping now.
+
+But first, I should double check the rRNA/nonrRNA ratios.
+
+```{r, echo = T, fig.width = 4, fig.height = 10}
+library(ggplot2)
+rRNA_ratio <- read.table("C:/Users/Alex/Desktop/geodes/analyses/01rRNA_removal/GEODES_rRNA_ratios.txt", header = F, sep = ",", colClasses = c("character"))
+split1 <- strsplit(rRNA_ratio$V1, " ")
+split2 <- strsplit(rRNA_ratio$V2, " ")
+nonrRNA_count <- c()
+rRNA_count <- c()
+samplenames <- c()
+for(i in 1:length(split1)){
+  nonrRNA_count[i] <- split1[[i]][1]
+  rRNA_count[i] <- split2[[i]][1]
+  samplenames[i] <- substr(split2[[i]][2], start = 1, stop = 9)
+}
+nonrRNA_count <- as.numeric(nonrRNA_count)/4
+rRNA_count <- as.numeric(rRNA_count)/4
+percent_rRNA <- rRNA_count/(rRNA_count + nonrRNA_count) * 100
+rRNA_ratios <- data.frame(samplenames, percent_rRNA)
+ggplot(rRNA_ratios, aes(x = samplenames, y = percent_rRNA)) + theme_bw() + geom_bar(stat = "identity") + coord_flip()
+
+```
