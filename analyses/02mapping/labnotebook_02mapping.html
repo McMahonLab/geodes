@@ -1057,6 +1057,243 @@ sed '1{10138055;10138060}' GEODES001_nonrRNA.fastq
 <p>Nope, error at same line. Definitely does not have @.</p>
 <p>What about converting to fasta and then splitting? Would you believe it, there’s the same error at the same line. WTF. I’ll come back to this later.</p>
 </div>
+<div id="section-7" class="section level4">
+<h4>2017-03-10</h4>
+<p>I’ve downloaded a fastq validator from here: <a href="http://genome.sph.umich.edu/wiki/FastQValidator" class="uri">http://genome.sph.umich.edu/wiki/FastQValidator</a> Running this in interactive mode on GEODES001 to see if it can diagnose the problem.</p>
+<pre class="bash"><code>#In interactive mode
+tar -xvzf FastQValidatorLibStatGen.0.1.1a.tgz
+cd fastQValidatorLibStatGen.0.1.1a
+make all
+
+cd ..
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/GEODES001_nonrRNA.fastq.gz .
+gzip -d GEODES001_nonrRNA.fastq.gz
+./fastQValidator_0.1.1a/fastQValidator/bin/fastQValidator --file GEODES001_nonrRNA.fastq.gz
+
+#FASTQ INVALID. Lots of repeated sequence identifiers, but not much I can do about that and I don't think that's causing the problem in one particular line. There are 6168721 sequences - a few less than I found with grep. I'd trust this program more. There are 2947696 errors. I'll turn off sequence ID matching and try again.
+./fastQValidator_0.1.1a/fastQValidator/bin/fastQValidator --file GEODES001_nonrRNA.fastq.gz --disableSeqIDCheck
+
+#Alright! Line 10138057, the sequence identifier lin was too short. Everything after that reads as an invalid character. What can I do about this
+sed -n 10138057p GEODES001_nonrRNA.fastq
+</code></pre>
+<p>I’ve found the problem. Line 10138057 is a blank line. THANKS JGI. How do I remove blank lines from a file?</p>
+<pre class="bash"><code>sed '/^$/d' GEODES001_nonrRNA.fastq &gt; mod.fastq
+./fastQValidator_0.1.1a/fastQValidator/bin/fastQValidator --file mod.fastq --disableSeqIDCheck
+
+#FASTQ SUCCESS. WOOHOO!
+#Can I now accurately calculate the number of fastq seqs in my file from the number of lines? 
+#Yes! 24675052/4 = 6168763, which is what the fastq validator reports</code></pre>
+<p>No errors reported in the fastq after I removed blank links, so let’s try getreads.sh again.</p>
+<p>In an interactive session:</p>
+<pre class="bash"><code>tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/GEODES001_nonrRNA.fastq.gz .
+gzip -d GEODES001_nonrRNA.fastq.gz
+
+sed -i '/^$/d' GEODES001_nonrRNA.fastq
+
+maxreads=$((`wc -l &lt; GEODES001_nonrRNA.fastq` / 8 - 1))
+startpoints=$(seq 0 500000 $maxreads)
+
+#That's some funky math up there. The first command counts the number of lines, then divides by 4, giving 6168763. But each sequence is paired - when I give getreads.sh IDS from 0-100000, it reads 2000000 reads and quits between 3000000 and 4000000. So I want to divide this by 2 again, or in other words, divide the line count by 8 to get the max reads. Also, getreads.sh starts counting at 0, so I subtract by 1.
+#The next line counts in increments from 500000 to the number of reads in the file. This should give me one million reads (paired) per file.
+
+for num in $startpoints;
+  do endpoint=$(($num + 499999));
+  bbmap/getreads.sh in=GEODES001_nonrRNA.fastq id=$num-$endpoint out=GEODES001_nonrRNA_$endpoint.fastq overwrite=T;
+  done
+
+#That worked! I even have exactly 168762 reads left in the last file.</code></pre>
+</div>
+<div id="section-8" class="section level4">
+<h4>2017-03-15</h4>
+<p>I went back to the rRNA removal step and rewrote the fastq splitting executable based on the work above. I reran everything, including the new samples that have arrived since February. Now I’ll use that same script as a base here and then change my bwa mapping to bbmap.</p>
+<p>I’m also going to change the numbering scheme of the scripts so that it’s clear what sequence you run them in and there are no duplicates.</p>
+<pre class="bash"><code>for file in /mnt/gluster/amlinz/GEODES_nonrRNA_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; samplenames.txt
+
+head -3 samplenames.txt &gt; test_samplenames.txt; mv test_samplenames.txt samplenames.txt</code></pre>
+<p>04splitfastqs.sub</p>
+<pre class="bash"><code>
+# 04split_fastq.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04split_fastq_$(Cluster).log
+error = 04split_fastq_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/04split_fastq.sh
+arguments = $(sample)
+output = 04split_fastq_$(Cluster).out
+#
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 2 GB
+request_disk = 4 GB
+#
+# Just one job for testing
+queue sample from samplenames.txt
+</code></pre>
+<p>04splitfastqs.sh</p>
+<pre class="bash"><code>#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1.fastq.gz .
+gzip -d $1.fastq.gz
+
+sed -i '/^$/d' $1_nonrRNA.fastq
+
+maxreads=$((`wc -l &lt; $1.fastq` / 8 - a))
+startpoints=$(seq 0 500000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 499999));
+  bbmap/getreads.sh in=$1.fastq id=$num-$endpoint out=$1$endpoint.fastq overwrite=T;
+  done
+
+rm $1.fastq
+gzip $1*
+cp $1* /mnt/gluster/amlinz/GEODES_mapping_split
+rm $1*
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+</code></pre>
+</div>
+<div id="section-9" class="section level4">
+<h4>2017-03-16</h4>
+<p>I started the scripts above and they ran for nearly 24 hours, producing no errors or output, until I killed it. It didn’t take that long to run all 85 metatranscriptomes for the rRNA removal, and I’m using nearly the same code. I’ll boot into interactive mode and see what’s going on. I should at least see the getreads.sh output, so presumably it never made it to that step.</p>
+<p>Think I found the problem - I left the .gz tag on the fastq file after I unzipped it. Removed that from the executable and restarted.</p>
+<p>Actually the problem was that my variable $1 included the “_nonrRNA&quot; tag and I included it in the script - so it was trying to process GEODES001_nonrRNA_nonrRNA.fastq. Also there’s something funky about variables and “_“, will look into this further. Anyway, it’s all working now.</p>
+</div>
+<div id="section-10" class="section level4">
+<h4>2017-03-17</h4>
+<p>Happy St. Patrick’s Day! My goal for today is to get the bbmap mapping program working. I’ve already got the installation figured out for BBtools, so hopefully this should be straightforward. I’ll run it in interactive mode first and record my commands below.</p>
+<p>First, make the database. I’ll use the ref MAGS SAGs for now, but switch to the metagenomes later.</p>
+<pre class="bash"><code>cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna &gt; mapping_database.fna
+cat /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff &gt; mapping_database.gff
+
+#We've got to fix some formatting issues in the gff file first
+#Remove comment lines
+sed -i '/^#/d' mapping_database.gff
+#Add back the first comment line
+echo '##gff-version 3' | cat - mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+#Remove CRISPR arrays
+sed '/CRISPR/d' mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+#Change semicolons in product names to a URL escape code
+sed -i 's|; |%3B |g' mapping_database.gff
+gzip mapping_database.gff 
+gzip mapping_database.fna 
+
+mv mapping_database* /mnt/gluster/amlinz/
+</code></pre>
+<pre class="bash"><code>
+#!/bin/bash
+#Map metatranscriptome reads to my database of reference genomes
+
+#Transfer metaT from gluster
+cp $1 .
+name=$(basename $1 |cut -d'.' -f1)
+cp /mnt/gluster/amlinz/mapping_database.fna.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar xvf samtools.tar.gz
+gzip -d $name.fastq.gz
+
+#Index the reference database
+bbmap/bbmap.sh ref=mapping_database.fna.gz
+
+#Run the mapping step
+#I've added a threads=1 parameter to keep the program from getting greedy and crashing a execute node. The minid parameter lets me set a minimum quality score for mapped reads. I'm also outputting the statistics produced (including %reads mapped) and % reads mapped to each scaffold.
+bbmap/bbmap.sh in=$name.fastsq out=$name.mapped.sam minid=0.8 threads=1 scafstats=$name.scaffolds.txt statsfile=$name.stats.txt
+
+# I want to store the output as bam. Use samtools to convert.
+samtools view -b -S -o $name.bam $name.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.bam /mnt/gluster/amlinz/GEODES_mapping_results/
+#Clean up
+rm -r bbmap
+rm $name*
+rm mapping_database.fna.gz
+rm *.tar.gz
+</code></pre>
+<p>Before I get ahead of myself, let’s switch over to the metagenome assemblies from GEODES instead of the ref MAGS SAGS.</p>
+<p>This is going to take awhile. In the meantime, I’ll write up the submit file and test to make sure the script works in parallel.</p>
+<pre class="bash"><code># 04mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04mapping_$(Cluster).log
+error = 04mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/04mapping.sh
+arguments = $(samplename)
+output = 04mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+transfer_output_files = *.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 5GB
+request_disk = 4GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2splitmappingfastqs.txt
+</code></pre>
+<pre class="bash"><code>find /mnt/gluster/amlinz/GEODES_mapping_results/ -type f &gt; path2splitmappingfastqs.txt</code></pre>
+<p>Not bad! Produced the bam output in the right place. I get an error that rm *.sam doesn’t work because no sam file was found - does converting it to bam destroy it? and the stats out files didn’t get returned - can I add these to the submit file?</p>
+<p>Note to self, using wildcards in the submit file results in your jobs being held. I’ll transfer these to a new directory in gluster instead.</p>
+<p>Works! This is running really fast, and I’m not sure how I would put the pieces back together again… can I run the mapping on non-split fastq files? TEst on file and time.</p>
+<p>Hits an error on the first blank line. Removing with the sed command and trying again.</p>
+<p>That took 50 minutes! Not bad. +1 for BBmap’s speed. The stats look good, too - assuming I can run the downstream ht-seq on the full file, I think I’ll do that.</p>
+</div>
+<div id="section-11" class="section level4">
+<h4>2017-03-18</h4>
+<p>I finished uploading the metagenome assemblies and gff files overnight. I’ll build a database out of those and run the mapping on that to start.</p>
+<pre class="bash"><code>cat /mnt/gluster/amlinz/metagenome_assemblies/fastas/*.fna &gt; mapping_database.fna
+cat /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff &gt; mapping_database.gff
+
+#We've got to fix some formatting issues in the gff file first
+#Remove comment lines
+sed -i '/^#/d' mapping_database.gff
+#Add back the first comment line
+echo '##gff-version 3' | cat - mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+#Remove CRISPR arrays
+sed '/CRISPR/d' mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+#Change semicolons in product names to a URL escape code
+sed -i 's|; |%3B |g' mapping_database.gff
+gzip mapping_database.gff 
+gzip mapping_database.fna 
+</code></pre>
+<p>Looking good, except that there are no product names in the gff file. Looking in the IMG data folder I downloaded from JGI, this info is in the “.product_name” file. Why this is necessary is beyond me, there’s a perfectly good place for product names in the gff file. But hey, do your own thing, JGI.</p>
+<p>Anyway, for right now I just need to know what scaffold reads mapped to, which is output by BBmap. I’ll write something to get the product name information later. Right now, I want to run BBMap using the metagenome assembly databases on the nonsplit nonrRNA fastq files.</p>
+<pre class="bash"><code>find /mnt/gluster/amlinz/GEODES_nonrRNA_concat/ -type f &gt; path2splitmappingfastqs.txt
+ head -3 path2splitmappingfastqs.txt &gt; temp.txt; mv temp.txt path2splitmappingfastqs.txt
+</code></pre>
+<p>Started at 11:11AM. We’ll time that to see if it takes ridiculously long with multiple genomes + the giant database. I may need to up the disk space requirements.</p>
+</div>
 </div>
 
 
