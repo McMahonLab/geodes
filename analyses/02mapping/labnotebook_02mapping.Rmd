@@ -1673,3 +1673,46 @@ rm *.gz
 ```
 
 39 jobs submitted with the new, shorter database file.
+
+####2017-03-27
+
+Since last week, I've been chatting with people about how best to do these tasks. For BBMap, Trina put me in touch with its developer, Brian Bushnell. He hasn't responded to my email so I assume he doesn't have the answers. I could contact CHTC help, but even my split files from last week are taking between 6 - 10 hours to run (just BBMap, not the samtools portion). If I could get access to more RAM, it would take even longer, so that's not a great option. I still think the piecemeal version is the way to go.
+
+For ClaMS, I've got it working on these smaller database chunks, but it's still quite slow. Really it's the same issue as BBMap - both run in Java, and have RAM limits which I far exceed. Also has issues with the NCBI database in that I have to specify a level to classify to ahead of time. Other recommendations I got from the lab were sourmash, LCA, and protein homology via blast. sourmash is a cool new matching algorithm, but I would need to write the rest of the classifier myself. LCA is supposedly fast and easy to use. A combination of LCA and protein homology would probably be the most accurate. I will discuss this with Trina on Wednesday.
+
+In the meantime, I'll work on that python script to put the mapping results together. I ran the mapping with SAM1.3 so HTSeq should be able to read the bam files now. In interactive mode:
+
+```{bash, eval = F}
+cp /mnt/gluster/amlinz/GEODES_mapping_results/GEODES071*.bam .
+tar xvf samtools.tar.gz
+tar xvf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
+export HOME=$(pwd)/home
+
+for file in *.bam;do samtools sort -o sorted.$file $file ;done
+
+#samtools merge -n -u GEODES071_all.bam sorted.*.bam
+#header will be wrong on the one below, not sure if this will be an issue or not
+samtools cat -o GEODES071_all.bam sorted.*.bam
+
+python
+import sys,os,HTSeq
+
+bam_file = HTSeq.BAM_Reader( "GEODES071_all.bam" )
+
+
+exit
+
+
+samtools view -f 4 -o GEODES071_all.sam GEODES071_all.bam
+
+
+```
+
+Still having problems with htseq - I don't understand how this BAM reader works, and I'm not seeing any examples online remotely close to what I want to do. Very tempted to write this in R, but the files are still huge. The full bam file for one sample is 18 GB, and I killed its sam file at 62 GB and it wasn't done writing yet. To cut down on this file size, I'm running the mapping again with mappedonly=t. This will save only mapped reads and not output a line for every read that didn't map. If I want to know how many didn't map, I can take the num entries in the sam file / num lines in the fasta file. 
+I also told it to stop outputting the stats files. Doesn't really make sense now that I"m splitting everything.
+
+
