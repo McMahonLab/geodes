@@ -1294,6 +1294,472 @@ gzip mapping_database.fna
 </code></pre>
 <p>Started at 11:11AM. We’ll time that to see if it takes ridiculously long with multiple genomes + the giant database. I may need to up the disk space requirements.</p>
 </div>
+<div id="section-12" class="section level4">
+<h4>2017-03-20</h4>
+<p>Yep, it takes ridiculously long. Then gets evicted from the execute nodes for taking up too much disk space (12GB). I may need to split this up afterall. My options:</p>
+<ul>
+<li>Split up the fastq files again</li>
+<li>Add more threads to bbmap</li>
+<li>Use the nodisk option to prevent bbmap from writing anything but output</li>
+<li>Split up the mapping database by lake</li>
+<li>Remove scaffolds that are too short to do much with</li>
+</ul>
+<p>I’ll try removing small scaffolds first. I found some code online to do this with awk, but need to check line wrapping first.</p>
+<p>Definitely wrapped. That sucks.I’ll try removing newline characters first. From Stack Overflow:</p>
+<pre class="bash"><code> sed -i ':a;N;/^&gt;/M!s/\n//;ta;P;D' /mnt/gluster/amlinz/mapping_database.fna</code></pre>
+<p>While that’s running, I’ll work on getting CLaMs running. I downloaded both the UI and the command line. They run on Java, so supposedly by unzipping the installation package and clicking the .jar file, it might work if the configs are right… hey that worked!</p>
+<p>I’m uploading the .fna file from the GEODES005 assembly in the GUI to test. I don’t think it likes it very much, it’s kind of frozen. Maybe I should run the length filtering here, too.</p>
+<p>I crashed CLaMs. Definitely going to look into give it some length filtered sequences.</p>
+<p>Ran:</p>
+<pre class="bash"><code>awk '!/^&gt;/ { next } { getline seq } length(seq) &gt;= 200 { print $0 &quot;\n&quot; seq }' GEODES005.assembled.fna &gt; filtered.fna</code></pre>
+<p>Didn’t reduce the file size at all. Not sure if that would help - but I still need to get the data into clams. For now I’ll worry about the mapping, though.</p>
+<p>Alright, let’s try the nodisk option.</p>
+<p>Update: that exceeded the memory requirements of BBmap itself. Oops. I’ll try putting the database back to disk and using split fastq files instead.</p>
+</div>
+<div id="section-13" class="section level4">
+<h4>2017-03-21</h4>
+<p>Splitting the fastq files didn’t help - I still ran out of memory. After talking to Sarah, I think I need to split up the mapping database. This is non-competitve mapping, and I want competive, so I’ll do “semi” competitve mapping by parsing the output files for the best hit out of all of the database sections.</p>
+<p>I was running CLams on just the GEODES005 assembly yesterday. The file loaded and was running, but showed no progress after several hours. I’ll try again on the smaller input file.</p>
+<p>I’ll use an interactive session and getreads.sh to split up the assembly files.</p>
+<pre class="bash"><code>condor_submit -i submits/testinteractive.sub
+#Wait
+#My old mapping database was 1/2 GB, so I'll aim for that size in my split database files.
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/GEODES005.assembled.fna .
+
+#sed -i '/^$/d' $1.filter-MTF.fastq
+
+#Since this is a wrapped fasta file, I'm going to calculate the maxreads differently
+maxreads=$(grep -c &quot;^&gt;&quot; GEODES005.assembled.fna)
+startpoints=$(seq 0 1000000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 999999));
+  bbmap/getreads.sh in=GEODES005.assembled.fna id=$num-$endpoint out=GEODES005.assembled.$endpoint.fna overwrite=T;
+  done
+
+rm GEODES005.assembled.fna
+gzip *.fna
+mkdir /mnt/gluster/amlinz/metagenome_assemblies/split_files/
+cp *fna.gz /mnt/gluster/amlinz/metagenome_assemblies/split_files/
+rm *.fna.gz
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+exit</code></pre>
+<p>I’ll test on just the one assembled metagenome for now, and add more when I have everythign working.</p>
+<p>Looks like to run pairwise combinations of metaTs and databases, I’ll need a list of every combination. Borrowing some code I found online to do this in bash.</p>
+<pre class="bash"><code>find /mnt/gluster/amlinz/GEODES_nonrRNA_concat/ -type f &gt; path2splitmappingfastqs.txt
+ head -3 path2splitmappingfastqs.txt &gt; temp.txt; mv temp.txt path2splitmappingfastqs.txt
+
+ls /mnt/gluster/amlinz/metagenome_assemblies/split_files/ &gt; split_databases.txt
+
+for a in $(awk '{print $1}' path2splitmappingfastqs.txt) 
+do 
+    for b in $(awk '{print $1}' split_databases.txt) 
+    do 
+        echo $a $b 
+    done 
+done &gt; metaT_db_combo.txt
+  
+head -2 metaT_db_combo.txt &gt; temp.txt; mv temp.txt metaT_db_combo.txt
+</code></pre>
+<p>Now my argument $1 has both the query and database. I’ll need to modify my executable to split this into two variables.</p>
+<pre class="bash"><code>
+#!/bin/bash
+#Map metatranscriptome reads to my database of reference genomes
+path=$(echo $1 | cut -d' ' -f1)
+db=$(echo $1 | cut -d' ' -f2)
+#Transfer metaT from gluster
+cp $path .
+name=$(basename $path |cut -d'.' -f1)
+cp /mnt/gluster/amlinz/metagenome_assemblies/split_files/$db .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar xvf samtools.tar.gz
+gzip -d $name.fastq.gz
+
+#Index the reference database
+bbmap/bbmap.sh ref=$db
+
+#Run the mapping step
+#I've added a threads=1 parameter to keep the program from getting greedy and crashing a execute node. The minid parameter lets me set a minimum quality score for mapped reads. I'm also outputting the statistics produced (including %reads mapped) and % reads mapped to each scaffold.
+bbmap/bbmap.sh in=$name.fastq out=$name.mapped.sam minid=0.8 threads=1 scafstats=$name.scaffolds.txt statsfile=$name.stats.txt
+
+# I want to store the output as bam. Use samtools to convert.
+samtools view -b -S -o $name.bam $name.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.bam /mnt/gluster/amlinz/GEODES_mapping_results/
+#Clean up
+rm -r bbmap
+rm $name*
+rm $db
+rm *.tar.gz
+</code></pre>
+<p>Trying on two files to start.</p>
+<p>I had some issues with the variable naming - apparently the sh automatically recongizes the space as meaning there are two variables. Script changed to reflect that. After that it works, except for not copying the output stats files over to gluster. I’ll fix that and then run on 3 metaTs and 4 db parts. I’ll use those output files to write a script to keep only the best hits from all database parts.</p>
+</div>
+<div id="section-14" class="section level4">
+<h4>2017-03-22</h4>
+<p>3 of the files never finished - I suspect these are the first chunks of the database, and that they’re too big. Next time I’ll chop into smaller pieces. In the meantime, I’ll use the output I have to write a parsing script. I think I’ll do this in Python using HTseq. Will run in interactive mode first to start figure out how to code python…</p>
+<pre class="bash"><code>cp /mnt/gluster/amlinz/GEODES_mapping_results/GEODES071*.bam .
+tar xvf samtools.tar.gz
+tar xvf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
+export HOME=$(pwd)/home
+
+for file in *.bam;do samtools sort $file sorted.$file;done
+
+#samtools merge -n -u GEODES071_all.bam sorted.*.bam
+#header will be wrong on the one below, not sure if this will be an issue or not
+samtools cat -o GEODES071_all.bam sorted.*.bam
+
+python
+import sys,os,HTSeq
+
+bam_file = HTSeq.BAM_Reader( &quot;GEODES071_all.bam&quot; )
+bundles = HTSeq.bundle.mulitple.alignmnets(bam_file)
+
+exit</code></pre>
+<p>The samtools bits take FOREVER and then printing bundles gave an error about an unknown CIGAR string “=”. Google says this is because HTseq doesn’t support SAM v1.4, only SAM v1.3. I can reformat the sam files with bbtools, or set my mapping to output v1.3 instead of 1.4. I need to redo my mapping with smaller database sizes anyway, so I’ll do that option.</p>
+<p>Here’s the full commands to do this:</p>
+<pre class="bash"><code>condor_submit -i submits/testinteractive.sub
+#Wait
+#My old mapping database was 1/2 GB, so I'll aim for that size in my split database files.
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/GEODES005.assembled.fna .
+
+
+#Since this is a wrapped fasta file, I'm going to calculate the maxreads differently
+maxreads=$(grep -c &quot;^&gt;&quot; GEODES005.assembled.fna)
+startpoints=$(seq 0 250000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 249999));
+  bbmap/getreads.sh in=GEODES005.assembled.fna id=$num-$endpoint out=GEODES005.assembled.$endpoint.fna overwrite=T;
+  done
+
+rm GEODES005.assembled.fna
+gzip *.fna
+mkdir /mnt/gluster/amlinz/metagenome_assemblies/split_files/
+cp *fna.gz /mnt/gluster/amlinz/metagenome_assemblies/split_files/
+rm *.fna.gz
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+exit
+
+find /mnt/gluster/amlinz/GEODES_nonrRNA_concat/ -type f &gt; path2splitmappingfastqs.txt
+ head -3 path2splitmappingfastqs.txt &gt; temp.txt; mv temp.txt path2splitmappingfastqs.txt
+
+ls /mnt/gluster/amlinz/metagenome_assemblies/split_files/ &gt; split_databases.txt
+
+for a in $(awk '{print $1}' path2splitmappingfastqs.txt) 
+do 
+    for b in $(awk '{print $1}' split_databases.txt) 
+    do 
+        echo $a $b 
+    done 
+done &gt; metaT_db_combo.txt
+  </code></pre>
+<p>04mapping.sh</p>
+<pre class="bash"><code>
+#!/bin/bash
+#Map metatranscriptome reads to my database of reference genomes
+#Transfer metaT from gluster
+cp $1 .
+name=$(basename $1 |cut -d'.' -f1)
+cp /mnt/gluster/amlinz/metagenome_assemblies/split_files/$2 .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar xvf samtools.tar.gz
+gzip -d $name.fastq.gz
+sed -i '/^$/d' $name.fastq
+
+#Index the reference database
+bbmap/bbmap.sh ref=$2
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.$2.mapped.sam minid=0.8 sam=1.3 threads=1 scafstats=$name.$2.scaffolds.txt statsfile=$name.$2.stats.txt
+
+# I want to store the output as bam. Use samtools to convert.
+samtools view -b -S -o $name.$2.bam $name.$2.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.$2.bam /mnt/gluster/amlinz/GEODES_mapping_results/
+cp *.txt /mnt/gluster/amlinz/GEODES_mapping_stats/
+
+#Clean up
+rm -r bbmap
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+</code></pre>
+<p>39 jobs submitted with the new, shorter database file.</p>
+</div>
+<div id="section-15" class="section level4">
+<h4>2017-03-27</h4>
+<p>Since last week, I’ve been chatting with people about how best to do these tasks. For BBMap, Trina put me in touch with its developer, Brian Bushnell. He hasn’t responded to my email so I assume he doesn’t have the answers. I could contact CHTC help, but even my split files from last week are taking between 6 - 10 hours to run (just BBMap, not the samtools portion). If I could get access to more RAM, it would take even longer, so that’s not a great option. I still think the piecemeal version is the way to go.</p>
+<p>For ClaMS, I’ve got it working on these smaller database chunks, but it’s still quite slow. Really it’s the same issue as BBMap - both run in Java, and have RAM limits which I far exceed. Also has issues with the NCBI database in that I have to specify a level to classify to ahead of time. Other recommendations I got from the lab were sourmash, LCA, and protein homology via blast. sourmash is a cool new matching algorithm, but I would need to write the rest of the classifier myself. LCA is supposedly fast and easy to use. A combination of LCA and protein homology would probably be the most accurate. I will discuss this with Trina on Wednesday.</p>
+<p>In the meantime, I’ll work on that python script to put the mapping results together. I ran the mapping with SAM1.3 so HTSeq should be able to read the bam files now. In interactive mode:</p>
+<pre class="bash"><code>cp /mnt/gluster/amlinz/GEODES_mapping_results/GEODES071*.bam .
+tar xvf samtools.tar.gz
+tar xvf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
+export HOME=$(pwd)/home
+
+for file in *.bam;do samtools sort -o sorted.$file $file ;done
+
+#samtools merge -n -u GEODES071_all.bam sorted.*.bam
+#header will be wrong on the one below, not sure if this will be an issue or not
+samtools cat -o GEODES071_all.bam sorted.*.bam
+
+python
+import sys,os,HTSeq
+
+bam_file = HTSeq.BAM_Reader( &quot;GEODES071_all.bam&quot; )
+
+
+exit
+
+
+samtools view -f 4 -o GEODES071_all.sam GEODES071_all.bam
+</code></pre>
+<p>Still having problems with htseq - I don’t understand how this BAM reader works, and I’m not seeing any examples online remotely close to what I want to do. Very tempted to write this in R, but the files are still huge. The full bam file for one sample is 18 GB, and I killed its sam file at 62 GB and it wasn’t done writing yet. To cut down on this file size, I’m running the mapping again with mappedonly=t. This will save only mapped reads and not output a line for every read that didn’t map. If I want to know how many didn’t map, I can take the num entries in the sam file / num lines in the fasta file. I also told it to stop outputting the stats files. Doesn’t really make sense now that I“m splitting everything.</p>
+</div>
+<div id="section-16" class="section level4">
+<h4>2017-03-30</h4>
+<p>The saga of mapping methods continues. I met with CHTC yesterday and they think that I CAN map without splitting if I just make the index once and store it in gluster. There are enough giant computers to do this, and they’re willing to waive my time limits if necessary. I’ll start this process by running the indexing on my small database, just to get the file names right.</p>
+<pre class="bash"><code>#Make the small database
+cat /mnt/gluster/amlinz/ref_genomes/fasta_files/*.fna &gt; mapping_database.fna
+gzip mapping_database.fna 
+cp mapping_database.fna.gz /mnt/gluster/amlinz/
+
+#Test in interactive mode
+condor_submit -i submits/testinteractive.sub
+
+#In interactive mode
+cp /mnt/gluster/amlinz/mapping_database.fna.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+
+#Index the reference database
+bbmap/bbmap.sh ref=mapping_database.fna.gz
+
+#clean up
+rm mapping_database.fna.gz
+rm -r ref
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+
+exit
+</code></pre>
+<p>Indexing creates a directory called “ref”. I’m guessing that the mapping step looks for this directory and uses whatever’s in it. Time to start the big index.</p>
+<p>04build_index.sh:</p>
+<pre class="bash"><code>#!/bin/bash
+#Build a re-usable mapping index
+cat /mnt/gluster/amlinz/metagenome_assemblies/fastas/*.fna &gt; mapping_database.fna
+cat /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff &gt; mapping_database.gff
+
+#We've got to fix some formatting issues in the gff file
+#Remove comment lines
+sed -i '/^#/d' mapping_database.gff
+#Add back the first comment line
+echo '##gff-version 3' | cat - mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+#Remove CRISPR arrays
+sed '/CRISPR/d' mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+#Change semicolons in product names to a URL escape code
+sed -i 's|; |%3B |g' mapping_database.gff
+
+#Remove short contigs in the mapping database fna file
+awk '!/^&gt;/ { next } { getline seq } length(seq) &gt;= 1000 { print $0 &quot;\n&quot; seq }' mapping_database.fna &gt; mapping_database1000.fna
+
+gzip mapping_database.gff 
+gzip mapping_database1000.fna
+
+#No longer need the gff file or the unfiltered fna file - move to gluster
+cp mapping_database.gff.gz /mnt/gluster/amlinz/
+rm mapping_database.gff.gz
+rm mapping_database.fna
+
+#Unzip bbmap and build the index
+tar -xvzf BBMap_36.99.tar.gz
+bbmap/bbmap.sh ref=mapping_database1000.fna.gz
+
+#make ref/ a tarball and move to gluster
+tar czvf ref.tar.gz ref/
+
+cp ref.tar.gz /mnt/gluster/amlinz/
+rm ref.tar.gz
+rm mapping_database1000.fna.gz</code></pre>
+<p>04build_index.sub:</p>
+<pre class="bash"><code># 04build_index.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04build_index_$(Cluster).log
+error = 04build_index_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/04build_index.sh
+output = 04build_index_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+#transfer_output_files = 
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 15GB
+request_disk = 60GB
+#
+#
+queue 
+</code></pre>
+<p>Here goes nothing…</p>
+<p>After building the database for 4 hours, bbmap reports the reference is empty… I suspect the read trimming command. Will try a bbtools command instead.</p>
+<pre class="bash"><code>#!/bin/bash
+#Build a re-usable mapping index
+#cat /mnt/gluster/amlinz/metagenome_assemblies/fastas/*.fna &gt; mapping_database.fna
+#cat /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff &gt; mapping_database.gff
+
+#We've got to fix some formatting issues in the gff file
+#Remove comment lines
+#sed -i '/^#/d' mapping_database.gff
+#Add back the first comment line
+#echo '##gff-version 3' | cat - mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+#Remove CRISPR arrays
+#sed '/CRISPR/d' mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+#Change semicolons in product names to a URL escape code
+#sed -i 's|; |%3B |g' mapping_database.gff
+
+cp /mnt/gluster/amlinz/mapping_database.fna.gz .
+tar -xvzf BBMap_36.99.tar.gz
+#Remove short contigs in the mapping database fna file
+bbmap/reformat.sh in=mapping_database.fna.gz out=mapping_database1000.fna minlength=1000
+
+#gzip mapping_database.gff 
+gzip mapping_database1000.fna
+
+#No longer need the gff file or the unfiltered fna file - move to gluster
+#cp mapping_database.gff.gz /mnt/gluster/amlinz/
+#rm mapping_database.gff.gz
+rm mapping_database.fna
+
+#Unzip bbmap and build the index
+bbmap/bbmap.sh ref=mapping_database1000.fna.gz
+
+#make ref/ a tarball and move to gluster
+tar czvf ref.tar.gz ref/
+
+cp ref.tar.gz /mnt/gluster/amlinz/
+rm ref.tar.gz
+rm mapping_database1000.fna.gz</code></pre>
+</div>
+<div id="section-17" class="section level4">
+<h4>2017-04-03</h4>
+<p>Finished running on Saturday! Now I will modify my mapping script to refer to the database in gluster.</p>
+<pre class="bash"><code>
+#!/bin/bash
+#Map metatranscriptome reads to my pre-indexed database of reference genomes
+#Transfer metaT from gluster
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1 .
+cp /mnt/gluster/amlinz/ref.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf ref.tar.gz
+gzip -d $1
+name=$(basename $1 |cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.mapped.sam minid=0.8 sam=1.3 threads=1 mappedonly=t
+
+# I want to store the output as bam. Use samtools to convert.
+samtools view -b -S -o $name.mapped.bam $name.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.mapped.bam /mnt/gluster/amlinz/GEODES_mapping_results/
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz</code></pre>
+<p>Make a short list of metaTs to test</p>
+<pre class="bash"><code>ls /mnt/gluster/amlinz/GEODES_nonrRNA_concat/ &gt; path2mappingfastqs.txt
+head -3 path2mappingfastqs.txt &gt; temp.txt; mv temp.txt path2mappingfastqs.txt</code></pre>
+<p>Modify the submit file</p>
+<pre class="bash"><code>
+# 04mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04mapping_$(Cluster).log
+error = 04mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/04mapping.sh
+arguments = $(samplename)
+output = 04mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory =15GB
+request_disk = 60GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2mappingfastqs.txt
+</code></pre>
+<p>Error: can’t find ref/1/summary.txt. Will go into interactive mode to test. Forgot the current dir in the copy ref command, and had the $name variable wrong. Running again.</p>
+</div>
+<div id="section-18" class="section level4">
+<h4>2017-04-04</h4>
+<p>Ran for awhile then got booted off for exceeding RAM usage. After reading, it looks like I need to specify where the index is with build=1. If I specify no index, bbmap starts building a new one in RAM from the info in ref/. In theory, the build parameter says go into indexed folders ref/genome/1 and ref/index/1 and use that.</p>
+<p>Still no dice. Closer inspection showed that the index building is aborting early? Emailed Brian to find out why.</p>
+</div>
+<div id="section-19" class="section level4">
+<h4>2017-04-05</h4>
+<p>Brian says the indexing step ran out of memory, particularly the Java bit. I think I’m going to need to run this in low memory mode. Brian says that should take about 30GB RAM - Ill change the submit file to this amount, add the-Xmx flag so Java uses this amount, and turn on the lowmemory mode with usemodulo.</p>
+<p>Well that finished oddly quickly and doesn’t seem to have aborted… Starting the mapping again to test.</p>
+<p>Update as of 6:15PM: first job ran out of memory. Will up it tomorrow.</p>
+</div>
 </div>
 
 
