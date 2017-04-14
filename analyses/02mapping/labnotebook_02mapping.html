@@ -1760,6 +1760,22 @@ queue samplename from path2mappingfastqs.txt
 <p>Well that finished oddly quickly and doesn’t seem to have aborted… Starting the mapping again to test.</p>
 <p>Update as of 6:15PM: first job ran out of memory. Will up it tomorrow.</p>
 </div>
+<div id="section-20" class="section level4">
+<h4>2017-04-06</h4>
+<p>Well, good thing I left the other two jobs running - they ran just fine! One finished at 10PM and the other finished at 12:30AM. Sizes are both around 350MB, so not bad at all.</p>
+<p>So how much memory did that first program try and use? What was the difference? GEODES001 is slightly bigger than GEODES002 and GEODES003, but not by much and there are certainly much bigger metatranscriptomes.</p>
+<p>Job usage: 21GB disk, 17GB RAM. 20 GB disk, 20GB RAM (limit). 20 GB disk, 20GB RAM (limit)</p>
+<p>I’ll try upping to 30GB RAM and running more jobs to see if it’s only the really big files that are failing. If it is, I’ll split up the fastq files and either run them each as a job or run them sequentially in the same script.</p>
+<p>Also dropping disk space to 25, since 20 seems to be all that is needed.</p>
+<pre class="bash"><code>ls /mnt/gluster/amlinz/GEODES_nonrRNA_concat/ &gt; path2mappingfastqs.txt
+head -10 path2mappingfastqs.txt &gt; temp.txt; mv temp.txt path2mappingfastqs.txt</code></pre>
+</div>
+<div id="section-21" class="section level4">
+<h4>2017-04-10</h4>
+<p>Success! Everything finished with no errors and the bam files look good. I did some poking around in the index and it looks like everything is there - same number of sequences as in the input fasta, so that’s a good sign. I think I’m confident in saying the mapping worked. The last thing I want to do is write something to quickly check the .err files to make sure they worked,so that I don’t have to go through them one by one.</p>
+<pre class="bash"><code>for file in 04mapping*.err; do test=$(grep &quot;SAM header is present:&quot; $file | wc -l); echo &quot;$file $test&quot;; done</code></pre>
+<p>I’m going to step away from mapping for a bit to get the HTSEQ count bit working with this output. I also need to figure out how to classify the contigs. Then I’ll come back here, clean up the current workflow, and run the mapping on all files.</p>
+</div>
 </div>
 
 

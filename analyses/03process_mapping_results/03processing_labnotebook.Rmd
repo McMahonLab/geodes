@@ -478,3 +478,175 @@ I got some weird errors about truncated files when trying to get a fastq file ou
 ####2017-02-27
 
 Ran the processing and didn't get any errors but about 10 samples produced empty output files. I'll come back and fix this if I have time before lab meeting. Moving on to making the metadata file now. 
+
+####2017-04-11
+
+It's been awhile for this step! I've got 10 files mapped accurately and am ready to revisit read counting. My issues last time were:
+- need a better way to parse the gff file
+- got errors because some SAM files had * as a Phred score
+- some files were just empty
+
+I'll start with the gff file. Can I find a tool for merging gff files? The tools at genometools.org/pub look good. I downloaded verstion 1.5.9. Uploading to CHTC.
+
+WHY JGI WHY??? GFF formats are the bane of my existance right now. After getting genometools installed (not easy) I finally run merge and get the error: strand '-1' not one character long on line 1 in GEODES005.assembled.gff
+
+Running head on my gff file piece indeed confirms that strand is indicated with -1 or 1. The standard gff format is - or +, hence the "one character" error. I'll need to change -1 to - and 1 to +, but only for that specific column. A job for awk maybe? Will also need to be conservative so as not to screw up my MAG gff files.
+
+First I should right down how I ultimately installed genometools. This is in an interactive session.
+```{bash, eval = F}
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make
+make prefix=$(pwd)/../genometools/ install
+cd ..
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Now I can run genometools
+gt merge -retainids -tidy -o mapping_database.gff /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff
+
+#This is what gave me that error
+
+#Copy the gff files to this directory
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff .
+
+#Fix the strand issue
+for file in *.gff; do awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $file > f1_$file; done
+
+#Try again
+gt merge -retainids -tidy -o mapping_database.gff -force f1*.gff
+
+
+```
+
+error:gff file not sorted
+
+####2017-04-12
+
+Busy day of meetings but I'll be working on the gff issue in between. According to the genometools manual, the command gt gff3 will sort gff files if that's added as a parameter. It will also tidy them up here instead of at the merge step. Starting a new interactive session to test:
+
+```{bash, eval = F}
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
+cd ..
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Copy the gff files to this directory
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff .
+
+#Fix the strand issue
+for file in *.gff; do awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $file > f1_$file; done
+
+#Add first comment line
+for file in f1*gff; do echo '##gff-version 3' | cat - $file > temp && mv temp $file; done
+echo '##gff-version 3' | cat - mapping_database.gff > temp && mv temp mapping_database.gff
+
+#Sort and tidy
+for file in f1*gff; do gt gff3 -sort yes -tidy -force -retainids -o tidy_$file $file; done
+
+#Run the merge
+gt merge -o mapping_database.gff tidy*gff
+
+gzip mapping_database.gff
+
+cp mapping_database.gff.gz /mnt/gluster/amlinz/
+
+rm *.gz
+rm *.gff
+rm -r genome*
+rm temp
+exit
+
+```
+
+I think that's working! Needed cairo=no, apparently not all nodes have cairo. Also needed to add a first comment line into the gff files. The tidy function added a gff header and corrected items to lowercase capitalization. After that the merge ran with no errors!
+This will work for now, but unfortunately I think I will need a separate script for each "type" of gff file I want to include in my database due to formatting issues... yuck.
+
+####2017-04-13
+
+Next up, edit the htseq-couns script:
+```{bash, eval = F}
+#!/bin/bash
+#Make a count table of mapped reads
+
+#Transfer data from gluster
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam .
+cp /mnt/gluster/amlinz/python.tar.gz .
+cp /mnt/gluster/amlinz/mapping_database.gff.gz .
+
+#Unzip programs
+tar xzf python.tar.gz
+tar xvf samtools.tar.gz
+gzip -d mapping_database.gff.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+#Manipulate the output
+samtools sort -o $1.sorted $1.mapped.bam
+samtools index $1.sorted.bam
+
+#Count reads
+python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t CDS -i locus_tag -m intersection-strict -o $1.CDS.sam $1.sorted.bam mapping_database.gff > $1.CDS.out
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+cp $1.CDS.out /mnt/gluster/amlinz/GEODES_mapping_summaries/
+rm $1.CDS.out
+
+#Clean up
+rm -r python
+rm -r samtools
+rm *.bam
+rm *.bai
+rm mapping_database*
+rm *.tar.gz
+```
+
+Make a list of files to run:
+```{bash, eval = F}
+for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
+cat bamfiles.txt
+
+```
+
+And the submit file:
+```{bash, eval = F}
+
+# 03processing.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03processing_$(Cluster).log
+error = 03processing_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = 03processing.sh
+arguments = $(samplename)
+output = 03processing_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 3GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+
+```
+
+Looks like CHTC is still down for repairs from last night. Will try again later today.
