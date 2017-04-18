@@ -650,3 +650,149 @@ queue samplename from bamfiles.txt
 ```
 
 Looks like CHTC is still down for repairs from last night. Will try again later today.
+
+####2017-04-17
+
+I did get the script started, and it ran for a few hours before running out of RAM. So I bumped the RAM up to 12GB, and it ran for 2.5 days, and then ran out of RAM. Clearly that's not feasible. I think I need to split up the input BAM files, run them individually, and then compile the results of HTseq count afterwards.
+
+Here's my first attempt at that script. After looking online, splitting by line should be sufficient.
+
+05splitbams.sh
+```{bash, eval = F}
+#!/bin/bash
+#Split bam files into smaller pieces based on line count
+tar xvf samtools.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam .
+
+samtools view $1.mapped.bam > $1.sam
+split -l 1000000 $1.sam part_$1
+
+# Rename files to include .sam extension
+for file in part_$1*;do mv $file $file.sam;done
+
+# Convert to bam and add the header back in
+for file in part_$1*.sam; do name=$(basename $file | cut -d'.' -f1);  samtools reheader $1.sam $file > $name.sam; samtools view -b $name.sam > $name.bam; done
+
+# Send files back to gluster
+cp part_$1*.bam /mnt/gluster/amlinz/GEODES_split_bams/
+
+# Clean up
+rm -r $1
+rm *sam
+rm *bam
+rm -r samtools
+rm samtools.tar.gz
+
+```
+
+Run this in interactive mode to test
+
+SO MANY PROBLEMS. The internet lies. I can't reheader because I have no EOF lines and I can't get the EOF lines by converting to BAM because I have no header. At this point, I think it would be easier to install another program.  I'm looking at NGSutils bamutils.
+
+Downloaded to my submit node via git, then intalling in interactive mode here: http://ngsutils.org/installation/
+
+####2017-04-18
+
+Couldn't install ngsutils yesterday - it needs Python, and I don't think my custom Python install had what it need. It kept giving an error about not finding a bin file during make and when I tried to run bamutils, I got an error that pysam was not installed even though I can call pysam just fine in a python session.
+
+Josh didn't have any more ideas for splitting bam files, so I'm going to try featureCounts instead of HTSeq. This one is supposed to be much faster, and I'm not seeing anything saying it's more error prone. Some say that it is more liberal in calling reads than HTSeq but that HTSeq may be too conservative overall.
+
+I'm going to build a custom install of featureCounts in an interactive session. I installed it from source code and am using the Linux instructions here: http://bioinf.wehi.edu.au/subread-package/
+
+```{bash, eval = F}
+tar zxvf subread-1.5.2-source.tar.gz
+cd subread-1.5.2-source/src
+make -f Makefile.Linux
+tar czvf subreads.tar.gz subread-1.5.2-source
+cp subreads.tar.gz /mnt/gluster/amlinz
+#Move to zipped/ back in home directory
+```
+
+New counting script - lines just commented out for now
+03featurecounts.sh
+```{bash, eval = F}
+
+#!/bin/bash
+#Make a count table of mapped reads
+
+#Transfer data from gluster
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam .
+#cp /mnt/gluster/amlinz/python.tar.gz .
+cp /mnt/gluster/amlinz/mapping_database.gff.gz .
+
+#Unzip programs
+#tar xzf python.tar.gz
+#tar xvf samtools.tar.gz
+tar xvzf subreads.tar.gz
+gzip -d mapping_database.gff.gz
+
+#Update the path variable
+#mkdir home
+#export PATH=$(pwd)/python/bin:$PATH
+#export HOME=$(pwd)/home
+
+#Manipulate the output
+#samtools sort -O bam $1.mapped.bam > $1.sorted.bam
+#samtools index $1.sorted.bam
+
+#Count reads
+#python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t CDS -i locus_tag -m intersection-strict -o $1.CDS.sam $1.sorted.bam mapping_database.gff > $1.CDS.out
+./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
+
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+cp $1.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
+cp $1.CDS.txt.summary /mnt/gluster/amlinz/GEODES_mapping_summaries/
+rm $1.CDS.txt
+
+
+#Clean up
+#rm -r python
+#rm -r samtools
+rm *.bam
+#rm *.bai
+rm mapping_database.gff
+rm *.tar.gz
+rm -r subread-1.5.2-source
+```
+
+03featurecounts.sub
+```{bash, eval = F}
+# 03featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03featurecounts_$(Cluster).log
+error = 03featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/03featurecounts.sh
+arguments = $(samplename)
+output = 03featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 20GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+
+```
+
+Test on one first
+
+
