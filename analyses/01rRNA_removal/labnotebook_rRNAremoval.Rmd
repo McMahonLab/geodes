@@ -8,31 +8,50 @@ To remove ribosomal reads from the metatranscriptomes. We used an rRNA removal k
 
 Starting with the quality filtered fastq files provided by the JGI through the Genome Portal, I will use Sortmerna to separate rRNA and non-rRNA reads into two separate files. I'll save both, but use the non-rRNA reads for downstream analyses.
 
-## Most recent workflow. 
-####Use this if you want to replicate our protocol. Updated 2017-03-15
+#### A quick word on high-throughput computing
 
+Because of the large amount of data from this project, I'm running my analyses in a high-throughput computing environment. I submit "jobs" (bits of analyses) from my "submit node" (computer where my home directory is located) and these jobs are sent off to open processors ("execute nodes") around campus. There are two files needed for this - ".sub" files state how many jobs to run, where to find the scripts, and what specs are needed. These are all stored in submits/ in my home folder. The executables, ".sh", are bash scripts that run the actual analysis, found in executables/. The more jobs I can split a task into, the more efficiently it will run - however, sometimes combining the results of many split jobs is prohibitively difficult. In some steps of this workflow, I've chosen to split each sample into many smaller files, while others I've submit one job per sample or even one job for all samples at once. This choice depends on the computational power required by each job and the ease of programming splitting and concatenation scripts.
+
+Running my analyses as many separate jobs presents issues for installation - I need a portable, easy-to-use file I can open and immediately start running a bioinformatics program on a new computer. This means the program can't have any dependencies, and it can't go downloading something from the internet every time I want to run a job. To solve this, I've created tarballs containing a pre-installed version of a program that can be unzipped with executables and databases ready to go. This also means I can be sure that my jobs are using the same version of programs like Python!
+
+UW-Madison Center for High-Throughput Computing (CHTC) runs on HTCondor, so all commands for submitting, checking, or removing jobs are from this program. If you want to run our workflow NOT in massive parallel, you can still use the bash (.sh) scripts. They accept one argument that is the input file name, path, or part of an input file name. So if you had one sample named "My_Favorite_Sample.fastq" you could run:
+
+```{bash, eval = F}
+./01rRNA_removal.sh /Path/To/My_Favorite_Sample.fastq
+```
+
+and receive files "My_Favorite_Sample_rRNA.fastq" and "My_Favorite_Sample_nonrRNA.fastq", as long as you had the program tarball sortmerna-2.1-linux-64.tar.gz in the same directory as 01rRNA_removal.sh. If you want to run several samples in sequence, you could use a for loop; if you have access to multiple threads, you could use a program to run a handful of samples in parallel on one computer.
+
+Happy Coding!
+
+## Most recent workflow. 
+####Use this if you want to replicate our protocol. Updated 2017-04-25
 First, a word on where all of our files are located:
 
-- zissou.bact.wisc.edu, our lab server, is where data is kept long term. However, it does not have the processing power to do the necessary computations.
-- Instead, we run things through UW-Madison's Center for High Throughput Computing, specifically on submit-3.chtc.wisc.edu. I submit jobs and store short-term, small files on this submit node in /home/amlinz/
-- BUT the actual data files are still way too large to be stored on the submit node. Instead, I have a gluster account where I keep the data files - from submit-3.chtc.wisc.edu, it is located at /mnt/gluster/amlinz. This means that instead of transferring data files with my executable in the submit node, I instead wrote a line in the executable that says "go to gluster and download this file." Therefore, I can only run my programs on computers with access to gluster. Also, please note that gluster is not for long-term storage - that is what Zissou is for!
+- We run things through UW-Madison's Center for High Throughput Computing, specifically on submit-3.chtc.wisc.edu. I submit jobs and store short-term, small files on this submit node in /home/amlinz/
+- The actual data files are still way too large to be stored on the submit node. Instead, I have a gluster account where I keep the data files - from submit-3.chtc.wisc.edu, it is located at /mnt/gluster/amlinz. This means that instead of transferring data files with my executable in the submit node, I instead wrote a line in the executable that says "go to gluster and download this file." Therefore, I can only run my programs on computers with access to gluster. Also, please note that gluster is not for long-term storage.
+- Backup copies of data and results are stored on the GEODES external hard drive.
 
 All the code below is run from my submit node, and frequently references my gluster account. Keep this in mind if you are trying to replicate the workflow! Also, if you copied the .sh and .sub files directly from this github repo, you'll need to run "dos2unix" on them to get rid of my silly Windows line endings before running.
 
 1. The first thing we need to do is split the giant fastq files into many smaller pieces. I'm starting with the reads that went through quality control at the JGI (extension .filter-MTF.fastq), located in /mnt/gluster/amlinz/GEODES_metaT.
 
+From the submit node:
+
 ```{bash, eval = F}
 # Make a new directory for the split files
 mkdir /mnt/gluster/amlinz/GEODES_metaT_split/
-# Alternatively, if you've already done this before, just make sure this directory is empty
-# rm -r /mnt/gluster/amlinz/GEODES_metaT_split/*
+# Alternatively, if you've done this before, just make sure this directory is empty
+# rm /mnt/gluster/amlinz/GEODES_metaT_split/*
 
 # Make a list of samples to run
 for file in /mnt/gluster/amlinz/GEODES_metaT/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samplenames.txt
+
 # Don't want to run all of your samples just yet? The line below will keep just the first 3 files in the list.
 # head -3 samplenames.txt > test_samplenames.txt; mv test_samplenames.txt samplenames.txt
+
 # Double check!
-# cat samplenames.txt
+cat samplenames.txt
 
 # You should have both 00split_fastq.sub and 00split_fastq.sh in your home folder. The .sub file references the .sh file.
 # I've set my executable to split files into 1,000,000 reads each, but you can change that.
@@ -45,9 +64,8 @@ condor_q
 # For a more detailed report of computers available while your job is idle:
 # condor_q -analyze
 # Something stuck or not going well? Remove jobs with:
-# condor_rm -all, or condor_rm -8222164 (job id)
+# condor_rm -all, condor_rm -amlinz or condor_rm -8222164 (job id)
 
-# All done! Time with 3 files = 23 minutes. Time with 85 files = 3 hours, but 2 got stuck.
 # Check to see if there's anything in the error file
 ls -ltr 00*.err
 
@@ -60,7 +78,6 @@ find /mnt/gluster/amlinz/GEODES_metaT_split/ -type f
 Here are the scripts used:
 00splitfastqs.sub
 ```{bash, eval = F}
-
 # 00split_fastq.sub
 #
 #
@@ -88,14 +105,13 @@ request_cpus = 1
 request_memory = 2 GB
 request_disk = 12 GB
 #
-# Just one job for testing
+# Submit jobs
 queue sample from samplenames.txt
 
 ```
 
 00splitfastqs.sh
 ```{bash, eval = F}
-
 #!/bin/bash
 tar -xvzf BBMap_36.99.tar.gz
 
@@ -118,7 +134,6 @@ cp $1* /mnt/gluster/amlinz/GEODES_metaT_split
 rm $1*
 rm BBMap_36.99.tar.gz
 rm -r bbmap
-
 ```
 
 
@@ -131,18 +146,15 @@ mkdir /mnt/gluster/amlinz/GEODES_rRNA_split/
 
 # Make a file that contains the paths to all of the file parts:
 find /mnt/gluster/amlinz/GEODES_metaT_split/ -type f > path2splitfastqs.txt
-# Double check!
 cat path2splitfastqs.txt
 
 # Submit the rRNA sorting jobs
 condor_submit submits/01rRNA_removal.sub
 
-# I've submit 177 jobs from 3 original fastq files. Time = 1 hour for most
-# 3 files got stuck somewhere. After contacting CHTC, here's what they told me to do if something gets stuck running way longer than it should:
-
+#Bonus: my jobs got stuck in limbo. Here's how CHTC Help recommend fixing.
 # Check to see where the jobs are:
 condor_q -run -nobatch
-# My stuck files were all on the same server.
+# My stuck files were all on the same server, so likely a problem with that execute node, not my script.
 # Move stuck jobs to hold and then restart:
 condor_hold amlinz
 condor_release amlinz
@@ -191,11 +203,11 @@ request_disk = 5GB
 # Tell HTCondor to run every fastq file in the provided list:
 queue fastqfile from path2splitfastqs.txt
 
+
 ```
 
 01rRNA_removal.sh
 ```{bash, eval = F}
-
 #!/bin/bash
 #Sort metatranscriptomic reads into rRNA and non-rRNA files
 
@@ -226,7 +238,6 @@ rm sortmerna-2.1-linux-64.tar.gz
 rm -r sortmerna-2.1-linux-64
 
 ```
-
 
 
 3. Put everything back together. This is a pretty simple program - all it does it copy files generated from the same sample, concatenate them into a single file, count the number of lines, zip it up, and send it back to gluster.
@@ -285,40 +296,6 @@ queue sample from samplenames.txt
 
 ```
 
-02cat_files.sh
-```{bash, eval = F}
-
-# 02cat_files.sub
-#
-#
-# Specify the HTCondor Universe
-universe = vanilla
-log = 02cat_files_$(Cluster).log
-error = 02cat_files_$(Cluster)_$(Process).err
-#
-# Specify your executable, arguments, and a file for HTCondor to store standard
-#  output.
-executable = executables/02cat_files.sh
-arguments = $(sample)
-output = 02cat_files_$(Cluster).out
-#
-# Specify that HTCondor should transfer files to and from the
-#  computer where each job runs.
-should_transfer_files = YES
-when_to_transfer_output = ON_EXIT
-#transfer_input_files =
-#transfer_output_files = $(sample)_rRNA_results.txt
-#
-# Tell HTCondor what amount of compute resources
-#  each job will need on the computer where it runs.
-Requirements = (Target.HasGluster == true)
-request_cpus = 1
-request_memory = 10GB
-request_disk = 10GB
-#
-# Tell HTCondor to run every fastq file in the provided list:
-queue sample from samplenames.txt
-```
 
 02cat_files.sh
 ```{bash, eval = F}
@@ -340,37 +317,38 @@ mv $1_rRNA.fastq.gz /mnt/gluster/amlinz/GEODES_rRNA_concat/
 rm *_rRNA.fastq
 
 echo ${nonrRNAcount},${rRNAcount} > $1_rRNA_results.txt
-
 ```
 
 
-4. Clean up after yourself. Gluster is not meant for long term storage of files!
-
-From Zissou:
-```{bash, eval = F}
-# Download files to scratch space. These will then be copied to /lakes_data/ 
-cd /scratch/amlinz/GEODES
-mkdir GEODES_nonrRNA
-mkdir GEODES_rRNA
-
-rsync -av amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_nonrRNA_concat/ GEODES_nonrRNA 
-rsync -av amlinz@submit-3.chtc.wisc.edu:/mnt/gluster/amlinz/GEODES_rRNA_concat/ GEODES_rRNA 
-```
+4. Clean up after yourself. Gluster is not meant for long term storage of files! Download these somewhere else and delete the copies on gluster once you're confident in the analysis.
 
 On my computer:
-Open up WinSCP and log into submit-3.chtc.wisc.edu. Download the GEODES_rRNA_ratios.txt file to my github repo, geodes/analyses/01rRNA_removal/. Download the most recent versions of the scripts used here while you're at it. Run the R script plot_rRNA_ratios.Rmd.
+Open up WinSCP and log into submit-3.chtc.wisc.edu. Download the GEODES_rRNA_ratios.txt file to my github repo, geodes/analyses/01rRNA_removal/. Download the most recent versions of the scripts used here while you're at it. I like to take a quick look at the results in R using the following code:
+
+```{r, echo = T, fig.width = 4, fig.height = 10}
+library(ggplot2)
+rRNA_ratio <- read.table("C:/Users/Alex/Desktop/geodes/analyses/01rRNA_removal/GEODES_rRNA_ratios.txt", header = F, sep = ",", colClasses = c("character"))
+split1 <- strsplit(rRNA_ratio$V1, " ")
+split2 <- strsplit(rRNA_ratio$V2, " ")
+nonrRNA_count <- c()
+rRNA_count <- c()
+samplenames <- c()
+for(i in 1:length(split1)){
+  nonrRNA_count[i] <- split1[[i]][1]
+  rRNA_count[i] <- split2[[i]][1]
+  samplenames[i] <- substr(split2[[i]][2], start = 1, stop = 9)
+}
+nonrRNA_count <- as.numeric(nonrRNA_count)/4
+rRNA_count <- as.numeric(rRNA_count)/4
+percent_rRNA <- rRNA_count/(rRNA_count + nonrRNA_count) * 100
+rRNA_ratios <- data.frame(samplenames, percent_rRNA)
+ggplot(rRNA_ratios, aes(x = samplenames, y = percent_rRNA)) + theme_bw() + geom_bar(stat = "identity") + coord_flip()
+
+```
 
 On submit-3.chtc.wisc.edu:
 
 ```{bash, eval = F}
-# The only files I need going forward are the nonrRNA files.
-# Note: I'll keep the directories, in case I need to run a few more files in the future:
-
-rm /mnt/gluster/amlinz/GEODES_metaT_split/*
-rm /mnt/gluster/amlinz/GEODES_nonrRNA_split/*
-rm /mnt/gluster/amlinz/GEODES_rRNA_split/*
-
-  
 # Delete all the .log, .out, and .err files in your home directory
 rm *.err
 rm *.log
@@ -382,6 +360,32 @@ rm *.txt
 ```
 
 Congratulations! You now have files of just nonrRNA reads from your metatranscriptomes, and are ready to run the next step.
+
+### Lazy Run
+
+You've already run the code above and worked out any errors that may arise on a few test files. Or maybe you got everything processed and then received a couple more samples to analyze. Either way, AS LONG AS YOU ARE CONFIDENT THAT THE WORKFLOW WORKS FOR YOUR SAMPLES AND PRODUCEs ABSOLUTELY ZERO ERRORS OR WARNINGS, go ahead and use the lazy run code. 
+
+```{bash, eval = F}
+rm /mnt/gluster/amlinz/GEODES_metaT_split/*
+for file in /mnt/gluster/amlinz/GEODES_metaT/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samplenames.txt
+condor_submit submits/00split_fastq.sub
+#Wait for all jobs to finish
+
+rm /mnt/gluster/amlinz/GEODES_nonrRNA_split/*
+rm /mnt/gluster/amlinz/GEODES_rRNA_split/*
+find /mnt/gluster/amlinz/GEODES_metaT_split/ -type f > path2splitfastqs.txt
+condor_submit submits/01rRNA_removal.sub
+#Wait
+
+condor_submit submits/02cat_files.sub
+#Wait
+
+cat *_rRNA_results.txt > GEODES_rRNA_ratios.txt
+#Download results
+rm *.err
+rm *.log
+rm *.out
+```
 
 # Lab Notebook
 

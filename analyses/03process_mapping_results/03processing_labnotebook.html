@@ -126,7 +126,7 @@ $(document).ready(function () {
 <p>The mapping in the last step produced a .sam file where each line is a read in the metatranscriptome, and information is included about whether or not it mapped, and where it mapped. Technically, this is the data I need to address my hypotheses, but each file is way to large and clunky to analyze. I’d like to analyze these using the DESEQ R package, which requires a table where rows are genes and columns are samples.</p>
 <div id="approach" class="section level5">
 <h5>Approach</h5>
-<p>I’m going to use htseq to count up to reads mapping to the same thing in each metaT. I’ll need samtools again to reformat the mapping output. Once I get an htseq-count summary file for each sample, I’ll combine them into a table for DESEQ. While I’m here, I’ll also create metadata files from the gff file (reproducibly!) so I can redo it for any genomes in my database.</p>
+<p>I’m using a program called FeatureCounts to count the number of reads mapped, then compiling these into a table. I’m also making metadata files to tell me which contig each gene locus_id belongs to and what it is annotated as.</p>
 </div>
 </div>
 <div id="most-recent-workflow." class="section level2">
@@ -134,11 +134,18 @@ $(document).ready(function () {
 <div id="use-this-if-you-want-to-replicate-our-protocol.-updated-2017-03-02" class="section level4">
 <h4>Use this if you want to replicate our protocol. Updated 2017-03-02</h4>
 <ol style="list-style-type: decimal">
-<li>Setup Set up folders in gluster for the outputs:</li>
+<li>Set up folders in gluster for the outputs, and a list of files to run.</li>
 </ol>
-<pre class="r"><code>mkdir /mnt/gluster/amlinz/GEODES_mapping_summaries/</code></pre>
-<p>Build python install interactive.sub:</p>
-<pre class="r"><code>universe = vanilla
+<pre class="r"><code>mkdir /mnt/gluster/amlinz/GEODES_mapping_summaries/
+
+for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; bamfiles.txt
+cat bamfiles.txt</code></pre>
+<p>Build the gff file in an interactive session. Note that every gff format is different, and I’ll likely need to modify this for every type of reference genome I (you) want to use. I’m using the program genometools to fix up gff files - better than wrangling around in awk - but it can’t fix everything. In my case, the gff files for the metagenome assemblies produced by the JGI don’t have an initial comment line and use a different strand annotation (-1, 1, instead of -, +), both of which crash genometools’ gff tidy function.</p>
+<p>build_gff.sub:</p>
+<pre class="bash"><code>
+#build_gff.sub
+#
+universe = vanilla
 # Name the log file:
 log = interactive.log
 
@@ -146,128 +153,188 @@ log = interactive.log
 output = process.out
 error = process.err
 
-# If you wish to compile code, you'll need the below lines. 
+# If you wish to compile code, you'll need the below lines.
 #  Otherwise, LEAVE THEM OUT if you just want to interactively test!
 +IsBuildJob = true
 requirements = (OpSysAndVer =?= &quot;SL6&quot;) &amp;&amp; ( IsBuildSlot == true )
 
 # Indicate all files that need to go into the interactive job session,
 #  including any tar files that you prepared:
-transfer_input_files = Python-2.7.13.tgz
+transfer_input_files = zipped/genometools-1.5.9.tar.gz
 
-# It's still important to request enough computing resources. The below 
+# It's still important to request enough computing resources. The below
 #  values are a good starting point, but consider your file sizes for an
 #  estimate of &quot;disk&quot; and use any other information you might have
 #  for &quot;memory&quot; and/or &quot;cpus&quot;.
+Requirements = (Target.HasGluster == true)
 request_cpus = 1
-request_memory = 1GB
-request_disk = 1GB
+request_memory = 20GB
+request_disk = 25GB
 
 queue</code></pre>
-<p>Start the session with:</p>
-<pre class="r"><code>condor_submit -i interactive.sub</code></pre>
-<p>Here’s what I’m typing in the interactive session:</p>
-<pre class="r"><code>mkdir python
-tar -xvf Python-2.7.13.tgz
-cd Python-2.7.13
-./configure --prefix=$(pwd)/../python
-make
-make install
+<p>Running the interactive session:</p>
+<pre class="bash"><code>condor_submit -i submits/build_gff.sub
+# Wait
+
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
 cd ..
-ls python
-ls python/bin
-# Maybe I can install htseq right in here?
-export PATH=$(pwd)/python/bin:$PATH
-wget https://bootstrap.pypa.io/get-pip.py
-python get-pip.py
-pip install numpy
-pip install matplotlib
-pip install htseq
-pip install pysam
-# hey, that worked!
-tar -czvf python.tar.gz python/
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Copy the gff files to this directory
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff .
+
+#Fix the strand issue
+for file in *.gff; do awk -F'\t' -vOFS='\t' '{gsub(&quot;-1&quot;, &quot;-&quot;, $7); gsub(&quot;1&quot;, &quot;+&quot;, $7); print}' $file &gt; f1_$file; done
+
+#Add first comment line
+for file in f1*gff; do echo '##gff-version 3' | cat - $file &gt; temp &amp;&amp; mv temp $file; done
+echo '##gff-version 3' | cat - mapping_database.gff &gt; temp &amp;&amp; mv temp mapping_database.gff
+
+#Sort and tidy
+for file in f1*gff; do gt gff3 -sort yes -tidy -force -retainids -o tidy_$file $file; done
+
+#Run the merge
+gt merge -o mapping_database.gff tidy*gff
+
+gzip mapping_database.gff
+
+cp mapping_database.gff.gz /mnt/gluster/amlinz/
+
+rm *.gz
+rm *.gff
+rm -r genome*
+rm temp
+exit
+</code></pre>
+<p>Last thing before running the scripts is to build an install for the FeatureCounts program. I installed it from source code and am using the Linux instructions here: <a href="http://bioinf.wehi.edu.au/subread-package/" class="uri">http://bioinf.wehi.edu.au/subread-package/</a></p>
+<p>install_featurecounts.sub</p>
+<pre class="bash"><code>
+#install_featurecounts.sub
+#
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines.
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= &quot;SL6&quot;) &amp;&amp; ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = zipped/subread-1.5.2-source.tar.gz
+
+# It's still important to request enough computing resources. The below
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of &quot;disk&quot; and use any other information you might have
+#  for &quot;memory&quot; and/or &quot;cpus&quot;.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 4GB
+
+queue
+</code></pre>
+<p>In the interactive session:</p>
+<pre class="bash"><code>condor_submit -i install_featurecounts.sub
+# Wait
+
+tar zxvf subread-1.5.2-source.tar.gz
+cd subread-1.5.2-source/src
+make -f Makefile.Linux
+tar czvf subread.tar.gz subread-1.5.2-source
+
+# Move tarball back to gluster
+cp subread.tar.gz /mnt/gluster/amlinz
+
+# Clean up
+rm subread.tar.gz
+rm -r subread-1.5.2.source
 exit
 
-# In your home folder, copy the install to gluster (it's too big to transfer via the submit file)
-cp python.tar.gz /mnt/gluster/amlinz/</code></pre>
-<p>Make a list of files to run:</p>
-<pre class="r"><code>for file in /mnt/gluster/amlinz/GEODES_mapping_concat/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; samfiles.txt
-cat samfiles.txt</code></pre>
+# Move tarball into zipped folder
+mv /mnt/gluster/amlinz/subread.tar.gz zipped/subread.tar.gz
+</code></pre>
 <ol start="2" style="list-style-type: decimal">
-<li>Run 03processing:</li>
+<li>Peform the counting. Like Jimmy Johns, FeatureCounts is freaky fast (and seems to be freaky good as well, at least it gives the same results as HTSeq-count) so this should only take a day or so. I’m using minOverlap and fracOverlap == 1, equivalent to HTSeq’s mode intersection_strict (read must be contained in a gene to be mapped to that gene).</li>
 </ol>
-<pre class="r"><code># 03processing.sub
+<p>FeatureCounts produces two files. The txt.summary has mapped and unmapped read proportions, while the mapped.txt has counts per feature. I remove unmapped reads from the file to save on space, otherwise I can’t open the files.</p>
+<p>06featurecounts.sub:</p>
+<pre class="bash"><code>
+# 06featurecounts.sub
 #
 #
 # Specify the HTCondor Universe
 universe = vanilla
-log = 03processing_$(Cluster).log
-error = 03processing_$(Cluster)_$(Process).err
+log = 03featurecounts_$(Cluster).log
+error = 03featurecounts_$(Cluster)_$(Process).err
 requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
-executable = 03processing.sh
+executable = executables/03featurecounts.sh
 arguments = $(samplename)
-output = 03processing_$(Cluster).out
+output = 03featurecounts_$(Cluster).out
 #
 # Specify that HTCondor should transfer files to and from the
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = samtools.tar.gz,mapping_database.gff.gz
+transfer_input_files = zipped/subreads.tar.gz
 #transfer_output_files =
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.
 Requirements = (Target.HasGluster == true)
 request_cpus = 1
-request_memory = 3GB
-request_disk = 5GB
+request_memory = 20GB
+request_disk = 12GB
 #
-# Tell HTCondor to run every fastq file in the provided list:
-queue samplename from samplenames.txt</code></pre>
-<p>Here’s its executable, 03processing.sh:</p>
-<pre class="r"><code>#!/bin/bash
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+</code></pre>
+<p>06featurecounts.sh:</p>
+<pre class="bash"><code>
+#!/bin/bash
 #Make a count table of mapped reads
 
 #Transfer data from gluster
-cp /mnt/gluster/amlinz/GEODES_mapping_concat/$1.all.sam .
-cp /mnt/gluster/amlinz/python.tar.gz .
-
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam .
+cp /mnt/gluster/amlinz/mapping_database.gff.gz .
 
 #Unzip programs
-tar xzf python.tar.gz
-tar xvf samtools.tar.gz
+tar xvzf subreads.tar.gz
 gzip -d mapping_database.gff.gz
 
-#Update the path variable
-mkdir home
-export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
-export HOME=$(pwd)/home
-
-#Manipulate the output
-samtools view -b -S $1.all.sam &gt; $1.bam 
-samtools sort -o $1.sorted $1.bam 
-samtools index $1.sorted.bam
-
 #Count reads
-python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t CDS -i locus_tag -m intersection-strict -o $1.CDS.sam $1.sorted.bam mapping_database.gff &gt; $1.CDS.out
+./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag --minOverlap 1 --fracOverlap 1 -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
+
+# Keep only mapped reads
+awk '(NR==1) || ($7 &gt; 0 ) ' $1.CDS.txt &gt; $1.CDS.mapped.txt
 
 #Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
-cp $1.CDS.out /mnt/gluster/amlinz/GEODES_mapping_summaries/
-rm $1.CDS.out
+cp $1.CDS.mapped.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
+cp $1.CDS.txt.summary /mnt/gluster/amlinz/GEODES_mapping_summaries/
+rm $1.CDS*
 
 #Clean up
-rm -rf python
-rm -rf samtools
-rm *.sam
 rm *.bam
-rm *.bai
 rm mapping_database*
-rm *.tar.gz</code></pre>
-<p>Check the results</p>
-<pre class="r"><code>ls -ltr /mnt/gluster/amlinz/GEODES_mapping_summaries/</code></pre>
+rm *.tar.gz
+rm -r subread-1.5.2-source
+</code></pre>
+<p>Run and check the results</p>
+<pre class="r"><code>condor_submit submits/06feature_counts.sub
+
+ls -ltr 06*err
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_summaries/</code></pre>
 <ol start="3" style="list-style-type: decimal">
 <li>Compile the result into a single table using the scripts 03maketable:</li>
 </ol>
@@ -665,6 +732,130 @@ request_disk = 12GB
 queue samplename from bamfiles.txt
 </code></pre>
 <p>Looks like CHTC is still down for repairs from last night. Will try again later today.</p>
+</div>
+<div id="section-7" class="section level4">
+<h4>2017-04-17</h4>
+<p>I did get the script started, and it ran for a few hours before running out of RAM. So I bumped the RAM up to 12GB, and it ran for 2.5 days, and then ran out of RAM. Clearly that’s not feasible. I think I need to split up the input BAM files, run them individually, and then compile the results of HTseq count afterwards.</p>
+<p>Here’s my first attempt at that script. After looking online, splitting by line should be sufficient.</p>
+<p>05splitbams.sh</p>
+<pre class="bash"><code>#!/bin/bash
+#Split bam files into smaller pieces based on line count
+tar xvf samtools.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam .
+
+samtools view $1.mapped.bam &gt; $1.sam
+split -l 1000000 $1.sam part_$1
+
+# Rename files to include .sam extension
+for file in part_$1*;do mv $file $file.sam;done
+
+# Convert to bam and add the header back in
+for file in part_$1*.sam; do name=$(basename $file | cut -d'.' -f1);  samtools reheader $1.sam $file &gt; $name.sam; samtools view -b $name.sam &gt; $name.bam; done
+
+# Send files back to gluster
+cp part_$1*.bam /mnt/gluster/amlinz/GEODES_split_bams/
+
+# Clean up
+rm -r $1
+rm *sam
+rm *bam
+rm -r samtools
+rm samtools.tar.gz
+</code></pre>
+<p>Run this in interactive mode to test</p>
+<p>SO MANY PROBLEMS. The internet lies. I can’t reheader because I have no EOF lines and I can’t get the EOF lines by converting to BAM because I have no header. At this point, I think it would be easier to install another program. I’m looking at NGSutils bamutils.</p>
+<p>Downloaded to my submit node via git, then intalling in interactive mode here: <a href="http://ngsutils.org/installation/" class="uri">http://ngsutils.org/installation/</a></p>
+</div>
+<div id="section-8" class="section level4">
+<h4>2017-04-18</h4>
+<p>Couldn’t install ngsutils yesterday - it needs Python, and I don’t think my custom Python install had what it need. It kept giving an error about not finding a bin file during make and when I tried to run bamutils, I got an error that pysam was not installed even though I can call pysam just fine in a python session.</p>
+<p>Josh didn’t have any more ideas for splitting bam files, so I’m going to try featureCounts instead of HTSeq. This one is supposed to be much faster, and I’m not seeing anything saying it’s more error prone. Some say that it is more liberal in calling reads than HTSeq but that HTSeq may be too conservative overall.</p>
+<p>I’m going to build a custom install of featureCounts in an interactive session. I installed it from source code and am using the Linux instructions here: <a href="http://bioinf.wehi.edu.au/subread-package/" class="uri">http://bioinf.wehi.edu.au/subread-package/</a></p>
+<pre class="bash"><code>tar zxvf subread-1.5.2-source.tar.gz
+cd subread-1.5.2-source/src
+make -f Makefile.Linux
+tar czvf subreads.tar.gz subread-1.5.2-source
+cp subreads.tar.gz /mnt/gluster/amlinz
+#Move to zipped/ back in home directory</code></pre>
+<p>New counting script - lines just commented out for now 03featurecounts.sh</p>
+<pre class="bash"><code>
+#!/bin/bash
+#Make a count table of mapped reads
+
+#Transfer data from gluster
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam .
+#cp /mnt/gluster/amlinz/python.tar.gz .
+cp /mnt/gluster/amlinz/mapping_database.gff.gz .
+
+#Unzip programs
+#tar xzf python.tar.gz
+#tar xvf samtools.tar.gz
+tar xvzf subreads.tar.gz
+gzip -d mapping_database.gff.gz
+
+#Update the path variable
+#mkdir home
+#export PATH=$(pwd)/python/bin:$PATH
+#export HOME=$(pwd)/home
+
+#Manipulate the output
+#samtools sort -O bam $1.mapped.bam &gt; $1.sorted.bam
+#samtools index $1.sorted.bam
+
+#Count reads
+#python ./python/bin/htseq-count -f bam -r pos -s no -a 0 -t CDS -i locus_tag -m intersection-strict -o $1.CDS.sam $1.sorted.bam mapping_database.gff &gt; $1.CDS.out
+./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
+
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+cp $1.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
+cp $1.CDS.txt.summary /mnt/gluster/amlinz/GEODES_mapping_summaries/
+rm $1.CDS.txt
+
+
+#Clean up
+#rm -r python
+#rm -r samtools
+rm *.bam
+#rm *.bai
+rm mapping_database.gff
+rm *.tar.gz
+rm -r subread-1.5.2-source</code></pre>
+<p>03featurecounts.sub</p>
+<pre class="bash"><code># 03featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03featurecounts_$(Cluster).log
+error = 03featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/03featurecounts.sh
+arguments = $(samplename)
+output = 03featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 20GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+</code></pre>
+<p>Test on one first</p>
 </div>
 </div>
 
