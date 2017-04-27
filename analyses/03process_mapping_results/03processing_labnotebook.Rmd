@@ -9,7 +9,7 @@ The mapping in the last step produced a .sam file where each line is a read in t
 I'm using a program called FeatureCounts to count the number of reads mapped, then compiling these into a table. I'm also making metadata files to tell me which contig each gene locus_id belongs to and what it is annotated as.
 
 ## Most recent workflow. 
-####Use this if you want to replicate our protocol. Updated 2017-03-02
+####Use this if you want to replicate our protocol. Updated 2017-04-25
 
 1. Set up folders in gluster for the outputs, and a list of files to run.
 ```{r, eval = F}
