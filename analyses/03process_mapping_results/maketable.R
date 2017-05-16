@@ -5,12 +5,14 @@
 filelist <- read.table("D:/GEODES_mapping_summaries/bamfiles.txt", colClasses = c("character"))
 
 # Read in all count files
-locus_tags <- c()
-for(i in 1:length(filelist$V1)){
+output <- read.table(paste("D:/GEODES_mapping_summaries/", filelist$V1[1], ".CDS.txt", sep = ""), header = T, colClasses = c("character", "character", "numeric", "numeric", "character", "numeric", "numeric"))
+locus_tags <- c(output$Geneid)
+locus_table <- data.frame(output[, 7])
+rownames(locus_table) <- locus_tags
+for(i in 63:length(filelist$V1)){
   name <- filelist$V1[i]
-  output <- read.table(paste("D:/GEODES_mapping_summaries/", name, ".CDS.mapped.txt", sep = ""), header = T, colClasses = c("character", "character", "numeric", "numeric", "character", "numeric", "numeric"))
-  assign(paste(name), output)
-  locus_tags <- append(locus_tags, output$Geneid, length(locus_tags))
+  output <- read.table(paste("D:/GEODES_mapping_summaries/", name, ".CDS.txt", sep = ""), header = T, colClasses = c("character", "character", "numeric", "numeric", "character", "numeric", "numeric"))
+  locus_table <- cbind(locus_table, output[, 7])
 }
 
 locus_tags <- unique(locus_tags)

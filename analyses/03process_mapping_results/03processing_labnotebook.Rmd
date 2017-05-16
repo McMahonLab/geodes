@@ -69,30 +69,43 @@ export PATH=$(pwd)/genometools/bin:$PATH
 
 #Copy the gff files to this directory
 cp /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff .
+cp /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff .
 
-#Fix the strand issue
-for file in *.gff; do awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $file > f1_$file; done
+#Make and save a list of which contigs are in which file
+for file in *.gff;do awk '{print $1}' $file > temp.txt; sort -u temp.txt > $file.txt;awk '{print FILENAME $0}' $file.txt > temp2.txt;mv temp2.txt $file.txt;done
+cat *.gff.txt > contig_metadata.txt
+cp contig_metadata.txt /mnt/gluster/amlinz/
 
-#Add first comment line
+#Attach the standard to one of the ref genomes files
+sed '2q;d' pFN18A_DNA_transcript.gff > line2.gff
+cat 2619619040.gff line2.gff > temp && mv temp 2619619040.gff
+
+#Fix the strand issue in the assemblies
+for file in GEODES*.gff; do awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $file > f1_$file; done
+
+#Add first comment line to the assemblies
 for file in f1*gff; do echo '##gff-version 3' | cat - $file > temp && mv temp $file; done
-echo '##gff-version 3' | cat - mapping_database.gff > temp && mv temp mapping_database.gff
 
-#Sort and tidy
-for file in f1*gff; do gt gff3 -sort yes -tidy -force -retainids -o tidy_$file $file; done
+#Sort and tidy the assemblies
+for file in f1*gff; do gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+#Fix up the ref genomes - add comment line, remove CRISPR lines, change semicolons to escaped semicolons, and sort.
+for file in 2*gff;do echo '##gff-version 3' | cat - $file > temp && mv temp $file;sed '/CRISPR/d' $file > temp && mv temp $file; sed -i 's|; |%3B |g' $file; gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
 
 #Run the merge
-gt merge -o mapping_database.gff tidy*gff
+gt merge -o mapping_database.gff sorted*gff
 
 gzip mapping_database.gff
-
 cp mapping_database.gff.gz /mnt/gluster/amlinz/
+
+rm GEODES*gff
+rm sorted*gff
+rm f1*gff
 
 rm *.gz
 rm *.gff
 rm -r genome*
-rm temp
 exit
-
 ```
 
 Last thing before running the scripts is to build an install for the FeatureCounts program. I installed it from source code and am using the Linux instructions here: http://bioinf.wehi.edu.au/subread-package/
@@ -862,4 +875,59 @@ queue samplename from bamfiles.txt
 
 Test on one first
 
+#### 2017-05-04
+
+Everything seems to be working well! featureCounts works great and Josh did some comparisons to HTSeq-count. It works the same as long as we set the intersection/fraction parameters to match HTSeq's intersection-strict mode. I've also uploaded all the metaTs! We have 109 - one extra? Probably one of the borderline low samples worked after we replaced it. My next task is to combine the ref MAGs SAGs database with the metagenome assemblies. I tried running my current script and no go - some of the refMS files were empty after sorting. Internet suggests that there may be empty lines in the files. I'm going into interactive mode to test with a limited number of files and troubleshoot.
+
+Think I've got it - the key is not to tidy the ref mags but to tidy the assemblies. My test samples didn't have blank lines but I'll add this to the script just in case for other samples.
+
+They will just not play nice. Current plan is to run the counting twice since it's so fast.
+
+
+#### 2017-05-15
+
+```{bash, eval = F}
+
+#!/bin/bash
+#Combine htseq-count results into one table
+cp /mnt/gluster/amlinz/GEODES_mapping_summaries/* .
+
+awk '{print $1}' GEODES001_nonrRNA.CDS.txt > rownames.txt
+for file in *.CDS.txt;do awk '{print $2}' $file > temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt > temp2.txt && mv temp2.txt $file;done
+echo "\t" | cat - rownames.txt > temp3.txt && mv temp3.txt rownames.txt
+files=$(echo *CDS.txt)
+paste rownames.txt $files > GEODES_genes_2017-05-15.txt
+
+rm *.out
+rm rownames.txt
+rm temp*.txt
+
+```
+
+```{bash, eval = F}
+
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_metaT/$1.filter-MTF.fastq.gz .
+gzip -d $1.filter-MTF.fastq.gz
+
+sed -i '/^$/d' $1.filter-MTF.fastq
+
+maxreads=$((`wc -l < $1.filter-MTF.fastq` / 8 - 1))
+startpoints=$(seq 0 500000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 499999));
+  bbmap/getreads.sh in=mapping_database.fna id=$num-$endpoint out=mapping_database.$num.fna overwrite=T;
+  done
+
+rm $1.filter-MTF.fastq
+gzip $1*
+cp $1* /mnt/gluster/amlinz/GEODES_metaT_split
+rm $1*
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+
+```
 

@@ -12,13 +12,13 @@ Last updated 2017-04-25
 ### rRNA removal
 
 ```{bash, eval = F}
-rm /mnt/gluster/amlinz/GEODES_metaT_split/*
+mkdir /mnt/gluster/amlinz/GEODES_metaT_split/
 for file in /mnt/gluster/amlinz/GEODES_metaT/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samplenames.txt
 condor_submit submits/00split_fastq.sub
 #Wait for all jobs to finish
 
-rm /mnt/gluster/amlinz/GEODES_nonrRNA_split/*
-rm /mnt/gluster/amlinz/GEODES_rRNA_split/*
+mkdir /mnt/gluster/amlinz/GEODES_nonrRNA_split/
+mkdir /mnt/gluster/amlinz/GEODES_rRNA_split/
 find /mnt/gluster/amlinz/GEODES_metaT_split/ -type f > path2splitfastqs.txt
 condor_submit submits/01rRNA_removal.sub
 #Wait
