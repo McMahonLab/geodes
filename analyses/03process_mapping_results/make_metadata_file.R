@@ -48,3 +48,6 @@ for(i in 1:dim(genome_data)[1]){
 z <- match(rowkey$Genome, genome_data$IMG.OID)
 rowkey$Phylogeny <- phylogeny[z]
 write.csv(rowkey, "C:/Users/Alex/Desktop/geodes/analyses/05R_calculations/gene_metadata_2017-02-28.csv")
+
+
+

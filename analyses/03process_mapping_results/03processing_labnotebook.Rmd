@@ -224,13 +224,13 @@ tar xvzf subreads.tar.gz
 gzip -d mapping_database.gff.gz
 
 #Count reads
-./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag --minOverlap 1 --fracOverlap 1 -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
+./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag --minOverlap 1 --fracOverlap 1 -M -fraction -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
 
 # Keep only mapped reads
-awk '(NR==1) || ($7 > 0 ) ' $1.CDS.txt > $1.CDS.mapped.txt
+#awk '(NR==1) || ($7 > 0 ) ' $1.CDS.txt > $1.CDS.mapped.txt
 
 #Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
-cp $1.CDS.mapped.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
+cp $1.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
 cp $1.CDS.txt.summary /mnt/gluster/amlinz/GEODES_mapping_summaries/
 rm $1.CDS*
 
@@ -898,7 +898,7 @@ echo "\t" | cat - rownames.txt > temp3.txt && mv temp3.txt rownames.txt
 files=$(echo *CDS.txt)
 paste rownames.txt $files > GEODES_genes_2017-05-15.txt
 
-rm *.out
+rm *.CDS.txt
 rm rownames.txt
 rm temp*.txt
 
@@ -931,3 +931,26 @@ rm -r bbmap
 
 ```
 
+####2017-05-22
+
+03maketable script produces no errors but then can't find the output file to transfer. Running in interactive mode to test.
+
+```{bash, eval = F}
+
+cp /mnt/gluster/amlinz/GEODES_mapping_summaries/*.CDS.txt .
+
+awk '{print $1}' GEODES001_nonrRNA.CDS.txt > rownames.txt
+for file in *.CDS.txt;do awk '{print $7}' $file > temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt > temp2.txt && mv temp2.txt $file;done
+echo " " | cat - rownames.txt > temp3.txt && mv temp3.txt rownames.txt
+files=$(echo *CDS.txt)
+paste rownames.txt $files > GEODES_genes_2017-05-23.txt
+sed -e '2,3d' GEODES_genes_2017-05-23.txt
+gzip GEODES_genes_2017-05-23.txt
+cp GEODES_genes_2017-05-23.txt.gz /mnt/gluster/amlinz
+
+rm *gz
+rm *.CDS.txt
+rm rownames.txt
+rm temp*.txt
+
+```
