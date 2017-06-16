@@ -1,62 +1,29 @@
 library(ff)
 library(DESeq)
 
-# gene_table <- read.table.ffdf(file = "D:/GEODES_mapping_summaries/GEODES_genes_2017-05-23.txt.gz", header = T)
-# rownames(gene_table) <- as.character(gene_table[, 1])
-# gene_table <- gene_table[, 2:dim(gene_table)[2]]
-# colnames(gene_table) <- gsub("_nonrRNA", "", colnames(gene_table))
-
 metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/analyses/05R_calculations/sample_metadata.csv", header = T, row.names = 1)
 metadata$condition <- paste(metadata$Lake, metadata$Timepoint, sep = ";")
 coldata <- data.frame(metadata[,4])
 
-gene_table1 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table1.csv", header = T, row.names = 1)
-gene_table2 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table2.csv", header = T, row.names = 1)
-gene_table3 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table3.csv", header = T, row.names = 1)
-gene_table4 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table4.csv", header = T, row.names = 1)
-gene_table5 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table5.csv", header = T, row.names = 1)
-gene_table6 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table6.csv", header = T, row.names = 1)
-gene_table7 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table7.csv", header = T, row.names = 1)
-gene_table8 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table8.csv", header = T, row.names = 1)
-gene_table9 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table9.csv", header = T, row.names = 1)
-gene_table10 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table10.csv", header = T, row.names = 1)
-gene_table11 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table11.csv", header = T, row.names = 1)
-gene_table12 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table12.csv", header = T, row.names = 1)
-gene_table13 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table13.csv", header = T, row.names = 1)
-gene_table17 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table17.csv", header = T, row.names = 1)
-gene_table18 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table18.csv", header = T, row.names = 1)
-gene_table19 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table19.csv", header = T, row.names = 1)
+# Use pFN18A as the normalization factor
 gene_table20 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table20.csv", header = T, row.names = 1)
+effect_size <- gene_table20[grep("pFN18A", rownames(gene_table20)), ]
+effect_size <- effect_size/median(as.numeric(effect_size))
 
-sums1 <- colSums(gene_table1)
-sums2 <- colSums(gene_table2)
-sums3 <- colSums(gene_table3)
-sums4 <- colSums(gene_table4)
-sums5 <- colSums(gene_table5)
-sums6 <- colSums(gene_table6)
-sums7 <- colSums(gene_table7)
-sums8 <- colSums(gene_table8)
-sums9 <- colSums(gene_table9)
-sums10 <- colSums(gene_table10)
-sums11 <- colSums(gene_table11)
-sums12 <- colSums(gene_table12)
-sums13 <- colSums(gene_table13)
-sums17 <- colSums(gene_table17)
-sums18 <- colSums(gene_table18)
-sums19 <- colSums(gene_table19)
-sums20 <- colSums(gene_table20)
+# Some of these samples had the standard amplify really poorly - make a vector to remove these from each dataset
+good_or_bad <- effect_size > 0.001
 
-library_size_df <- rbind(sums1, sums2, sums3, sums4, sums5, sums6, sums7, sums8, sums9, sums10, sums11, sums12, sums13, sums17, sums18, sums19, sums20)
-library_size <- colSums(library_size_df)
-effect_size <- library_size/min(library_size)
+# Remove table20 to save RAM
+rm(gene_table20)
 
-
+# Read in each table and calculate a p-value for each row. Save pvalue (non-adjusted), fold change (normalized), and read count (normalized)
 datasets <- c("gene_table1", "gene_table2", "gene_table3", "gene_table4", "gene_table5", "gene_table6", "gene_table7", "gene_table8", "gene_table8", "gene_table9", "gene_table10", "gene_table11", "gene_table12", "gene_table13", "gene_table17", "gene_table18", "gene_table19", "gene_table20")
 
-for(j in 17:length(datasets)){
-  table <- get(datasets[j])
+for(j in 1:length(datasets)){
+  table <- read.csv(file = paste("D:/GEODES_mapping_summaries/", datasets[j], ".csv", sep = ""), header = T, row.names = 1)
+  table <- table[, which(good_or_bad == T)]
   colnames(table) <- gsub("_nonrRNA", "", colnames(table))
-  cds <- newCountDataSet(countData = table, conditions = metadata$condition, sizeFactors = effect_size)
+  cds <- newCountDataSet(countData = table, conditions = metadata$condition[match(colnames(table), rownames(metadata))], sizeFactors = as.numeric(effect_size[which(good_or_bad == T)]))
   cds <- estimateDispersions(cds)
   #Sparkling
   res1 <- nbinomTest(cds, "Sparkling;0", "Sparkling;4")
@@ -83,7 +50,8 @@ for(j in 17:length(datasets)){
   
   sp_pvals <- sp_pvals[which(howmanynas < 11), ]
   sp_fold <- sp_fold[which(howmanynas < 11), ]
-  sp_norm <- table[match(rownames(sp_pvals), rownames(table)), ]
+  sp_norm <- as.data.frame(sweep(as.matrix(table), 2, as.numeric(effect_size[which(good_or_bad == T)]), "/"))
+  sp_norm <- sp_norm[match(rownames(sp_pvals), rownames(sp_norm )), ]
   
   assign(paste("sp_pvals", j, sep = ""), sp_pvals)
   assign(paste("sp_fold", j, sep = ""), sp_fold)
@@ -99,21 +67,21 @@ for(j in 17:length(datasets)){
   res6 <- nbinomTest(cds, "Trout;20", "Trout;24")
   res7 <- nbinomTest(cds, "Trout;24", "Trout;28")
   #missing timepoints
-  res11 <- nbinomTest(cds, "Trout;40", "Trout;44")
   
-  tb_pvals <- data.frame(res1$pval, res2$pval, res3$pval, res4$pval, res5$pval, res6$pval, res7$pval, res11$pval)
-  tb_fold <- data.frame(res1$foldChange, res2$foldChange, res3$foldChange, res4$foldChange, res5$foldChange, res6$foldChange, res7$foldChange, res11$foldChange)
+  tb_pvals <- data.frame(res1$pval, res2$pval, res3$pval, res4$pval, res5$pval, res6$pval, res7$pval)
+  tb_fold <- data.frame(res1$foldChange, res2$foldChange, res3$foldChange, res4$foldChange, res5$foldChange, res6$foldChange, res7$foldChange)
   rownames(tb_fold) <- rownames(tb_pvals) <- res1$id
-  colnames(tb_fold) <- colnames(tb_pvals) <- c("TB0:4", "TB4:8", "TB8:12", "TB12:16", "TB16:20", "TB20:24", "TB24:28", "TB:40:44")
+  colnames(tb_fold) <- colnames(tb_pvals) <- c("TB0:4", "TB4:8", "TB8:12", "TB12:16", "TB16:20", "TB20:24", "TB24:28")
   
   howmanynas <- c()
   for(i in 1:dim(tb_pvals)[1]){
     howmanynas[i] <- length(which(is.na(tb_pvals[i, ]) == T))
   }
   
-  tb_pvals <- tb_pvals[which(howmanynas < 8), ]
-  tb_fold <- tb_fold[which(howmanynas < 8), ]
-  tb_norm <- table[match(rownames(tb_pvals), rownames(table)), ]
+  tb_pvals <- tb_pvals[which(howmanynas < 7), ]
+  tb_fold <- tb_fold[which(howmanynas < 7), ]
+  tb_norm <- as.data.frame(sweep(as.matrix(table), 2, as.numeric(effect_size[which(good_or_bad == T)]), "/"))
+  tb_norm <- tb_norm[match(rownames(tb_pvals), rownames(tb_norm)), ]
   
   assign(paste("tb_pvals", j, sep = ""), tb_pvals)
   assign(paste("tb_fold", j, sep = ""), tb_fold)
@@ -146,13 +114,15 @@ for(j in 17:length(datasets)){
   
   me_pvals <- me_pvals[which(howmanynas < 11), ]
   me_fold <- me_fold[which(howmanynas < 11), ]
-  me_norm <- table[match(rownames(me_pvals), rownames(table)), ]
+  me_norm <- as.data.frame(sweep(as.matrix(table), 2, as.numeric(effect_size[which(good_or_bad == T)]), "/"))
+  me_norm <- me_norm[match(rownames(me_pvals), rownames(me_norm)), ]
   
   assign(paste("me_pvals", j, sep = ""), me_pvals)
   assign(paste("me_fold", j, sep = ""), me_fold)
   assign(paste("me_norm", j, sep = ""), me_norm)
   
   print(paste("Mendota", j))
+
 }
 
 sp_pvals <- rbind(sp_pvals1, sp_pvals2, sp_pvals3, sp_pvals4, sp_pvals5, sp_pvals6, sp_pvals7, sp_pvals8, sp_pvals9, sp_pvals10, sp_pvals11, sp_pvals12, sp_pvals13, sp_pvals14, sp_pvals15, sp_pvals16, sp_pvals17, sp_pvals18)
@@ -171,15 +141,15 @@ for(i in 1:dim(tb_pvals)[2]){
   print(length(which(tb_pvals[,i] < 0.05)))
 }
 
-write.csv(sp_pvals, file = "D:/GEODES_mapping_summaries/Sparkling_pvalues_2017-06-08.csv")
-write.csv(tb_pvals, file = "D:/GEODES_mapping_summaries/TroutBog_pvalues_2017-06-08.csv")
-write.csv(me_pvals, file = "D:/GEODES_mapping_summaries/Mendota_pvalues_2017-06-08.csv")
+write.csv(sp_pvals, file = "D:/GEODES_mapping_summaries/Sparkling_pvalues_2017-06-12.csv")
+write.csv(tb_pvals, file = "D:/GEODES_mapping_summaries/TroutBog_pvalues_2017-06-12.csv")
+write.csv(me_pvals, file = "D:/GEODES_mapping_summaries/Mendota_pvalues_2017-06-12.csv")
 
-write.csv(sp_fold, file = "D:/GEODES_mapping_summaries/Sparkling_foldchange_2017-06-08.csv")
-write.csv(tb_fold, file = "D:/GEODES_mapping_summaries/TroutBog_foldchange_2017-06-08.csv")
-write.csv(me_fold, file = "D:/GEODES_mapping_summaries/Mendota_foldchange_2017-06-08.csv")
+write.csv(sp_fold, file = "D:/GEODES_mapping_summaries/Sparkling_foldchange_2017-06-12.csv")
+write.csv(tb_fold, file = "D:/GEODES_mapping_summaries/TroutBog_foldchange_2017-06-12.csv")
+write.csv(me_fold, file = "D:/GEODES_mapping_summaries/Mendota_foldchange_2017-06-12.csv")
 
-write.csv(sp_norm, file = "D:/GEODES_mapping_summaries/Sparkling_normalized_counts_2017-06-08.csv")
-write.csv(tb_norm, file = "D:/GEODES_mapping_summaries/TroutBog_normalized_counts_2017-06-08.csv")
-write.csv(me_norm, file = "D:/GEODES_mapping_summaries/Mendota_normalized_counts_2017-06-08.csv")
+write.csv(sp_norm, file = "D:/GEODES_mapping_summaries/Sparkling_normalized_counts_2017-06-12.csv")
+write.csv(tb_norm, file = "D:/GEODES_mapping_summaries/TroutBog_normalized_counts_2017-06-12.csv")
+write.csv(me_norm, file = "D:/GEODES_mapping_summaries/Mendota_normalized_counts_2017-06-12.csv")
 
