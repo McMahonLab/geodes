@@ -7,7 +7,7 @@ output: html_document
 # No, you can't take a shortcut.
 This lazy run workflow is a streamlined version of the full workflow, intended to be run after you've already worked out the kinks in the full workflow specific to your files and system. Modify it based on what you've learned while running the full workflow and it should speed things up if you have to re-run the analysis.
 
-Last updated 2017-04-25
+Last updated 2017-06-16
 
 ### rRNA removal
 
@@ -60,4 +60,91 @@ condor_submit submits/05mapping.sub
 rm *.err
 rm *.log
 rm *.out
+```
+
+## Read Counting
+
+```{bash, eval = F}
+mkdir /mnt/gluster/amlinz/GEODES_mapping_summaries/
+
+for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
+cat bamfiles.txt
+
+condor_submit -i submits/build_gff.sub
+# Wait
+
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
+cd ..
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Copy the gff files to this directory
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff .
+cp /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff .
+
+#Make and save a list of which contigs are in which file
+for file in *.gff;do awk '{print $1}' $file > temp.txt; sort -u temp.txt > $file.txt;awk '{print FILENAME $0}' $file.txt > temp2.txt;mv temp2.txt $file.txt;done
+cat *.gff.txt > contig_metadata.txt
+cp contig_metadata.txt /mnt/gluster/amlinz/
+
+#Attach the standard to one of the ref genomes files
+sed '2q;d' pFN18A_DNA_transcript.gff > line2.gff
+cat 2619619040.gff line2.gff > temp && mv temp 2619619040.gff
+
+#Fix the strand issue in the assemblies
+for file in GEODES*.gff; do awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $file > f1_$file; done
+
+#Add first comment line to the assemblies
+for file in f1*gff; do echo '##gff-version 3' | cat - $file > temp && mv temp $file; done
+
+#Sort and tidy the assemblies
+for file in f1*gff; do gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+#Fix up the ref genomes - add comment line, remove CRISPR lines, change semicolons to escaped semicolons, and sort.
+for file in 2*gff;do echo '##gff-version 3' | cat - $file > temp && mv temp $file;sed '/CRISPR/d' $file > temp && mv temp $file; sed -i 's|; |%3B |g' $file; gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+#Run the merge
+gt merge -o mapping_database.gff sorted*gff
+
+gzip mapping_database.gff
+cp mapping_database.gff.gz /mnt/gluster/amlinz/
+
+rm GEODES*gff
+rm sorted*gff
+rm f1*gff
+
+rm *.gz
+rm *.gff
+rm -r genome*
+exit
+
+condor_submit -i install_featurecounts.sub
+# Wait
+
+tar zxvf subread-1.5.2-source.tar.gz
+cd subread-1.5.2-source/src
+make -f Makefile.Linux
+tar czvf subread.tar.gz subread-1.5.2-source
+
+# Move tarball back to gluster
+cp subread.tar.gz /mnt/gluster/amlinz
+
+# Clean up
+rm subread.tar.gz
+rm -r subread-1.5.2.source
+exit
+
+# Move tarball into zipped folder
+mv /mnt/gluster/amlinz/subread.tar.gz zipped/subread.tar.gz
+
+condor_submit submits/06feature_counts.sub
+
+ls -ltr 06*err
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_summaries/
+
+condor_submit submits/07maketable.sub
+ls
+ls -ltr 07*.err
 ```

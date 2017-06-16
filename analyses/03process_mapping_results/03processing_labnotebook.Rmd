@@ -9,7 +9,7 @@ The mapping in the last step produced a .sam file where each line is a read in t
 I'm using a program called FeatureCounts to count the number of reads mapped, then compiling these into a table. I'm also making metadata files to tell me which contig each gene locus_id belongs to and what it is annotated as.
 
 ## Most recent workflow. 
-####Use this if you want to replicate our protocol. Updated 2017-04-25
+####Use this if you want to replicate our protocol. Updated 2017-06-16
 
 1. Set up folders in gluster for the outputs, and a list of files to run.
 ```{r, eval = F}
@@ -174,21 +174,20 @@ FeatureCounts produces two files. The txt.summary has mapped and unmapped read p
 
 06featurecounts.sub:
 ```{bash, eval = F}
-
 # 06featurecounts.sub
 #
 #
 # Specify the HTCondor Universe
 universe = vanilla
-log = 03featurecounts_$(Cluster).log
-error = 03featurecounts_$(Cluster)_$(Process).err
+log = 06featurecounts_$(Cluster).log
+error = 06featurecounts_$(Cluster)_$(Process).err
 requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
-executable = executables/03featurecounts.sh
+executable = executables/06featurecounts.sh
 arguments = $(samplename)
-output = 03featurecounts_$(Cluster).out
+output = 06featurecounts_$(Cluster).out
 #
 # Specify that HTCondor should transfer files to and from the
 #  computer where each job runs.
@@ -207,10 +206,12 @@ request_disk = 12GB
 # Tell HTCondor to run every file in the provided list:
 queue samplename from bamfiles.txt
 
+
 ```
 
 06featurecounts.sh:
 ```{bash, eval = F}
+
 
 #!/bin/bash
 #Make a count table of mapped reads
@@ -224,12 +225,13 @@ tar xvzf subreads.tar.gz
 gzip -d mapping_database.gff.gz
 
 #Count reads
-./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag --minOverlap 1 --fracOverlap 1 -M -fraction -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
+./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag --minOverlap 1 --fracOverlap 1 -M --fraction -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
 
 # Keep only mapped reads
 #awk '(NR==1) || ($7 > 0 ) ' $1.CDS.txt > $1.CDS.mapped.txt
 
 #Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+#cp $1.CDS.mapped.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
 cp $1.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
 cp $1.CDS.txt.summary /mnt/gluster/amlinz/GEODES_mapping_summaries/
 rm $1.CDS*
@@ -240,8 +242,8 @@ rm mapping_database*
 rm *.tar.gz
 rm -r subread-1.5.2-source
 
-```
 
+```
 
 Run and check the results
 
@@ -252,31 +254,33 @@ ls -ltr 06*err
 ls -ltr /mnt/gluster/amlinz/GEODES_mapping_summaries/
 ```
 
-3. Compile the result into a single table using the scripts 03maketable:
+This will also dump a bunch of files with stats on the counting in your home folder.
 
-03maketable.sub:
-```{r, eval = F}
+3. Compile the result into a single table using the scripts 07maketable. Change the date in the .sh file so that you have a record of which result this is (for when you inevitably have to re-run something).
+
+07maketable.sub:
+```{bash, eval = F}
 # 03maketable.sub
 #
 #
 # Specify the HTCondor Universe
 universe = vanilla
-log = 03maketable_$(Cluster).log
-error = 03maketable_$(Cluster)_$(Process).err
+log = 07maketable_$(Cluster).log
+error = 07maketable_$(Cluster)_$(Process).err
 requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
-executable = 03maketable.sh
-#arguments = 
-output = 03maketable_$(Cluster).out
+executable = executables/07maketable.sh
+#arguments =
+output = 07maketable_$(Cluster).out
 #
 # Specify that HTCondor should transfer files to and from the
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-#transfer_input_files = 
-transfer_output_files = GEODES_genes_2017-02-22.txt
+#transfer_input_files =
+#transfer_output_files = GEODES_genes_2017-05-19.txt
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.
@@ -285,35 +289,131 @@ request_cpus = 1
 request_memory = 1GB
 request_disk = 2GB
 #
-# Tell HTCondor to run every fastq file in the provided list:
+# Only need one instance of this job
 queue
+
 ```
 
-03maketable.sh
+07maketable.sh
 ```{r, eval = F}
+
 #!/bin/bash
-#Combine htseq-count results into one table
-cp /mnt/gluster/amlinz/GEODES_mapping_summaries/* .
+cp /mnt/gluster/amlinz/GEODES_mapping_summaries/*.CDS.txt .
 
-awk '{print $1}' GEODES001_nonrRNA.CDS.out > rownames.txt
-for file in *.out;do awk '{print $2}' $file > temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt > temp2.txt && mv temp2.txt $file;done
-echo "\t" | cat - rownames.txt > temp3.txt && mv temp3.txt rownames.txt
-files=$(echo *.out)
-paste rownames.txt $files > GEODES_genes_2017-02-27.txt
+awk '{print $1}' GEODES001_nonrRNA.CDS.txt > rownames.txt
+for file in *.CDS.txt;do awk '{print $7}' $file > temp.txt;sample=$(basename $f$
+echo "placeholder" | cat - rownames.txt > temp3.txt && mv temp3.txt rownames.txt
+files=$(echo *CDS.txt)
+paste rownames.txt $files > GEODES_genes_2017-05-23.txt
+sed -i -e '2,3d' GEODES_genes_2017-05-23.txt
+gzip GEODES_genes_2017-05-23.txt
+cp GEODES_genes_2017-05-23.txt.gz /mnt/gluster/amlinz
 
-rm *.out
+rm *gz
+rm *.CDS.txt
 rm rownames.txt
 rm temp*.txt
 
 ```
 
-4. Make a metadata file
+```{bash, eval = F}
+condor_submit submits/07maketable.sub
 
-You'll need a custom file with information about each locus tag in the table - what genome did it come from and what gene product does it encode? Make this with make_metadata_file.R from your mapping_database.gff file. Use the commented bash code to get contig names from your gff file first. Then change your file paths and go ahead and source it. I like to do this with Rstudio on my desktop, so I downloaded the file first. 
+ls -ltr 07*.err
+```
 
-5. Cleanup
+4. Cleanup
 
-The only thing I want to save is the table itself, which I downloaded onto my computer with WinSCP. Once you've checked the table to make sure it works, delete all /*.err, /*.out, and /*.log files. Move onto the 05R_analyses directory, where you'll link those locus tags to genomes and gene products.
+The only thing I want to save is the table itself, which I downloaded onto my computer with WinSCP. Once you've checked the table to make sure it works, delete all /*.err, /*.out, and /*.log files. Move onto the 04R_analyses directory, where you'll link those locus tags to genomes and gene products.
+
+#Lazy Run
+
+As in the previous step's lazy run workflow, THIS IS FOR AFTER YOU'VE DONE THE FULL WORKFLOW ONCE AND KNOW EVERYTHING WORKS. NOT FOR ACTUALLY BEING LAZY.
+
+```{bash, eval = F}
+mkdir /mnt/gluster/amlinz/GEODES_mapping_summaries/
+
+for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
+cat bamfiles.txt
+
+condor_submit -i submits/build_gff.sub
+# Wait
+
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
+cd ..
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Copy the gff files to this directory
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff .
+cp /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff .
+
+#Make and save a list of which contigs are in which file
+for file in *.gff;do awk '{print $1}' $file > temp.txt; sort -u temp.txt > $file.txt;awk '{print FILENAME $0}' $file.txt > temp2.txt;mv temp2.txt $file.txt;done
+cat *.gff.txt > contig_metadata.txt
+cp contig_metadata.txt /mnt/gluster/amlinz/
+
+#Attach the standard to one of the ref genomes files
+sed '2q;d' pFN18A_DNA_transcript.gff > line2.gff
+cat 2619619040.gff line2.gff > temp && mv temp 2619619040.gff
+
+#Fix the strand issue in the assemblies
+for file in GEODES*.gff; do awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $file > f1_$file; done
+
+#Add first comment line to the assemblies
+for file in f1*gff; do echo '##gff-version 3' | cat - $file > temp && mv temp $file; done
+
+#Sort and tidy the assemblies
+for file in f1*gff; do gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+#Fix up the ref genomes - add comment line, remove CRISPR lines, change semicolons to escaped semicolons, and sort.
+for file in 2*gff;do echo '##gff-version 3' | cat - $file > temp && mv temp $file;sed '/CRISPR/d' $file > temp && mv temp $file; sed -i 's|; |%3B |g' $file; gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+#Run the merge
+gt merge -o mapping_database.gff sorted*gff
+
+gzip mapping_database.gff
+cp mapping_database.gff.gz /mnt/gluster/amlinz/
+
+rm GEODES*gff
+rm sorted*gff
+rm f1*gff
+
+rm *.gz
+rm *.gff
+rm -r genome*
+exit
+
+condor_submit -i install_featurecounts.sub
+# Wait
+
+tar zxvf subread-1.5.2-source.tar.gz
+cd subread-1.5.2-source/src
+make -f Makefile.Linux
+tar czvf subread.tar.gz subread-1.5.2-source
+
+# Move tarball back to gluster
+cp subread.tar.gz /mnt/gluster/amlinz
+
+# Clean up
+rm subread.tar.gz
+rm -r subread-1.5.2.source
+exit
+
+# Move tarball into zipped folder
+mv /mnt/gluster/amlinz/subread.tar.gz zipped/subread.tar.gz
+
+condor_submit submits/06feature_counts.sub
+
+ls -ltr 06*err
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_summaries/
+
+condor_submit submits/07maketable.sub
+ls
+ls -ltr 07*.err
+```
 
 #Lab Notebook
 
@@ -954,3 +1054,42 @@ rm rownames.txt
 rm temp*.txt
 
 ```
+
+#### 2017-06-16
+
+Long time, no see. I've been working on the downstream steps, but realized one issue with the read mapping - multi-mapping reads. By default, featureCounts does not count reads mapping to more than one location in the reference database. But since we have so much in our reference, there's a high chance that locations are replicated, particularly in replicate metagenomes. I switched this to fractional instead. Here's the new script:
+
+```{bash, eval = F}
+
+#!/bin/bash
+#Make a count table of mapped reads
+
+#Transfer data from gluster
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam .
+cp /mnt/gluster/amlinz/mapping_database.gff.gz .
+
+#Unzip programs
+tar xvzf subreads.tar.gz
+gzip -d mapping_database.gff.gz
+
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag --minOverlap 1 --fracOverlap 1 -M --fraction -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
+
+# Keep only mapped reads
+#awk '(NR==1) || ($7 > 0 ) ' $1.CDS.txt > $1.CDS.mapped.txt
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+#cp $1.CDS.mapped.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
+cp $1.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
+cp $1.CDS.txt.summary /mnt/gluster/amlinz/GEODES_mapping_summaries/
+rm $1.CDS*
+
+#Clean up
+rm *.bam
+rm mapping_database*
+rm *.tar.gz
+rm -r subread-1.5.2-source
+
+```
+
+I will update the workflows to reflect this change.
