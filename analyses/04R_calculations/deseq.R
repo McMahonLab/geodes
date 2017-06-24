@@ -1,9 +1,12 @@
 library(ff)
 library(DESeq)
 
-metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/analyses/05R_calculations/sample_metadata.csv", header = T, row.names = 1)
+metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/analyses/04R_calculations/sample_metadata.csv", header = T, row.names = 1)
 metadata$condition <- paste(metadata$Lake, metadata$Timepoint, sep = ";")
 coldata <- data.frame(metadata[,4])
+spark_meta <- metadata[which(metadata$Lake == "Sparkling"), ]
+trout_meta <- metadata[which(metadata$Lake == "Trout"), ]
+mendota_meta <- metadata[which(metadata$Lake == "Mendota"), ]
 
 # Use pFN18A as the normalization factor
 gene_table20 <- read.csv(file = "D:/GEODES_mapping_summaries/gene_table20.csv", header = T, row.names = 1)
@@ -23,102 +26,109 @@ for(j in 1:length(datasets)){
   table <- read.csv(file = paste("D:/GEODES_mapping_summaries/", datasets[j], ".csv", sep = ""), header = T, row.names = 1)
   table <- table[, which(good_or_bad == T)]
   colnames(table) <- gsub("_nonrRNA", "", colnames(table))
-  cds <- newCountDataSet(countData = table, conditions = metadata$condition[match(colnames(table), rownames(metadata))], sizeFactors = as.numeric(effect_size[which(good_or_bad == T)]))
-  cds <- estimateDispersions(cds)
-  #Sparkling
-  res1 <- nbinomTest(cds, "Sparkling;0", "Sparkling;4")
-  res2 <- nbinomTest(cds, "Sparkling;4", "Sparkling;8")
-  res3 <- nbinomTest(cds, "Sparkling;8", "Sparkling;12")
-  res4 <- nbinomTest(cds, "Sparkling;12", "Sparkling;16")
-  res5 <- nbinomTest(cds, "Sparkling;16", "Sparkling;20")
-  res6 <- nbinomTest(cds, "Sparkling;20", "Sparkling;24")
-  res7 <- nbinomTest(cds, "Sparkling;24", "Sparkling;28")
-  res8 <- nbinomTest(cds, "Sparkling;28", "Sparkling;32")
-  res9 <- nbinomTest(cds, "Sparkling;32", "Sparkling;36")
-  res10 <- nbinomTest(cds, "Sparkling;36", "Sparkling;40")
-  res11 <- nbinomTest(cds, "Sparkling;40", "Sparkling;44")
-  
-  sp_pvals <- data.frame(res1$pval, res2$pval, res3$pval, res4$pval, res5$pval, res6$pval, res7$pval, res8$pval, res9$pval, res10$pval, res11$pval)
-  sp_fold <- data.frame(res1$foldChange, res2$foldChange, res3$foldChange, res4$foldChange, res5$foldChange, res6$foldChange, res7$foldChange, res8$foldChange, res9$foldChange, res10$foldChange, res11$foldChange)
-  rownames(sp_fold) <- rownames(sp_pvals) <- res1$id
-  colnames(sp_fold) <- colnames(sp_pvals) <- c("SP0:4", "SP4:8", "SP8:12", "SP12:16", "SP16:20", "SP20:24", "SP24:28", "SP28:32", "SP32:36", "SP36:40", "SP:40:44")
-  
-  howmanynas <- c()
-  for(i in 1:dim(sp_pvals)[1]){
-    howmanynas[i] <- length(which(is.na(sp_pvals[i, ]) == T))
-  }
-  
-  sp_pvals <- sp_pvals[which(howmanynas < 11), ]
-  sp_fold <- sp_fold[which(howmanynas < 11), ]
-  sp_norm <- as.data.frame(sweep(as.matrix(table), 2, as.numeric(effect_size[which(good_or_bad == T)]), "/"))
-  sp_norm <- sp_norm[match(rownames(sp_pvals), rownames(sp_norm )), ]
-  
-  assign(paste("sp_pvals", j, sep = ""), sp_pvals)
-  assign(paste("sp_fold", j, sep = ""), sp_fold)
+  # cds <- newCountDataSet(countData = table, conditions = metadata$condition[match(colnames(table), rownames(metadata))], sizeFactors = as.numeric(effect_size[which(good_or_bad == T)]))
+  # cds <- estimateDispersions(cds)
+  # #Sparkling
+  # res1 <- nbinomTest(cds, "Sparkling;0", "Sparkling;4")
+  # res2 <- nbinomTest(cds, "Sparkling;4", "Sparkling;8")
+  # res3 <- nbinomTest(cds, "Sparkling;8", "Sparkling;12")
+  # res4 <- nbinomTest(cds, "Sparkling;12", "Sparkling;16")
+  # res5 <- nbinomTest(cds, "Sparkling;16", "Sparkling;20")
+  # res6 <- nbinomTest(cds, "Sparkling;20", "Sparkling;24")
+  # res7 <- nbinomTest(cds, "Sparkling;24", "Sparkling;28")
+  # res8 <- nbinomTest(cds, "Sparkling;28", "Sparkling;32")
+  # res9 <- nbinomTest(cds, "Sparkling;32", "Sparkling;36")
+  # res10 <- nbinomTest(cds, "Sparkling;36", "Sparkling;40")
+  # res11 <- nbinomTest(cds, "Sparkling;40", "Sparkling;44")
+  # 
+  # sp_pvals <- data.frame(res1$pval, res2$pval, res3$pval, res4$pval, res5$pval, res6$pval, res7$pval, res8$pval, res9$pval, res10$pval, res11$pval)
+  # sp_fold <- data.frame(res1$foldChange, res2$foldChange, res3$foldChange, res4$foldChange, res5$foldChange, res6$foldChange, res7$foldChange, res8$foldChange, res9$foldChange, res10$foldChange, res11$foldChange)
+  # rownames(sp_fold) <- rownames(sp_pvals) <- res1$id
+  # colnames(sp_fold) <- colnames(sp_pvals) <- c("SP0:4", "SP4:8", "SP8:12", "SP12:16", "SP16:20", "SP20:24", "SP24:28", "SP28:32", "SP32:36", "SP36:40", "SP:40:44")
+  # 
+  # howmanynas <- c()
+  # for(i in 1:dim(sp_pvals)[1]){
+  #   howmanynas[i] <- length(which(is.na(sp_pvals[i, ]) == T))
+  # }
+  # 
+  # sp_pvals <- sp_pvals[which(howmanynas < 11), ]
+  # sp_fold <- sp_fold[which(howmanynas < 11), ]
+  norm <- as.data.frame(sweep(as.matrix(table), 2, as.numeric(effect_size[which(good_or_bad == T)]), "/"))
+  keep <- match(rownames(spark_meta), colnames(norm))
+  keep <- keep[which(is.na(keep) == F)]
+  sp_norm <- norm[, keep]
+  sp_norm <- sp_norm[which(rowSums(sp_norm) > 0), ]
+  # 
+  # assign(paste("sp_pvals", j, sep = ""), sp_pvals)
+  # assign(paste("sp_fold", j, sep = ""), sp_fold)
   assign(paste("sp_norm", j, sep = ""), sp_norm)
-  
-  print(paste("Sparkling", j))
-  #Trout
-  res1 <- nbinomTest(cds, "Trout;0", "Trout;4")
-  res2 <- nbinomTest(cds, "Trout;4", "Trout;8")
-  res3 <- nbinomTest(cds, "Trout;8", "Trout;12")
-  res4 <- nbinomTest(cds, "Trout;12", "Trout;16")
-  res5 <- nbinomTest(cds, "Trout;16", "Trout;20")
-  res6 <- nbinomTest(cds, "Trout;20", "Trout;24")
-  res7 <- nbinomTest(cds, "Trout;24", "Trout;28")
-  #missing timepoints
-  
-  tb_pvals <- data.frame(res1$pval, res2$pval, res3$pval, res4$pval, res5$pval, res6$pval, res7$pval)
-  tb_fold <- data.frame(res1$foldChange, res2$foldChange, res3$foldChange, res4$foldChange, res5$foldChange, res6$foldChange, res7$foldChange)
-  rownames(tb_fold) <- rownames(tb_pvals) <- res1$id
-  colnames(tb_fold) <- colnames(tb_pvals) <- c("TB0:4", "TB4:8", "TB8:12", "TB12:16", "TB16:20", "TB20:24", "TB24:28")
-  
-  howmanynas <- c()
-  for(i in 1:dim(tb_pvals)[1]){
-    howmanynas[i] <- length(which(is.na(tb_pvals[i, ]) == T))
-  }
-  
-  tb_pvals <- tb_pvals[which(howmanynas < 7), ]
-  tb_fold <- tb_fold[which(howmanynas < 7), ]
-  tb_norm <- as.data.frame(sweep(as.matrix(table), 2, as.numeric(effect_size[which(good_or_bad == T)]), "/"))
-  tb_norm <- tb_norm[match(rownames(tb_pvals), rownames(tb_norm)), ]
-  
-  assign(paste("tb_pvals", j, sep = ""), tb_pvals)
-  assign(paste("tb_fold", j, sep = ""), tb_fold)
+  # 
+  # print(paste("Sparkling", j))
+  # #Trout
+  # res1 <- nbinomTest(cds, "Trout;0", "Trout;4")
+  # res2 <- nbinomTest(cds, "Trout;4", "Trout;8")
+  # res3 <- nbinomTest(cds, "Trout;8", "Trout;12")
+  # res4 <- nbinomTest(cds, "Trout;12", "Trout;16")
+  # res5 <- nbinomTest(cds, "Trout;16", "Trout;20")
+  # res6 <- nbinomTest(cds, "Trout;20", "Trout;24")
+  # res7 <- nbinomTest(cds, "Trout;24", "Trout;28")
+  # #missing timepoints
+  # 
+  # tb_pvals <- data.frame(res1$pval, res2$pval, res3$pval, res4$pval, res5$pval, res6$pval, res7$pval)
+  # tb_fold <- data.frame(res1$foldChange, res2$foldChange, res3$foldChange, res4$foldChange, res5$foldChange, res6$foldChange, res7$foldChange)
+  # rownames(tb_fold) <- rownames(tb_pvals) <- res1$id
+  # colnames(tb_fold) <- colnames(tb_pvals) <- c("TB0:4", "TB4:8", "TB8:12", "TB12:16", "TB16:20", "TB20:24", "TB24:28")
+  # 
+  # howmanynas <- c()
+  # for(i in 1:dim(tb_pvals)[1]){
+  #   howmanynas[i] <- length(which(is.na(tb_pvals[i, ]) == T))
+  # }
+  # 
+  # tb_pvals <- tb_pvals[which(howmanynas < 7), ]
+  # tb_fold <- tb_fold[which(howmanynas < 7), ]
+  keep <- match(rownames(trout_meta), colnames(norm))
+  keep <- keep[which(is.na(keep) == F)]
+  tb_norm <- norm[, keep]
+  tb_norm <- tb_norm[which(rowSums(tb_norm) > 0), ]
+  # 
+  # assign(paste("tb_pvals", j, sep = ""), tb_pvals)
+  # assign(paste("tb_fold", j, sep = ""), tb_fold)
   assign(paste("tb_norm", j, sep = ""), tb_norm)
+  # 
+  # print(paste("Trout", j))
+  # 
+  # #Mendota
+  # res1 <- nbinomTest(cds, "Mendota;0", "Mendota;4")
+  # res2 <- nbinomTest(cds, "Mendota;4", "Mendota;8")
+  # res3 <- nbinomTest(cds, "Mendota;8", "Mendota;12")
+  # res4 <- nbinomTest(cds, "Mendota;12", "Mendota;16")
+  # res5 <- nbinomTest(cds, "Mendota;16", "Mendota;20")
+  # res6 <- nbinomTest(cds, "Mendota;20", "Mendota;24")
+  # res7 <- nbinomTest(cds, "Mendota;24", "Mendota;28")
+  # res8 <- nbinomTest(cds, "Mendota;28", "Mendota;32")
+  # res9 <- nbinomTest(cds, "Mendota;32", "Mendota;36")
+  # res10 <- nbinomTest(cds, "Mendota;36", "Mendota;40")
+  # res11 <- nbinomTest(cds, "Mendota;40", "Mendota;44")
+  # 
+  # me_pvals <- data.frame(res1$pval, res2$pval, res3$pval, res4$pval, res5$pval, res6$pval, res7$pval, res8$pval, res9$pval, res10$pval, res11$pval)
+  # me_fold <- data.frame(res1$foldChange, res2$foldChange, res3$foldChange, res4$foldChange, res5$foldChange, res6$foldChange, res7$foldChange, res8$foldChange, res9$foldChange, res10$foldChange, res11$foldChange)
+  # rownames(me_fold) <- rownames(me_pvals) <- res1$id
+  # colnames(me_fold) <- colnames(me_pvals) <- c("ME0:4", "ME4:8", "ME8:12", "ME12:16", "ME16:20", "ME20:24", "ME24:28", "ME28:32", "ME32:36", "ME36:40", "ME:40:44")
+  # 
+  # howmanynas <- c()
+  # for(i in 1:dim(me_pvals)[1]){
+  #   howmanynas[i] <- length(which(is.na(me_pvals[i, ]) == T))
+  # }
+  # 
+  # me_pvals <- me_pvals[which(howmanynas < 11), ]
+  # me_fold <- me_fold[which(howmanynas < 11), ]
+  keep <- match(rownames(mendota_meta), colnames(norm))
+  keep <- keep[which(is.na(keep) == F)]
+  me_norm <- norm[, keep]
+  me_norm <- me_norm[which(rowSums(me_norm) > 0), ]
   
-  print(paste("Trout", j))
-  
-  #Mendota
-  res1 <- nbinomTest(cds, "Mendota;0", "Mendota;4")
-  res2 <- nbinomTest(cds, "Mendota;4", "Mendota;8")
-  res3 <- nbinomTest(cds, "Mendota;8", "Mendota;12")
-  res4 <- nbinomTest(cds, "Mendota;12", "Mendota;16")
-  res5 <- nbinomTest(cds, "Mendota;16", "Mendota;20")
-  res6 <- nbinomTest(cds, "Mendota;20", "Mendota;24")
-  res7 <- nbinomTest(cds, "Mendota;24", "Mendota;28")
-  res8 <- nbinomTest(cds, "Mendota;28", "Mendota;32")
-  res9 <- nbinomTest(cds, "Mendota;32", "Mendota;36")
-  res10 <- nbinomTest(cds, "Mendota;36", "Mendota;40")
-  res11 <- nbinomTest(cds, "Mendota;40", "Mendota;44")
-  
-  me_pvals <- data.frame(res1$pval, res2$pval, res3$pval, res4$pval, res5$pval, res6$pval, res7$pval, res8$pval, res9$pval, res10$pval, res11$pval)
-  me_fold <- data.frame(res1$foldChange, res2$foldChange, res3$foldChange, res4$foldChange, res5$foldChange, res6$foldChange, res7$foldChange, res8$foldChange, res9$foldChange, res10$foldChange, res11$foldChange)
-  rownames(me_fold) <- rownames(me_pvals) <- res1$id
-  colnames(me_fold) <- colnames(me_pvals) <- c("ME0:4", "ME4:8", "ME8:12", "ME12:16", "ME16:20", "ME20:24", "ME24:28", "ME28:32", "ME32:36", "ME36:40", "ME:40:44")
-  
-  howmanynas <- c()
-  for(i in 1:dim(me_pvals)[1]){
-    howmanynas[i] <- length(which(is.na(me_pvals[i, ]) == T))
-  }
-  
-  me_pvals <- me_pvals[which(howmanynas < 11), ]
-  me_fold <- me_fold[which(howmanynas < 11), ]
-  me_norm <- as.data.frame(sweep(as.matrix(table), 2, as.numeric(effect_size[which(good_or_bad == T)]), "/"))
-  me_norm <- me_norm[match(rownames(me_pvals), rownames(me_norm)), ]
-  
-  assign(paste("me_pvals", j, sep = ""), me_pvals)
-  assign(paste("me_fold", j, sep = ""), me_fold)
+  # assign(paste("me_pvals", j, sep = ""), me_pvals)
+  # assign(paste("me_fold", j, sep = ""), me_fold)
   assign(paste("me_norm", j, sep = ""), me_norm)
   
   print(paste("Mendota", j))
@@ -141,15 +151,15 @@ for(i in 1:dim(tb_pvals)[2]){
   print(length(which(tb_pvals[,i] < 0.05)))
 }
 
-write.csv(sp_pvals, file = "D:/GEODES_mapping_summaries/Sparkling_pvalues_2017-06-12.csv")
-write.csv(tb_pvals, file = "D:/GEODES_mapping_summaries/TroutBog_pvalues_2017-06-12.csv")
-write.csv(me_pvals, file = "D:/GEODES_mapping_summaries/Mendota_pvalues_2017-06-12.csv")
+write.csv(sp_pvals, file = "D:/GEODES_mapping_summaries/Sparkling_pvalues_2017-06-20.csv")
+write.csv(tb_pvals, file = "D:/GEODES_mapping_summaries/TroutBog_pvalues_2017-06-20.csv")
+write.csv(me_pvals, file = "D:/GEODES_mapping_summaries/Mendota_pvalues_2017-06-20.csv")
 
-write.csv(sp_fold, file = "D:/GEODES_mapping_summaries/Sparkling_foldchange_2017-06-12.csv")
-write.csv(tb_fold, file = "D:/GEODES_mapping_summaries/TroutBog_foldchange_2017-06-12.csv")
-write.csv(me_fold, file = "D:/GEODES_mapping_summaries/Mendota_foldchange_2017-06-12.csv")
+write.csv(sp_fold, file = "D:/GEODES_mapping_summaries/Sparkling_foldchange_2017-06-20.csv")
+write.csv(tb_fold, file = "D:/GEODES_mapping_summaries/TroutBog_foldchange_2017-06-20.csv")
+write.csv(me_fold, file = "D:/GEODES_mapping_summaries/Mendota_foldchange_2017-06-20.csv")
 
-write.csv(sp_norm, file = "D:/GEODES_mapping_summaries/Sparkling_normalized_counts_2017-06-12.csv")
-write.csv(tb_norm, file = "D:/GEODES_mapping_summaries/TroutBog_normalized_counts_2017-06-12.csv")
-write.csv(me_norm, file = "D:/GEODES_mapping_summaries/Mendota_normalized_counts_2017-06-12.csv")
+write.csv(sp_norm, file = "D:/GEODES_mapping_summaries/Sparkling_normalized_counts_2017-06-20.csv")
+write.csv(tb_norm, file = "D:/GEODES_mapping_summaries/TroutBog_normalized_counts_2017-06-20.csv")
+write.csv(me_norm, file = "D:/GEODES_mapping_summaries/Mendota_normalized_counts_2017-06-20.csv")
 
