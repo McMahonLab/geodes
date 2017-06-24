@@ -238,3 +238,239 @@ sft = pickSoftThreshold(snorm_clean, verbose = 3, blockSize = 100)
 
 ```
 
+####2017-06-23
+
+Well, I got the WGCNA working, but after running through 1/13 blocks, it crashed due to lack of RAM. I've already reduced the size of that as far as I can, so I don't think I can run this analysis, at least not on my desktop.
+
+Next I tried a k-means clustering test on Sparkling's p-values table set to binary mode, which finished in about 2 minutes. Hooray.
+
+Before I launch into a full k-means analysis, though, I need that metadata table of phylogeny and product names, I tried making this in R last night. R crashed trying to hold the vector of gene names, let alone also holding the contigs, genomes, and product names files, and forget grepping anything. So I think I need to run this on CHTC. I've upload the sparkling norm table and the files for GEODES005 info and will write a test script. Hopefully I can parallelize this and speed it up!
+
+```{bash, eval = F}
+awk -F "\"*,\"*" '{print $1}' Sparkling_normalized_counts_2017-06-20.csv > rownames.txt
+# remove first quotation mark
+sed -i 's/\(.\{1\}\)//' rownames.txt
+# remove first blank line
+tail -n +2 rownames.txt > temp.txt && mv temp.txt rownames.txt
+# only use the gff for mags
+cat /mnt/gluster/amlinz/ref_genomes/gff_files/* > MAGS.gff
+
+grep -f rownames.txt MAGS.gff > MAGS_search.txt
+
+```
+
+Two problems:
+- slooooowwww. Maybe 1000 genes/hour, and I have 8 million.
+- Doesn't report not matches, so if I search for something in the MAGs and it's not there, it just skips that line. So I need a for loop that prints something if the match is not found. Which slows things down even more.
+
+```{bash, eval = F}
+head -50 rownames.txt > test.txt
+# gRep in gff file
+while read line; do find=$(grep $line MAGS.gff); if [ -z "$find" ]; then echo "No_match"; else echo $find; fi; done < test.txt > output.txt
+
+# extract and match contigs
+awk '{print $1}' output.txt > contigs.txt 
+while read line; do find=$(grep $line contig_metadata.txt); if [ -z "$find" ]; then echo "No_match"; else echo $find; fi; done < contigs.txt > contig_matches.txt
+awk -F "\"*.gff\"*" '{print $1}' contig_matches.txt > trimmed_contig_matches.txt
+
+# extract product names
+awk -F "\"*product=\"*" '{print $2}' output.txt > mag_products.txt
+
+#find phylogeny of each genome
+while read line; do find=$(grep $line Readme.csv);echo $find; done < trimmed_contig_matches.txt > full_phylogeny.txt
+awk -F "\"*,\"*" '{print $3,$4,$5,$6,$7,$8}' full_phylogeny.txt > trimmed_phylogeny.txt
+#beautiful!
+
+paste test.txt trimmed_contig_matches.txt mag_products.txt trimmed_phylogeny.txt | column -s $'\t' -t > gene_metadata_part.txt
+
+#now make similar datasets for the metagenomes
+#idea: if a row says "No_match", remove it from the table and put it in a separate file. Do grep on separate file. Cat at the end.
+
+# find some metaG genes to practice on
+ grep -n "Ga0164294" rownames.txt
+head -364300 rownames.txt > test.txt
+tail -50 test.txt > temp.txt && mv temp.txt test.txt
+
+grep "No_match" gene_metadata_part.txt > metaGs.txt
+grep -v "No_match" gene_metadata_part.txt > MAGs_only.txt
+
+awk '{print $1}' metaGs.txt > metaGs_genes.txt
+awk -F "\"*_\"*" '{print $1}' metaGs_genes.txt > metaG_genomes.txt
+
+#-w matches the whole word, so that gene111 does not also match gene1112 and 1113
+while read line; do find=$(grep -w $line GEODES005.assembled.product_names);  echo $find; done < metaGs_genes.txt > full_product_names.txt
+
+awk '{print $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20}' full_product_names.txt > trimmed_product_names.txt
+
+#Get phylogeny
+while read line; do find=$(grep -w $line GEODES005.assembled.phylodist);  echo $find; done < metaGs_genes.txt > full_phylogeny.txt
+awk '{print $5}' full_phylogeny.txt > trimmed_phylogeny.txt
+
+paste metaGs_genes.txt metaG_genomes.txt trimmed_product_names.txt trimmed_phylogeny.txt | column -s $'\t' -t > gene_metadata_part2.txt
+
+cat gene_metadata_part1.txt gene_metadata_part2.txt > complete_table.txt
+
+```
+Woohoo! Now to clean this script up and run it in parallel. I'll also need to cat all the metaG files into two larger ones.
+
+08gene_data.sh:
+```{bash, eval = F}
+#!/bin/bash
+
+# Grab information about transcripts with mapped reads
+
+cp /mnt/gluster/amlinz/greptime/* .
+cp $1 .
+
+while read line; do find=$(grep $line MAGS.gff); if [ -z "$find" ]; then echo "No_match"; else echo $find; fi; done < $1 > output.txt
+
+# extract and match contigs
+awk '{print $1}' output.txt > contigs.txt 
+while read line; do find=$(grep $line contig_metadata.txt); if [ -z "$find" ]; then echo "No_match"; else echo $find; fi; done < contigs.txt > contig_matches.txt
+awk -F "\"*.gff\"*" '{print $1}' contig_matches.txt > trimmed_contig_matches.txt
+
+# extract product names
+awk -F "\"*product=\"*" '{print $2}' output.txt > mag_products.txt
+
+#find phylogeny of each genome
+while read line; do find=$(grep $line Readme.csv);echo $find; done < trimmed_contig_matches.txt > full_phylogeny.txt
+awk -F "\"*,\"*" '{print $3,$4,$5,$6,$7,$8}' full_phylogeny.txt > trimmed_phylogeny.txt
+
+paste $1 trimmed_contig_matches.txt mag_products.txt trimmed_phylogeny.txt | column -s $'\t' -t > gene_metadata_part1.txt
+
+# Now for the metagenomes
+
+grep "No_match" gene_metadata_part1.txt > metaGs.txt
+grep -v "No_match" gene_metadata_part1.txt > MAGs_only.txt
+
+awk '{print $1}' metaGs.txt > metaGs_genes.txt
+awk -F "\"*_\"*" '{print $1}' metaGs_genes.txt > metaG_genomes.txt
+
+#-w matches the whole word, so that gene111 does not also match gene1112 and 1113
+while read line; do find=$(grep -w $line GEODES.product_names);  echo $find; done < metaGs_genes.txt > full_product_names.txt
+
+awk '{print $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20}' full_product_names.txt > trimmed_product_names.txt
+
+#Get phylogeny
+while read line; do find=$(grep -w $line GEODES.phylodist);  echo $find; done < metaGs_genes.txt > full_phylogeny.txt
+awk '{print $5}' full_phylogeny.txt > trimmed_phylogeny.txt
+
+paste metaGs_genes.txt metaG_genomes.txt trimmed_product_names.txt trimmed_phylogeny.txt | column -s $'\t' -t > gene_metadata_part2.txt
+
+name=$(basename $1)
+cat gene_metadata_part1.txt gene_metadata_part2.txt > done_$1.txt
+cp done_$1.txt /mnt/gluster/amlinz/mapped_transcripts/
+
+rm *txt
+rm *gff
+rm *csv
+rm GEODES*
+rm $1
+
+
+```
+
+I'll also need to concatenate the MAGs and GEODEs files and save them, extract the rownames from the normalized tables, reduce to unique rownames only, and split by lines. I'm thinking 500-1000 is a good amount to split by - each job should take under an hour then.
+
+In an interactive session:
+```{bash, eval = F}
+cp /mnt/gluster/amlinz/greptime/* .
+
+#Concat the metagenome files
+cat *phylodist > GEODES.assembled.phylodist
+cat *product_names > GEODES.assembled.product_names
+cp GEODES.assembled* /mnt/gluster/amlinz/greptime/
+ls -ltrh /mnt/gluster/amlinz/greptime/
+rm GEODES*
+
+#Concat the MAG gff files
+cat /mnt/gluster/amlinz/ref_genomes/gff_files/* > MAGs.gff
+mv MAGS.gff /mnt/gluster/amlinz/greptime
+ls -ltrh /mnt/gluster/amlinz/greptime/
+rm MAGs.gff
+
+#Make a list of gene names
+awk -F "\"*,\"*" '{print $1}' Sparkling_normalized_counts_2017-06-20.csv > sparkling.txt
+sed -i 's/\(.\{1\}\)//' sparkling.txt
+# remove first blank line
+tail -n +2 sparkling.txt > temp.txt && mv temp.txt sparkling.txt
+
+awk -F "\"*,\"*" '{print $1}' Mendota_normalized_counts_2017-06-20.csv > mendota.txt
+sed -i 's/\(.\{1\}\)//' mendota.txt
+# remove first blank line
+tail -n +2 mendota.txt > temp.txt && mv temp.txt mendota.txt
+
+awk -F "\"*,\"*" '{print $1}' TroutBog_normalized_counts_2017-06-20.csv > trout.txt
+sed -i 's/\(.\{1\}\)//' trout.txt
+# remove first blank line
+tail -n +2 trout.txt > temp.txt && mv temp.txt trout.txt
+
+cat sparkling.txt mendota.txt trout.txt > all.txt
+
+# Keep only unique genes
+uniq -u all.txt > temp.txt && mv temp.txt all.txt
+
+# Split into manageable chunks
+split -l 1000 -d -a 4 all.txt gene_names
+mv gene_names* /mnt/gluster/amlinz/mapped_transcripts/
+
+rm *txt
+rm *csv
+exit
+
+```
+
+Meanwhile, back at the ranch, I still need to make a list of files to run and a submit file.
+
+08gene_data.sub:
+```{bash, eval = F}
+# 08gene_data.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 08gene_data_$(Cluster).log
+error = 08gene_data_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/08gene_data.sh
+arguments = $(genefile)
+output = 08gene_data_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = zipped/subreads.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 10GB
+request_disk = 5GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue genefile from genefile_list.txt
+
+```
+
+in home folder:
+```{bash, eval = F}
+ls /mnt/gluster/amlinz/mapped_transcripts/* > genefile_list.txt
+```
+
+Run 5 files just to test
+
+
+
+
+After running, put the files back together in an interactive session:
+```{bash, eval = F}
+cat /mnt/gluster/amlinz/mapped_transcripts/done* > gene_data_table.txt
+```
+
+Woohoo, it's working! 8890 jobs submitted, 5 done already and they look good!
