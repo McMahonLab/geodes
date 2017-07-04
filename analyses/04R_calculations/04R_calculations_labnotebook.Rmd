@@ -637,9 +637,19 @@ rm $name
  
  HA! INstead of concatenating the MAG output to the metaG output, I was concanenating the first part with MAG data and "no matches" to the metaG output. Then when I removed duplicates, it kept only the first items, which was "no match". So instead of re-running (for now), I should remove "no match" lines and then remove duplictes.
  
- ```{bash, eval = F}
+```{bash, eval = F}
 grep -v "No_match" GEODES_genekey_2017-06-25.txt > temp.txt
 sort -t ' ' -k 1,1 -u temp.txt > GEODES_genekey_2017-06-26.txt
 
  
- ```
+```
+ 
+####2017-06-28
+
+Met with Frank A. about my workflow yesterday! He had some great ideas and corrections. Here's my notes regarding the R analyses:
+
+- Do NOT normalize based on median - does not account for relative abundance! Instead use transcripts/L. There's instructions for this in Satinsky's Amazon river plume paper.
+- For all the euk stuff, map to these contigs but remove reads that mapped to eukaryotes. We're interested in the algae, but the classifications for those may not be very good - compare these to refseq to decide if we want to keep these contigs.
+- Frank strongly recommends RAIN (rhythmiciy analysis incorporating nonparametric methods). It's a time series analysis, but he thinks we can still do that with our data structure.
+- On an unrelated note, Frank thinks viruses are cool but way more difficult... would need a custom database with lots of curation... do not touch at this point in time. But that's probably why I don't see many virus hits so far.
+

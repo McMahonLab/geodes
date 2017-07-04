@@ -1853,3 +1853,15 @@ Just kidding, it only feels that way.
 
 HTSEQ takes forever, so I switched to featureCounts (a much faster program instead). It's pretty great so far and produce nearly identical results to HTSEQ when Josh tested it on some of our previous data. But I did need to re-run the mapping to use trd = T, which means it trims white space from names. Otherwise featureCounts truncates names. I'm still sticking with mapped = T to save space, featureCounts still records things with 0 reads mapped. Other than that, I changed some numbering.
 Updating the workflow with the new scripts now.
+
+####2017-06-28
+
+Met with Frank A. about my workflow yesterday! He had some great ideas and corrections. Here's my notes regarding the mapping step:
+
+- Don't use any mapping threshold lower than 90%, you get weird stuff otherwise. 
+- If you have some divergent sequences that don't map, try LAST (using translational search or low threshold DNA search) to identify them. This runs pretty quickly.
+- To deal with mulit-mapping reads, count only unique hits first, then assign the multi-mapping reads *based on the distribution of unique hits.* So if you have gene A and gene B, and gene A has 9 times more reads than gene B, a read mapping to gene A and B should be randomly assigned to A 9/10 times and B 1/10 times.
+- If you are mapping to 95% ID, getting 30-40% of reads to map is sufficient.
+- Trina would like to know the proportion of reads that map to MGs vs SAGs vs MAGs
+- Redundant sequences are a huge issue! This might be why I have so many mapped features (Frank thinks my 8 million CDS hits is oddly high). To fix this, our favorite option was creating a non-redundant gene catalog using CDhit. You lose information about contigs, but Frank thinks we shouldn't put too much stock in contig assemblies either. Alternatively, I could use mapping to find unique contigs.
+- Regarding the taxonomic classifications, Frank thinks binning and then classifying based on marker genes is the way to go. Contig classifications are iffy at best and you can't say contigs came from the same organism because they had the same classification. Metabat is the group favorite for binning. For unbinned contigs, BLAST/LAST the genes to refseq. 
