@@ -1865,3 +1865,69 @@ Met with Frank A. about my workflow yesterday! He had some great ideas and corre
 - Trina would like to know the proportion of reads that map to MGs vs SAGs vs MAGs
 - Redundant sequences are a huge issue! This might be why I have so many mapped features (Frank thinks my 8 million CDS hits is oddly high). To fix this, our favorite option was creating a non-redundant gene catalog using CDhit. You lose information about contigs, but Frank thinks we shouldn't put too much stock in contig assemblies either. Alternatively, I could use mapping to find unique contigs.
 - Regarding the taxonomic classifications, Frank thinks binning and then classifying based on marker genes is the way to go. Contig classifications are iffy at best and you can't say contigs came from the same organism because they had the same classification. Metabat is the group favorite for binning. For unbinned contigs, BLAST/LAST the genes to refseq. 
+
+####2017-07-17
+
+Goal #1: use a test genome (2582580633) to extract only coding regions from the genome based on the gff file. I think I can use genometools gt extractfeat for this. The real question is can I make a gff file just for cds at the end to use for featurecounts.
+
+Here's my submit file to try this out:
+```{bash, eval = F}
+#interactive1.sub
+#
+universe = vanilla
+# Name the log file:
+log = testgffextraction.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines.
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = 2582580633.fna,2582580633.gff,zipped/genometools-1.5.9.tar.gz
+
+# It's still important to request enough computing resources. The below
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 4GB
+
+queue
+
+```
+
+Before I can use the genome tools extraction feature, I need to format the gff files. borrowing code form 03processing lab notebook.
+
+```{bash, eval = F}
+#!/bin/bash
+#Extract coding genes from a test genome
+
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
+cd ..
+export PATH=$(pwd)/genometools/bin:$PATH
+
+for file in 2*gff;do echo '##gff-version 3' | cat - $file > temp && mv temp $file;sed '/CRISPR/d' $file > temp && mv temp $file; sed -i 's|; |%3B |g' $file; gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+gt extractfeat -type CDS -seqid yes -retainids yes -seqfile 2582580633.fna 
+
+```
+
+Not quite working right - won't accept both gff and seq file
+
+It looks like I need a mapping file that says which contig is in which sequencing file. Which assumes that each contig is in a separate file. So I need to:
+- split each contig (read?) into separate files (use bbtools?)
+- make a mapping formatted file that says which contig name (from gff file) matches which sequencing file
+- the gff file.
+
+Presumably the program will read an entry in the gff file, look up which fna file contains the contig, and use the sequence position to extract the coding regions. My output will be a fna file of just coding regions for that genome - with any luck, they'll be a new gff file too, but I guess I can make that if I need to. I still don't know how to get the gff through CDHit anyway.
