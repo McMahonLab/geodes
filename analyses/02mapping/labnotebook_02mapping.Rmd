@@ -1931,3 +1931,87 @@ It looks like I need a mapping file that says which contig is in which sequencin
 - the gff file.
 
 Presumably the program will read an entry in the gff file, look up which fna file contains the contig, and use the sequence position to extract the coding regions. My output will be a fna file of just coding regions for that genome - with any luck, they'll be a new gff file too, but I guess I can make that if I need to. I still don't know how to get the gff through CDHit anyway.
+
+```{bash, eval = F}
+tar -xvzf BBMap_36.99.tar.gz
+
+carrots=$((`grep ">" 2582580633.fna | wc -l`))
+startpoints=$(seq 0 1 $(($carrots-1)))
+
+for num in $startpoints; do bbmap/getreads.sh in=2582580633.fna id=$num out=contig_$num.fna overwrite=T; done
+
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
+cd ..
+export PATH=$(pwd)/genometools/bin:$PATH
+
+for file in 2*gff;do echo '##gff-version 3' | cat - $file > temp && mv temp $file;sed '/CRISPR/d' $file > temp && mv temp $file; sed -i 's|; |%3B |g' $file; gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+# That all seemed to work well - each contig is now in a separate file.
+# I need the mapping in form:
+# mapping = {
+#  chr1  = "hs_ref_chr1.fa.gz",
+#  chr2  = "hs_ref_chr2.fa.gz"
+# }
+
+# or in my case,
+# mapping = {
+#  TE3838DRAFT_TBepi_metabat_3838_1008378.3  = "contig_2.fna",
+#  TE3838DRAFT_TBepi_metabat_3838_1019275.4  = "contig_3.fna"
+# }
+# contig name is the > to the first space. Let's make one column of that, one column of file names, paste together with stuff in between, and stick the first and last lines on there.
+
+for file in contig_*.fna; do head -n1 $file | awk '{print $1;}'; done > contig_names.txt
+#remove the carrot
+sed -e 's/>//g' contig_names.txt > temp.txt && mv temp.txt contig_names.txt
+
+#List the contig file names
+for file in contig_*.fna; do echo " = "$file","; done > file_names.txt
+#add quotes
+sed -e 's/con/"con/g' file_names.txt > temp.txt && mv temp.txt file_names.txt
+sed -e 's/fna/fna"/g' file_names.txt > temp.txt && mv temp.txt file_names.txt
+
+# Remove the last comma in the file
+sed '$ s/.$//' file_names.txt > temp.txt && mv temp.txt file_names.txt
+
+#combine the two files
+paste -d "", contig_names.txt file_names.txt > mapping_file.txt
+# remvoe the comma separator
+sed 's/, =/ =/g' mapping_file.txt > temp.txt && mv temp.txt mapping_file.txt
+
+echo 'mapping = {' | cat - mapping_file.txt > temp.txt && mv temp.txt mapping_file.txt
+echo '}' >> mapping_file.txt
+
+gt extractfeat -type CDS -seqid yes -retainids yes -regionmapping mapping_file.txt 2582580633.gff  
+# not working
+
+#Well shoot. All I needed to do in the first place was add matchdescstart
+ gt extractfeat -type CDS -seqid yes -retainids yes -seqfile 2582580633.fna -matchdescstart sorted_2582580633.gff >  CDS_2582580633.gff
+ 
+ # Remove everything but the CDS.gff file and the genometools tarball and clear out
+tar cvzf genometools.tar.gz genometools
+```
+
+Next I'll install CDHit and test it on my one fasta file. After that, I'll need to recreate a gff file to go with the CDhit output and add in all the information I can to the fasta headers. Or figure out how to make featurecounts add mroe information to its output.
+
+```{bash, eval = F}
+#change testinteractive.sub to have the new CDhit tarball
+
+tar xvf cd-hit-v4.6.8-2017-0621-source.tar.gz --gunzip
+cd cd-hit-v4.6.8-2017-0621
+make
+cd cd-hit-auxtools
+make
+
+cd ../..
+tar czvf cd-hit.tar.gz cd-hit-v4.6.8-2017-0621
+exit
+mv cd-hit.tar.gz zipped/
+```
+Modify the testgff script to send out the cdhit tarball, the gff file, and the CDS fna file
+
+```{bash, eval = F}
+./cd-hit-v4.6.8-2017-0621/cd-hit-est -i CDS_2582580633.fna -o nr_2582580633.fna -c 0.95 
+
