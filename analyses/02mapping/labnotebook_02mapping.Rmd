@@ -2056,5 +2056,48 @@ cat fasta_headers.txt | while read line; do length=`grep $line nr_test.fna.clstr
 # looking good! from here, I need phylogeny from the metagenome binning, so I'll hold off the on the rest of the dummy gff fro now. Hardest part is done, though.
 ```
 
+####2017-08-08
+
+Quick update on the metagenomic binning - it's been a bit of a saga. Gluster went down for updates so I had to move all my stuff off, make backup copies on the new lab storage drive (probably a good thing anyway), re-upload my files to Gluster after a week of updates, realize they have imposed new file number limits and I am way over, meet with CHTC to boost my limits, switch submit servers to get more space in my home folder and use Gluster less, re-upload the metagenome assemblies, talk to CHTC about how to install Metabat with all its many dependencies, they suggest a docker, available docker does not work, CHTC asks Metabat to make an official one, they do!, and now I can't get that to work.
+
+I've asked Lauren what I can do about that. Meanwhile, I'll work on formatting the algae gffs.
+
+testgffextraction.sub:
+```{bash, eval = F}
+tar xvzf refseq_algae.tar.gz
+tar xvzf cd-hit.tar.gz
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+gzip -d refseq_algae/fastas/*
+gzip -d refseq_algae/gffs/*
+
+for file in refseq_algae/gffs/*;do name=$(basename $file);gt gff3 -sort yes -tidy -retainids -o sorted_$name $file; done
+
+for file in refseq_algae/fastas/*; do name=$(basename $file .fna); gt extractfeat -type CDS -seqid yes -retainids yes -seqfile refseq_algae/fastas/$name.fna -matchdescstart sorted_$name.gff >  CDS_$name.fna; done
+
+cat CDS*fna > all_CDS.fna
+
+./cd-hit-v4.6.8-2017-0621/cd-hit-est -i all_CDS.fna -o nr_test.fna -c 0.95
+
+# Make sure the gff stuff I've written so far works, too
+grep ">" nr_test.fna > fasta_headers.txt
+sed -e 's/>//g' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+#awk '{print $1}' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+#instead of removing 2nd field, just remove the space
+sed -e 's/ /_/g' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+sort fasta_headers.txt | uniq -cd
+#lots of duplicate headers - what gives?
+#Keeping id helps, but still many dups. Looks like id tells chromosome. Are there multiple CDS entries for each cds#?
+#Yup. that's weird. I think I'll ask around the lab on why this is the case.
+
+numlines=$(wc -l sorted_GCF_000149405.2_ASM14940v2_genomic.gff | awk -F ' ' '{print $1}')
+eachline=$(seq 0 $numlines)
+testline=$(seq 1000 1010)
+
+for num in $testline; do line=$(sed "${num}q;d" sorted_GCF_000149405.2_ASM14940v2_genomic.gff); iscds=$(echo "$line" | grep "CDS" | wc -l); if [ $iscds -gt 0 ]; then info=$(awk -F ' ' '{print9}'); repeats=$(head -$num sorted_GCF_000149405.2_ASM14940v2_genomic.gff | grep $info | wc -l); echo $repeats; fi; done
+
+#never mind, I think it'd be easier to fix this in fasta headers than in the gff file.
+
 
 ```
