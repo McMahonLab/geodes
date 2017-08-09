@@ -2101,3 +2101,158 @@ for num in $testline; do line=$(sed "${num}q;d" sorted_GCF_000149405.2_ASM14940v
 
 
 ```
+
+####2017-08-09
+Talking to Josh, it sounds like these duplicated CDS things - transpliced genes - shouldn't be too frequent, so I will try just removing them.
+
+```{bash, eval = F}
+tar xvzf refseq_algae.tar.gz
+tar xvzf cd-hit.tar.gz
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+gzip -d refseq_algae/fastas/*
+gzip -d refseq_algae/gffs/*
+
+for file in refseq_algae/gffs/*;do name=$(basename $file);awk '!seen[$9]++' $file > nodups_$name; gt gff3 -sort yes -tidy -retainids -o sorted_$name nodups_$name; done
+
+for file in refseq_algae/fastas/*; do name=$(basename $file .fna); gt extractfeat -type CDS -seqid yes -retainids yes -seqfile refseq_algae/fastas/$name.fna -matchdescstart sorted_$name.gff >  CDS_$name.fna; done
+
+cat CDS*fna > all_CDS.fna
+
+./cd-hit-v4.6.8-2017-0621/cd-hit-est -i all_CDS.fna -o nr_test.fna -c 0.95
+
+
+```
+
+Pre-transpliced gene removal line counts:
+ 94633 sorted_GCF_000149405.2_ASM14940v2_genomic.gff
+    68845 sorted_GCF_000150955.2_ASM15095v2_genomic.gff
+    92188 sorted_GCF_000186865.1_v_1.0_genomic.gff
+    36150 sorted_GCF_000240725.1_ASM24072v1_genomic.gff
+   395430 sorted_GCF_000315625.1_Guith1_genomic.gff
+   419862 sorted_GCF_000372725.1_Emiliana_huxleyi_CCMP1516_main_genome_assembly_v1.0_genomic.gff
+   
+Post-transpliced gene removal line counts:
+77439 sorted_GCF_000149405.2_ASM14940v2_genomic.gff
+    61087 sorted_GCF_000150955.2_ASM15095v2_genomic.gff
+    76305 sorted_GCF_000186865.1_v_1.0_genomic.gff
+    29212 sorted_GCF_000240725.1_ASM24072v1_genomic.gff
+   263340 sorted_GCF_000315625.1_Guith1_genomic.gff
+   317935 sorted_GCF_000372725.1_Emiliana_huxleyi_CCMP1516_main_genome_assembly_v1.0_genomic.gff
+   
+I also get errors about CDS regions being in the wrong phase.
+
+Still some duplicates... what gives? Actually what does it matter if I have duplicates from the same gene? I'll pull the same info down for each one anyway. I just have to watch out for getting more than one grep hit.
+
+```{bash, eval = F}
+tar xvzf refseq_algae.tar.gz
+tar xvzf cd-hit.tar.gz
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+gzip -d refseq_algae/fastas/*
+gzip -d refseq_algae/gffs/*
+
+for file in refseq_algae/gffs/*;do name=$(basename $file);gt gff3 -sort yes -tidy -retainids -o sorted_$name $file; done
+
+for file in refseq_algae/fastas/*; do name=$(basename $file .fna); gt extractfeat -type CDS -seqid yes -retainids yes -seqfile refseq_algae/fastas/$name.fna -matchdescstart sorted_$name.gff >  CDS_$name.fna; done
+
+cat CDS*fna > all_CDS.fna
+
+./cd-hit-v4.6.8-2017-0621/cd-hit-est -i all_CDS.fna -o nr_test.fna -c 0.95
+
+# Make sure the gff stuff I've written so far works, too
+grep ">" nr_test.fna > fasta_headers.txt
+sed -e 's/>//g' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+#awk '{print $1}' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+#instead of removing 2nd field, just remove the space
+sed -e 's/ /_/g' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+sort fasta_headers.txt | uniq -cd
+
+cat fasta_headers.txt | while read line; do hit=`grep -n $line nr_test.fna.clstr | awk -F: '{print $1}'`; head -n $hit nr_test.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; done > clusters.txt
+#remove the carrot and the space
+#sed -e 's/>//g' clusters.txt > temp.txt && mv temp.txt clusters.txt
+#sed -e 's/ //g' clusters.txt > temp.txt && mv temp.txt clusters.txt
+
+cat fasta_headers.txt | while read line; do length=`grep $line nr_test.fna.clstr | awk '{print $2}' | sed 's/[^0-9]*//g'`; echo $length; done > endpoint.txt
+
+```
+
+Problem #2. Not only do I have duplicate samples within a single genome... the genes in each genome are named the same thing. This is dumb. Maybe I will have to go back to renaming CDS regions, with the genome this time, too. Could I tag on the location and genome to each ID?
+
+```{bash, eval = F}
+#Strip off the hashtag lines and save for later
+grep "##\|#!" refseq_algae/gffs/GCF_000149405.2_ASM14940v2_genomic.gff > top_of_file.txt
+grep -v "##\|#!" refseq_algae/gffs/GCF_000149405.2_ASM14940v2_genomic.gff > bottom_of_file.txt
+
+#Take bits and pieces of columns as needed
+awk '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt
+awk '{print $9}' bottom_of_file.txt > part2.txt
+awk -F ";" '{print $1}' part2.txt > IDs.txt
+awk -F ";" '{print $2,$3,$4,$5,$6,$7,$8,$9,$10}' part2.txt > tags.txt
+awk '{print $1}' bottom_of_file.txt > genome.txt
+awk '{print $4}' bottom_of_file.txt > start.txt
+
+
+#Put them back together - I want them in this order:
+# part1, IDs.txt, ".", genome.txt, ".", start.txt, ";", tags.txt
+
+paste part1.txt IDs.txt > cat1.txt
+paste -d "." cat1.txt genome.txt > cat2.txt
+paste -d "." cat2.txt start.txt > cat3.txt
+paste -d ";" cat3.txt tags.txt > newbottom.txt
+
+cat top_of_file.txt newbottom.txt > new.gff.txt
+
+# Write a loop to do this for all the gffs: 
+# Use - instead of . since there's a . in the genome names
+
+tar xvzf refseq_algae.tar.gz
+gzip -d refseq_algae/fastas/*
+gzip -d refseq_algae/gffs/*
+
+for file in refseq_algae/gffs/*;
+  do name=$(basename $file);
+  grep "##\|#!" $file > top_of_file.txt; grep -v "##\|#!" $file > bottom_of_file.txt;
+  awk -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt;
+  awk '{print $9}' bottom_of_file.txt > part2.txt;
+  awk -F ";" '{print $1}' part2.txt > IDs.txt;
+  awk -F "product=" '{print $2}' part2.txt > gene.txt;
+  awk '{print $1}' bottom_of_file.txt > genome.txt;
+  awk '{print $4}' bottom_of_file.txt > start.txt;
+  paste -d "\t'" part1.txt IDs.txt > cat1.txt;
+  paste -d "-" cat1.txt start.txt > cat2.txt;
+  paste -d "-" cat2.txt genome.txt > cat3.txt;
+  paste -d "-" cat3.txt gene.txt > newbottom.txt;
+  cat top_of_file.txt newbottom.txt > new.gff.txt;
+  gt gff3 -sort yes -tidy -retainids -o sorted_$name new.gff.txt;
+done
+
+#alright, I can get it working but only if I leave a lot of the crap behind - doesn't like not being able to find the parent gene for each cds
+#let's see if the rest of the workflow works
+
+for file in refseq_algae/fastas/*; do name=$(basename $file .fna); gt extractfeat -type CDS -seqid yes -retainids yes -seqfile refseq_algae/fastas/$name.fna -matchdescstart sorted_$name.gff >  CDS_$name.fna; done
+
+cat CDS*fna > all_CDS.fna
+
+./cd-hit-v4.6.8-2017-0621/cd-hit-est -i all_CDS.fna -o nr_test.fna -c 0.95
+
+# Make sure the gff stuff I've written so far works, too
+grep ">" nr_test.fna > fasta_headers.txt
+sed -e 's/>//g' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+awk '{print $1}' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+#instead of removing 2nd field, just remove the space
+#sed -e 's/ /_/g' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+sort fasta_headers.txt | uniq -cd
+
+cat fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); hit=`grep -n $var nr_test.fna.clstr | awk -F: '{print $1}'`; head -n $hit nr_test.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; done > clusters.txt
+#remove the carrot and the space
+#sed -e 's/>//g' clusters.txt > temp.txt && mv temp.txt clusters.txt
+#sed -e 's/ //g' clusters.txt > temp.txt && mv temp.txt clusters.txt
+
+cat fasta_headers.txt | while read line; do length=`grep $line nr_test.fna.clstr | awk '{print $2}' | sed 's/[^0-9]*//g'`; echo $length; done > endpoint.txt
+
+```
+
+*shakes fist at gods of bioinformatics* so close! The problem is that cd-hit only outputs the first 19 characters of my IDs, which is not enough to be unique. Maybe I can switch the gene location to be ahead of the genome name to get around that?
