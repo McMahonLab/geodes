@@ -2256,3 +2256,31 @@ cat fasta_headers.txt | while read line; do length=`grep $line nr_test.fna.clstr
 ```
 
 *shakes fist at gods of bioinformatics* so close! The problem is that cd-hit only outputs the first 19 characters of my IDs, which is not enough to be unique. Maybe I can switch the gene location to be ahead of the genome name to get around that?
+
+That works!
+
+####2017-08-10
+
+With such success on the algal part, I'd like to modify the gene names of my MAGs and SAGs. Trina suggested this to make it easier to parse relevant information once I've counted mapped reads, rather than running grep every time I need a product name.
+
+```{bash, eval = F}
+for file in refseq_algae/gffs/*;
+  do name=$(basename $file);
+  grep "##\|#!" $file > top_of_file.txt; grep -v "##\|#!" $file > bottom_of_file.txt;
+  awk -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt;
+  awk '{print $9}' bottom_of_file.txt > part2.txt;
+  awk -F ";" '{print $1}' part2.txt > IDs.txt;
+  awk -F "product=" '{print $2}' part2.txt > gene.txt;
+  awk '{print $1}' bottom_of_file.txt > genome.txt;
+  awk '{print $4}' bottom_of_file.txt > start.txt;
+  paste -d "\t'" part1.txt IDs.txt > cat1.txt;
+  paste -d "-" cat1.txt start.txt > cat2.txt;
+  paste -d "-" cat2.txt genome.txt > cat3.txt;
+  paste -d "-" cat3.txt gene.txt > newbottom.txt;
+  cat top_of_file.txt newbottom.txt > new.gff.txt;
+  gt gff3 -sort yes -tidy -retainids -o sorted_$name new.gff.txt;
+done
+```
+
+Well poop. My gff files are gone and I will need to re-upload them. which is fine, except I've still got 2 days left on my pre-rRNA sorting transfer and I'll need another 2 to transfer the metagenomes - which brings me to problem #2. So I've been busting my chops trying to get metabat running so that I can classify contigs based on their bin classifications. But we've always done that using phylosift, and I can't get phylosift working. So in the meantime, maybe I can work on finding a new classification method that works better in high throughput (and apply that to my other project, too!)
+```
