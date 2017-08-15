@@ -2431,4 +2431,148 @@ name=$(basename $file);
 
 I stopped at the ##### after that step ran for 5 hours.... it finished 60,000 out of 4 million. Yikes. My options seem to be either split it up, or wait until after the NR bit and hope there are fewer genes to grep, or both. I'll sleep on this.
 
+####2017-08-14
 
+My two goals for the day: 
+1. try the assembled contig gff's again. According to the internet, I can specify grep -F to match plain text instead of regex characters, which should speed it up significantly. I'm also considering a two step grep, where I make a smaller file of unique contigs and then look for each gene's assignment in that file instead of the full phylodist.
+2. Get a mapping index built for one of the metagenome assemblies. I wrote a job for this but it keeps saying it can't find things.
+
+Boot up an interactive job and run the code below until the #### (where I stopped last week)
+```{bash, eval = F}
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/GEODES005.assembled.fna.gz .
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES005.assembled.gff .
+cp /mnt/gluster/amlinz/metagenome_assemblies/product_names/GEODES005.assembled.product_names .
+cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/GEODES005.assembled.phylodist .
+gzip -d GEODES005.assembled.fna.gz
+
+file="GEODES005.assembled.gff"
+name=$(basename $file);
+
+  awk -F "\t" -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' $file > part1.txt;
+  awk -F "\t" '{print $9}' $file > part2.txt;
+  awk -F ";" '{print $1}' part2.txt > IDs.txt;
+#get product name from separate file
+# I need locustags, not ids, to look up product names
+  awk -F "locus_tag=" '{print $2}' part2.txt | awk -F ";" '{print $1}' > locust.txt;
+  while read line; do find=$(grep -wF $line GEODES005.assembled.product_names|awk '{print $2}');  echo $find; done < locust.txt > product_names.txt
+  awk '{print $1}' $file > genome.txt;
+  awk -F "\t" '{print $4}' $file > start.txt;
+  
+  uniq genome.txt > uniq_genomes.txt
+  #look up phylogeny from phylodist
+  rows=$(wc -l $file | awk '{print $1}');
+  while read line; do find=$(grep -wF $line GEODES005.assembled.phylodist|awk '{print $5}');  echo $find; done < genome.txt > classifications.txt
+  #######
+  assignment=$(grep -n $genome refseq_algae/algae_phylogeny.txt | awk '{print $2}')
+  yes $assignment | head -n $rows > classification.txt
+  
+  paste -d "\t'" part1.txt IDs.txt > cat1.txt;
+  paste -d "_" cat1.txt start.txt > cat2.txt;
+  paste -d "_" cat2.txt genome.txt > cat3.txt;
+  paste -d "_" cat3.txt classification.txt > cat4.txt; #paste phylogeny to ID
+  paste -d "_" cat4.txt gene.txt > newbottom.txt;
+  cat top_of_file.txt newbottom.txt > new.gff.txt;
+  gt gff3 -sort yes -tidy -retainids -o sorted_$name new.gff.txt
+
+```
+
+Even with the -F and running all afternoon, still only 100,000 out of 4 million done. Can I split this up in parallel? My 10,000 jobs limit still gives me 400 lines per job, which would be quite maneageable.
+
+Meanwhile, run an interactive job of the index building:
+```{bash, eval = F}
+
+#!/bin/bash
+#Build a re-usable mapping index
+cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/GEODES005.assembled.fna.gz .
+gzip -d GEODES005.assembled.fna.gz
+
+#Unzip bbmap and build the index
+tar -xvzf BBMap_36.99.tar.gz
+bbmap/bbmap.sh ref=GEODES005.assembled.fna usemodulo=T -Xmx30g
+
+# Make ref/ a tarball and move to gluster
+tar czvf GEODES005_assembled_index.tar.gz ref/
+
+cp GEODES005_assembled_index.tar.gz /mnt/gluster/amlinz/
+rm *.tar.gz
+rm -r bbmap/
+rm -r ref/
+rm *fna
+```
+
+That worked fine. I forgot to copy the output to gluster (head-keyboard). Now I can move on to the actual mapping.
+
+mapping_metaGs.sh
+```{bash, eval = F}
+#!/bin/bash
+#Map metatranscriptome reads to my pre-indexed database of reference genomes
+#Transfer metaT from gluster
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/metagenomes/GEODES005.metagenome.fastq.gz .
+cp /mnt/gluster/amlinz/GEODES005_assembled_index.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf GEODES005_assembled_index.tar.gz
+gzip -d  GEODES005.metagenome.fastq.gz
+mv GEODES005.metagenome.fastq GEODES005_metagenome.fastq
+name=$(basename GEODES005_metagenome.fastq | cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.mapped.sam minid=0.8 trd=T sam=1.3 threads=1 build=1 usemodulo=T mappedonly=T -Xmx30g
+
+# I want to store the output as bam. Use samtools to convert.
+samtools view -b -S -o $name.mapped.bam $name.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.mapped.bam /mnt/gluster/amlinz/
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+```
+
+mapping_metaGs.sub
+```{bash, eval = F}
+
+# mapping_metaGs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = mapping_metaGs_$(Cluster).log
+error = mapping_metaGs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/mapping_metaGs.sh
+arguments = $(samplename)
+output = mapping_metaGs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory =30GB
+request_disk = 30GB
+#
+# 
+queue 
+
+```
