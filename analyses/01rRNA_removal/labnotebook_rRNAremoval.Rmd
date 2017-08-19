@@ -1192,3 +1192,182 @@ rRNA_ratios <- data.frame(samplenames, percent_rRNA)
 ggplot(rRNA_ratios, aes(x = samplenames, y = percent_rRNA)) + theme_bw() + geom_bar(stat = "identity") + coord_flip()
 
 ```
+
+####2017-08-17
+
+Nothing wrong here, but I do have to re-implement my rRNA sorting to depend less on gluster, so I'm going to modify my scripts slightly and right a DAG. Already did this for the non-redundant gene database!
+
+samplenames.sh
+```{bash, eval = F}
+for file in /mnt/gluster/amlinz/filtered/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samplenames.txt
+
+# Don't want to run all of your samples just yet? The line below will keep just the first 3 files in the list.
+# head -3 samplenames.txt > test_samplenames.txt; mv test_samplenames.txt samplenames.txt
+
+```
+
+Here are the scripts used:
+00splitfastqs.sub
+```{bash, eval = F}
+# 00split_fastq.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 00split_fastq_$(Cluster).log
+error = 00split_fastq_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/00split_fastq.sh
+arguments = $(sample)
+output = 00split_fastq_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+transfer_output_files = $(samplename)*.gz
+
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 2 GB
+request_disk = 12 GB
+#
+# Submit jobs
+queue sample from samplenames.txt
+
+```
+
+00splitfastqs.sh
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_metaT/$1.filter-MTF.fastq.gz .
+gzip -d $1.filter-MTF.fastq.gz
+
+sed -i '/^$/d' $1.filter-MTF.fastq
+
+maxreads=$((`wc -l < $1.filter-MTF.fastq` / 8 - 1))
+startpoints=$(seq 0 500000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 499999));
+  bbmap/getreads.sh in=$1.filter-MTF.fastq id=$num-$endpoint out=$1_filter-MTF_$endpoint.fastq overwrite=T;
+  done
+
+rm $1.filter-MTF.fastq
+gzip $1*
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+```
+
+
+path2splitfastqs.sh
+```{bash, eval = F}
+#!/bin/bash
+mv GEODES*gz /home/amlinz/GEODES_metaT_split/
+find /home/amlinz/GEODES_metaT_split/ -type f > path2splitfastqs.txt
+```
+
+01rRNA_removal.sub
+```{bash, eval = F}
+
+# 01rRNA_removal.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 01rRNA_removal_$(Cluster).log
+error = 01rRNA_removal_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/01rRNA_removal.sh
+arguments = $(fastqfile)
+output = 01rRNA_removal_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/sortmerna-2.1-linux-64.tar.gz,$(fastqfile)
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+request_cpus = 1
+request_memory = 2GB
+request_disk = 5GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue fastqfile from path2splitfastqs.txt
+
+
+```
+
+01rRNA_removal.sh
+```{bash, eval = F}
+#!/bin/bash
+#Sort metatranscriptomic reads into rRNA and non-rRNA files
+
+#Transfer the fasta file from gluster
+cp $1 ./
+name=$(basename $1 |cut -d'.' -f1)
+
+#Unzip files
+tar -xvf sortmerna-2.1-linux-64.tar.gz
+gzip -d $name.fastq
+cd sortmerna-2.1-linux-64
+
+#Index the rRNA databases
+./indexdb_rna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac-16s-db:\./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db
+
+#Run the sorting program
+./sortmerna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac-16s-db:./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db --reads ../${name}.fastq  --fastx --aligned ${name}_rRNA --other ${name}_nonrRNA --log -v -m 1 -a 1
+
+#Let's unpack the parameters I've chosen. --ref refers to the databases I've just indexed. --reads says use the fastq file provided. --fastx means I would like a fastq file as output. --aligned is the name for rRNA reads, --other is the name for non-rRNA reads. --log says compute statistics about the run. -v means verbose. I've left the alignment setting at the default, --best. There's a faster setting, but I'm hoping I won't need it. And finally, -m tells sortmerna it can use 3GB of RAM to hold each piece of the fastq file as it processes. Hopefully that will give it a fighting chance.
+#Move the output files back to gluster
+
+gzip *RNA.fastq
+
+#Remove files
+cd ..
+rm sortmerna-2.1-linux-64.tar.gz
+rm -r sortmerna-2.1-linux-64
+
+```
+
+
+cat_files.sh
+```{bash, eval = F}
+#!/bin/bash
+#Concatenate sortmerna output
+mv *_rRNA.fastq.gz /home/amlinz/GEODES_rRNA_split
+mv *nonrRNA.fastq.gz /home/amlinz/GEODES_nonrRNA_split
+
+gzip -d /home/amlinz/GEODES_rRNA_split
+gzip -d /home/amlinz/GEODES_nonrRNA_split
+
+for sample in /home/amlinz/samplenames.txt;
+  do $(sample)*_nonrRNA.fastq > /mnt/gluster/amlinz/GEODES_nonrRNA/$(sample)_nonrRNA.fastq;
+  $(sample)*_rRNA.fastq > /mnt/gluster/amlinz/GEODES_rRNA/$(sample)_rRNA.fastq;
+  done
+  
+gzip /mnt/gluster/amlinz/GEODES_nonrRNA/*
+gzip /mnt/gluster/amlinz/GEODES_rRNA/*
+
+```
+
+01rRNA_sorting.DAG
+```{bash, eval = F}
+JOB 00split_fastq /home/amlinz/submits/00split_fastq.sub
+JOB 01rRNA_removal /home/amlinz/submits/01rRNA_removal.sub
+SCRIPT PRE 00split_fastq /home/amlinz/scripts/samplenames.sh
+SCRIPT POST 00split_fastq /home/amlinz/scripts/path2splitfastqs.sh
+SCRIPT POST 01rRNA_removal /home/amlinz/scripts/cat_files.sh
+```

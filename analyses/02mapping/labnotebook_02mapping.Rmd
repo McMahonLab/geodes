@@ -2576,3 +2576,377 @@ request_disk = 30GB
 queue 
 
 ```
+
+#### 2017-08-17
+
+Busy couple days! I had my committee meeting and I chatted with Sarah about mapping, binning, and classifying things. My committee strongly feels that trying to map and bin these genomes is not worth the time for the benefit to this project when I already have classifications. But Trina still feels that it would be beneficial to somewhat improve these classifications. Sarah has also run into this issue and her solution is to take the consensus taxonomy from the best BLAST hit of each gene to the IMG database, which JGI conveniently outputs. I'm hoping to use Sarah's Python script for this, so I first need to update my python tarball to include the pandas package.
+
+```{bash, eval = F}
+mkdir python
+tar -xvf Python-2.7.13.tgz
+cd Python-2.7.13
+./configure --prefix=$(pwd)/../python
+make
+make install
+cd ..
+ls python
+ls python/bin
+
+export PATH=$(pwd)/python/bin:$PATH
+wget https://bootstrap.pypa.io/get-pip.py
+python get-pip.py
+pip install numpy
+pip install matplotlib
+pip install htseq
+pip install pysam
+pip install pandas
+tar -czvf python.tar.gz python/
+exit
+
+```
+
+Looks good. Now to write a submit and executable to run Sarah's script. I'll try in interactive mode first.
+
+```{bash, eval = F}
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$(pwd)/bwa:$PATH
+export HOME=$(pwd)/home
+```
+
+No dice. Sarah is working on modifying her script to work more generally, so I'll give that a try when it's ready.
+
+####2017-08-18
+
+Meanwhile, I'll start high-throughputting the other types of reference that need to be processed. MAGs_SAGs first.
+
+03refMAGs_SAGs.sub
+```{bash, eval=F}
+# 03refMAGs_SAGs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03refMAGs_SAGs_$(Cluster).log
+error = 03refMAGs_SAGs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/03refMAGs_SAGs.sh
+arguments = $(samplename)
+output = 03refMAGs_SAGs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/genometools.tar.gz,ref_MAGs_SAGs/fastas/$samplename.fna,ref_MAGs_SAGs/gffs/$samplename.gff,ref_MAGs_SAGs/Readme.csv
+transfer_output_files = CDS_$1.fna
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from /home/amlinz/refMAGS_SAGs_list.txt
+```
+
+03refMAGs_SAGs.sh
+```{bash, eval = F}
+#!/bin/bash
+#Rename genes to include relevant info from the gff file, then extract a fasta of only coding regions
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+grep "##\|#!" $1.gff > top_of_file.txt
+grep -v "##\|#!" $1.gff > bottom_of_file.txt #take headers off the top of the file
+awk -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt #split by first 8 columns
+awk '{print $9}' bottom_of_file.txt > part2.txt #put the last of column of tags in its own file
+awk -F ";" '{print $1}' part2.txt > IDs.txt #take out just the ID tag
+awk -F "product=" '{print $2}' part2.txt > gene.txt #get the product name
+rows=$(wc -l bottom_of_file.txt | awk '{print $1}')
+yes $1 | head -n $rows > genome.txt
+#look up phylogeny and make that column, too
+assignment=$(grep -n $1 Readme.csv | awk -F "," '{print $3,$4,$5,$6,$7,$8}' OFS=",")
+yes $assignment | head -n $rows > classification.txt
+awk '{print $4}' bottom_of_file.txt > start.txt #get the gene start location
+paste -d "\t'" part1.txt IDs.txt > cat1.txt #paste first 8 columns to ID tag
+paste -d "_" cat1.txt start.txt > cat2.txt #paste start location to ID
+paste -d "_" cat2.txt genome.txt > cat3.txt #paste genome to ID
+paste -d "_" cat3.txt classification.txt > cat4.txt #paste phylogeny to ID
+paste -d "_" cat4.txt gene.txt > newbottom.txt #paste product name to ID
+cat top_of_file.txt newbottom.txt > new.gff #put the top of the file back on
+gt gff3 -sort yes -tidy -retainids -o sorted_$1.gff new.gff #clean up the the gff sorter
+
+
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile $1.fna -matchdescstart sorted_$1.gff >  CDS_$1.fna
+
+rm *tar.gz
+rm -r genometools
+rm *fna*
+rm *txt
+rm *gff
+
+```
+
+
+A script to make the list of files to run:
+refMAGs_SAGs_list.sh
+```{bash, eval = F}
+#!/bin/bash
+
+for file in ref_MAGs_SAGs/fastas/*;do name=$(basename $file | cut -d'.' -f1); echo $name; done > refMAGs_SAGs_list.txt
+
+#For testing, uncomment the following lines:
+head -2 refMAGs_SAGs_list.txt > temp.txt
+mv temp.txt refMAGs_SAGs_list.txt
+```
+
+A script to move the output into its own folder:
+move_CDS_output.sh
+```{bash, eval = F}
+#!/bin/bash
+
+mv CDS*fna > CDS_fastas
+```
+
+And my first ever DAG!
+02nonredundant_db.DAG:
+```{bash, eval = F}
+JOB 03refMAGs_SAGs /home/amlinz/submits/03refMAGs_SAGs.sub
+SCRIPT PRE 03refMAGs_SAGs /home/amlinz/scripts/refMAGs_SAGs_list.sh
+SCRIPT POST 03refMAGs_SAGs /home/amlinz/scripts/move_CDS_output.sh
+```
+
+Time to test! I'm going to rearrange my homefolder to archive old scripts and prepare to move over to DAGs. Submit with
+```{bash, eval = F}
+condor_submit_dag DAGs/02nonredundant_db.DAG
+```
+
+It's alive! A few things of note:
+ - use absolute paths, otherwise I get horribly confused
+ - all queued filenames in the submit file should be surrounded by $()
+ - The command "yes" needs to be killed by the script in remote sessions, which produces an error that can be ignored.
+ - make sure to run chmod +x on the pre and post scripts
+ 
+Now add a submit and execute for the refseq algae.
+
+04algae.sub:
+```{bash, eval = F}
+# 04algae.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04algae_$(Cluster).log
+error = 04algae_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/04algae.sh
+arguments = $(samplename)
+output = 04algae_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/genometools.tar.gz,refseq_algae/fastas/$(samplename).fna.gz,ref_MAGs_SAGs/gffs/$(samplename).gff.gz,refseq_algae/algae_phylogeny.txt
+transfer_output_files = CDS_$(samplename).fna
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from /home/amlinz/algae_list.txt
+```
+
+algae_list.sh
+```{bash, eval = F}
+#!/bin/bash
+
+for file in refseq_algae/fastas/*;do name=$(basename $file .fna.gz); echo $name; done > algae_list.txt
+
+#For testing, uncomment the following lines:
+head -2 algae_list.txt > temp.txt
+mv temp.txt algae_list.txt
+```
+
+04algae.sh
+```{bash, eval = F}
+#!/bin/bash
+#Rename genes to include relevant info from the gff file, then extract a fasta of only coding regions
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+gzip -d *gz
+
+grep "##\|#!" $1.gff > top_of_file.txt; grep -v "##\|#!" $1.gff > bottom_of_file.txt;
+awk -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt;
+awk '{print $9}' bottom_of_file.txt > part2.txt;
+awk -F ";" '{print $1}' part2.txt > IDs.txt;
+awk -F "product=" '{print $2}' part2.txt > gene.txt;
+awk '{print $1}' bottom_of_file.txt > genome.txt;
+awk '{print $4}' bottom_of_file.txt > start.txt;
+#look up phylogeny and make that column, too
+rows=$(wc -l bottom_of_file.txt | awk '{print $1}')
+assignment=$(grep -n $1 algae_phylogeny.txt | awk '{print $2}')
+yes $assignment | head -n $rows > classification.txt
+paste -d "\t'" part1.txt IDs.txt > cat1.txt;
+paste -d "_" cat1.txt start.txt > cat2.txt;
+paste -d "_" cat2.txt genome.txt > cat3.txt;
+paste -d "_" cat3.txt classification.txt > cat4.txt; #paste phylogeny to ID
+paste -d "_" cat4.txt gene.txt > newbottom.txt;
+cat top_of_file.txt newbottom.txt > new.gff;
+gt gff3 -sort yes -tidy -retainids -o sorted_$1.gff new.gff;
+
+
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile $1.fna -matchdescstart sorted_$1.gff >  CDS_$1.fna
+
+rm *tar
+rm -r genometools
+rm *fna*
+rm *txt
+rm *gff
+
+
+```
+
+Update the DAG:
+```{bash, eval = F}
+
+JOB 03refMAGs_SAGs /home/amlinz/submits/03refMAGs_SAGs.sub
+JOB 04algae /home/amlinz/submits/04algae.sub
+SCRIPT PRE 03refMAGs_SAGs /home/amlinz/scripts/refMAGs_SAGs_list.sh
+SCRIPT PRE 04algae /home/amlinz/scripts/algae_list.sh
+SCRIPT POST 03refMAGs_SAGs 04algae /home/amlinz/scripts/move_CDS_output.sh
+```
+
+And add a line to the post script to concatenate CDS_fasta into a single file on gluster.
+```{bash, eval = F}
+
+#!/bin/bash
+
+mv /home/amlinz/CDS*.fna /home/amlinz/CDS_fastas
+cat /home/amlinz/CDS_fastas/* > /mnt/gluster/amlinz/CDS_regions.fna
+gzip /mnt/gluster/amlinz/CDS_regions.fna
+
+```
+
+Got the jobs to actually run, but the output fna files are empty. And the last script doesn't seem to be running. Looks like it can't be attached to two scripts, so I'll just run it manually after, or tell the algae to run after mags. Booting into interactive mode for the empty file issue.
+
+Left a $file in the first grep line. Also realized I should add rm commands.
+
+And then take out the rm *fna* one because it's deleting my output. But now it's working! Time to add CD-HIT into the equation.
+
+05cd-hit.sh
+```{bash, eval = F}
+#!/bin/bash
+#Cluster coding regions to get nonredundant genes and make a dummy gff file to go with it
+
+tar xvzf cd-hit.tar.gz
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+cp /mnt/gluster/amlinz/CDS_regions.fna.gz .
+gzip -d CDS_regions.fna.gz
+
+./cd-hit-v4.6.8-2017-0621/cd-hit-est -i CDS_regions.fna -o nonredundant_database.fna -c 0.95
+
+grep ">" nonredundant_database.fna > fasta_headers.txt
+#remove the carrot
+sed -e 's/>//g' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+
+# Step 2, Link cluster number to that id
+cat fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); hit=`grep -n $var nonredundant_database.fna.clstr | awk -F: '{print $1}'`; head -n $hit nonredundant_database.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; done > clusters.txt
+
+cat fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); length=`grep $var nonredundant_database.fna.clstr | awk '{print $2}' | sed 's/[^0-9]*//g'`; echo $length; done > endpoint.txt
+
+#already, now the good part. Make a couple of dummy columns and put the whole shebang together.
+# I need:
+# first line is version of gff
+# genome name - something like "NR_database"
+# source - cluster number
+# type - CDS
+# start - 1
+# stop - my calculated endpoints
+# strand and frame info - ., +, 0
+# tags - use the fasta header as ID
+
+rows=$(wc -l fasta_headers.txt | awk '{print $1}')
+yes "NR_gene_database" | head -n $rows > genome.txt
+yes "CDS" | head -n $rows > type.txt
+yes "1" | head -n $rows > start.txt
+yes "." | head -n $rows > info1.txt
+yes "+" | head -n $rows > info2.txt
+yes "0" | head -n $rows > info3.txt
+yes "ID" | head -n $rows > ID.txt
+
+paste -d "=" ID.txt fasta_headers.txt > tags.txt
+paste genome.txt clusters.txt type.txt start.txt endpoint.txt info1.txt info2.txt info3.txt tags.txt > nonredundant_database.gff
+
+echo '##gff-version 3' | cat - nonredundant_database.gff > temp && mv temp nonredundant_database.gff
+gt gff3 -sort yes -tidy -retainids -o sorted_nonredundant_database.gff nonredundant_database.gff
+
+gzip sorted_nonredundant_database.gff
+mv nonredundant_database.gff.gz /mnt/gluster/amlinz
+gzip nonredundant_database.fna
+mv nonredundant_database.fna.gz /mnt/gluster/amlinz
+
+rm *tar.gz
+rm *fna
+rm *clstr
+rm *gff
+rm *txt
+rm -r genometools
+rm -r cd-hit-v4.6.8-2017-0621
+```
+
+05cd-hit.sub
+```{bash, eval = F}
+# 05cd-hit.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 05cd-hit_$(Cluster).log
+error = 05cd-hit_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/05cd-hit.sh
+#arguments = $(samplename)
+output = 05cd-hit_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/genometools.tar.gz,zipped/cd-hit.tar.gz
+#transfer_output_files = CDS_$(samplename).fna
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 3GB
+#
+# run one instance
+queue 
+```
+
+Works good on its own - add to DAG and run the whole thing
+
+Forgot to set the path for genometools, so it couldn't find command gt. Try again.
