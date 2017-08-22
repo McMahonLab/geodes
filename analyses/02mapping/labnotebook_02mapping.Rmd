@@ -2988,3 +2988,35 @@ export HOME=$(pwd)/home
 
 
 ```
+
+####2017-08-22
+
+Sort of have the phylodist script working - more on that later. Meanwhile, I'm trying to get my cd-hit script to work faster. I suspect the issue is my 4-stage grep, which in retrospect seems a bit ridiculous. I'm trying some new things in an interactive session:
+```{bash, eval = F}
+# to save time:
+head -5000 fasta_headers.txt > test_fasta_headers.txt
+# Old commands
+cat test_fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); hit=`grep -n $var nonredundant_database.fna.clstr | awk -F: '{print $1}'`; head -n $hit nonredundant_database.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; done > clusters.txt
+
+cat fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); length=`grep $var nonredundant_database.fna.clstr | awk '{print $2}' | sed 's/[^0-9]*//g'`; echo $length; done > endpoint.txt
+
+#New
+#trying this to find out how many genes are in the largest cluster - then I can specify grep in a smaller range of the dataset
+sort -nrk1,1 nonredundant_database.fna.clstr  | head -1
+# It's 90 - let's even assume this gets riduclously large and grep 500 above
+cat test_fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); grep -B 500 $var nonredundant_database.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; done > clusters2.txt
+#Same clusters, much faster time. Hooray!
+# the next step was extracting length of each gene. Can I get this from the first loop still?
+touch endpoint.txt
+cat test_fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); grep -B 500 $var nonredundant_database.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; length=`tail -1 splitfile.clstr | awk '{print $2}' | sed 's/[^0-9]*//g'`; echo $length >> endpoint.txt;done > clusters.txt
+
+#Nice! Try with a larger file and time.
+#At it's current rate (2382 fasta headers in 6 minutes), It should take 26 hours to finish the whole file. Even if I add more with the GEODES files, this should still finish under 3 days.
+#Actually... can I set the grep chunk to only take the max of the cluster number?
+maxsize=$(sort -nrk1,1 nonredundant_database.fna.clstr  | head -1 | cut -f1)
+maxsize=$(($maxsize + 1))
+touch endpoint.txt
+cat fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); grep -B $maxsize $var nonredundant_database.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; length=`tail -1 splitfile.clstr | awk '{print $2}' | sed 's/[^0-9]*//g'`; echo $length >> endpoint.txt;done > clusters.txt
+
+#3281 in 6 min! That's 19.3 hours. Woohoo! Even if it takes longer once the contigs are in, that's still an improvement. My work here is done (for now).
+```
