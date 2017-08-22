@@ -1227,7 +1227,7 @@ output = 00split_fastq_$(Cluster).out
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 transfer_input_files = zipped/BBMap_36.99.tar.gz
-transfer_output_files = $(samplename)*.gz
+transfer_output_files = $(sample)*.gz
 
 #
 # Tell HTCondor what amount of compute resources
@@ -1247,7 +1247,7 @@ queue sample from samplenames.txt
 #!/bin/bash
 tar -xvzf BBMap_36.99.tar.gz
 
-cp /mnt/gluster/amlinz/GEODES_metaT/$1.filter-MTF.fastq.gz .
+cp /mnt/gluster/amlinz/filtered/$1.filter-MTF.fastq.gz .
 gzip -d $1.filter-MTF.fastq.gz
 
 sed -i '/^$/d' $1.filter-MTF.fastq
@@ -1257,11 +1257,13 @@ startpoints=$(seq 0 500000 $maxreads)
 
 for num in $startpoints;
   do endpoint=$(($num + 499999));
-  bbmap/getreads.sh in=$1.filter-MTF.fastq id=$num-$endpoint out=$1_filter-MTF_$endpoint.fastq overwrite=T;
+  bbmap/getreads.sh in=$1.filter-MTF.fastq id=$num-$endpoint out=$1-$endpoint.fastq overwrite=T;
   done
 
 rm $1.filter-MTF.fastq
-gzip $1*
+mkdir $1-splitfiles
+mv *fastq $1-splitfiles
+tar cvzf $1-splitfiles.tar.gz $1-splitfiles
 rm BBMap_36.99.tar.gz
 rm -r bbmap
 ```
@@ -1271,7 +1273,15 @@ path2splitfastqs.sh
 ```{bash, eval = F}
 #!/bin/bash
 mv GEODES*gz /home/amlinz/GEODES_metaT_split/
-find /home/amlinz/GEODES_metaT_split/ -type f > path2splitfastqs.txt
+cd /home/amlinz/GEODES_metaT_split
+ls *.tar.gz |xargs -n1 tar -xvzf
+rm *.tar.gz
+cd /home/amlinz/
+gzip /home/amlinz/GEODES_metaT_split/*/*fastq
+mv /home/amlinz/GEODES_metaT_split/*/*fastq.gz /home/amlinz/GEODES_metaT_split/
+rmdir /home/amlinz/GEODES_metaT_split/*
+ls /home/amlinz/GEODES_metaT_split/ > path2splitfastqs.txt
+
 ```
 
 01rRNA_removal.sub
@@ -1296,7 +1306,7 @@ output = 01rRNA_removal_$(Cluster).out
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 transfer_input_files = zipped/sortmerna-2.1-linux-64.tar.gz,$(fastqfile)
-#transfer_output_files =
+transfer_output_files = $(fastqfile)-rRNA,$(fastqfile)-nonrRNA
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.
@@ -1315,8 +1325,6 @@ queue fastqfile from path2splitfastqs.txt
 #!/bin/bash
 #Sort metatranscriptomic reads into rRNA and non-rRNA files
 
-#Transfer the fasta file from gluster
-cp $1 ./
 name=$(basename $1 |cut -d'.' -f1)
 
 #Unzip files
@@ -1330,10 +1338,12 @@ cd sortmerna-2.1-linux-64
 #Run the sorting program
 ./sortmerna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac-16s-db:./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db --reads ../${name}.fastq  --fastx --aligned ${name}_rRNA --other ${name}_nonrRNA --log -v -m 1 -a 1
 
-#Let's unpack the parameters I've chosen. --ref refers to the databases I've just indexed. --reads says use the fastq file provided. --fastx means I would like a fastq file as output. --aligned is the name for rRNA reads, --other is the name for non-rRNA reads. --log says compute statistics about the run. -v means verbose. I've left the alignment setting at the default, --best. There's a faster setting, but I'm hoping I won't need it. And finally, -m tells sortmerna it can use 3GB of RAM to hold each piece of the fastq file as it processes. Hopefully that will give it a fighting chance.
-#Move the output files back to gluster
 
 gzip *RNA.fastq
+mkdir ../$1-rRNA
+mkdir ../$1-nonrRNA
+mv *_rRNA.fastq.gz ../$1-rRNA
+mv *nonrRNA.fastq.gz ../$1-nonrRNA
 
 #Remove files
 cd ..
@@ -1347,15 +1357,16 @@ cat_files.sh
 ```{bash, eval = F}
 #!/bin/bash
 #Concatenate sortmerna output
-mv *_rRNA.fastq.gz /home/amlinz/GEODES_rRNA_split
-mv *nonrRNA.fastq.gz /home/amlinz/GEODES_nonrRNA_split
+mv /home/amlinz/*fastq.gz-rRNA/* /home/amlinz/GEODES_rRNA_split
+mv /home/amlinz/*fastq.gz-nonrRNA/* /home/amlinz/GEODES_nonrRNA_split
+rmdir *fastq.gz-*
 
-gzip -d /home/amlinz/GEODES_rRNA_split
-gzip -d /home/amlinz/GEODES_nonrRNA_split
+gzip -d /home/amlinz/GEODES_nonrRNA_split/*
+gzip -d /home/amlinz/GEODES_rRNA_split/*
 
-for sample in /home/amlinz/samplenames.txt;
-  do $(sample)*_nonrRNA.fastq > /mnt/gluster/amlinz/GEODES_nonrRNA/$(sample)_nonrRNA.fastq;
-  $(sample)*_rRNA.fastq > /mnt/gluster/amlinz/GEODES_rRNA/$(sample)_rRNA.fastq;
+cat /home/amlinz/samplenames.txt | while read line;
+  do cat /home/amlinz/GEODES_nonrRNA_split/$line*nonrRNA.fastq > /mnt/gluster/amlinz/GEODES_nonrRNA/$line-nonrRNA.fastq;
+  cat /home/amlinz/GEODES_rRNA_split/$line*rRNA.fastq > /mnt/gluster/amlinz/GEODES_rRNA/$line-rRNA.fastq;
   done
   
 gzip /mnt/gluster/amlinz/GEODES_nonrRNA/*
@@ -1371,3 +1382,5 @@ SCRIPT PRE 00split_fastq /home/amlinz/scripts/samplenames.sh
 SCRIPT POST 00split_fastq /home/amlinz/scripts/path2splitfastqs.sh
 SCRIPT POST 01rRNA_removal /home/amlinz/scripts/cat_files.sh
 ```
+
+####2017-08-21

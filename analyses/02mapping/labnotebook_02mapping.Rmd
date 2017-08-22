@@ -2950,3 +2950,41 @@ queue
 Works good on its own - add to DAG and run the whole thing
 
 Forgot to set the path for genometools, so it couldn't find command gt. Try again.
+
+
+####2017-08-19
+
+```{bash, eval = F}
+cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/GEODES005.assembled.phylodist .
+echo $'locus_tag\thomolog_gene_oid\thomolog_taxon_oid\tpercent_identity\tlineage' | cat - GEODES005.assembled.phylodist > temp.phylodist
+mv temp.phylodist GEODES005.assembled.phylodist
+python classifyWphylodist_contigs.py -pd GEODES005.assembled.phylodist -pc .70 -hm 2
+ 
+```
+
+
+####2017-08-21
+
+Two problems - one, it's been 3 days and my cd-hit script has not yet finished. Which probably means I need to rethink the massive use of grep in that script. Two, I got Sarah's classification script working, but it only reports "NO CLASSIFICATION DUE TO LOW GENE NUMBER" or something along the lines of there's less than 2 genes on every contig, which is untrue. I'm thinking of making a mini test phylodist file to try and diagnose, so I can at least better tell Sarah what I need fixed.
+
+In the same interactive job as before:
+```{bash, eval = F}
+#make a test file
+
+grep "10000001" GEODES005.assembled.phylodist | head -5 > contig1.phylodist
+grep "10000101" GEODES005.assembled.phylodist | head -5 > contig2.phylodist
+grep "10001001" GEODES005.assembled.phylodist | head -5 > contig3.phylodist
+echo $'locus_tag\thomolog_gene_oid\thomolog_taxon_oid\tpercent_identity\tlineage' | cat - contig1.phylodist contig2.phylodist contig3.phylodist > test.phylodist
+
+#save to gluster, then add print statements to python script
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$(pwd)/bwa:$PATH
+export HOME=$(pwd)/home
+
+#contig name getting cutoff by 1! fix and try again
+
+
+
+```
