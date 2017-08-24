@@ -3020,3 +3020,29 @@ cat fasta_headers.txt | while read line; do var=$(echo $line | cut -c1-19); grep
 
 #3281 in 6 min! That's 19.3 hours. Woohoo! Even if it takes longer once the contigs are in, that's still an improvement. My work here is done (for now).
 ```
+
+
+####2017-08-23
+
+Alright, one last iteration of the script from Sarah. It should now read in arguments as numbers instead of as strings. I'm going to test it, make modifications as necessary, and send my changes to Sarah.
+
+```{bash, eval = F}
+#make a test file
+cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/GEODES005.assembled.phylodist .
+grep "10000002" GEODES005.assembled.phylodist | head -10 > contig1.phylodist
+grep "10000102" GEODES005.assembled.phylodist | head -10 > contig2.phylodist
+grep "10001002" GEODES005.assembled.phylodist | head -10 > contig3.phylodist
+echo $'locus_tag\thomolog_gene_oid\thomolog_taxon_oid\tpercent_identity\tlineage' | cat - contig1.phylodist contig2.phylodist contig3.phylodist > test.phylodist
+
+#save to gluster, then add print statements to python script
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$(pwd)/bwa:$PATH
+export HOME=$(pwd)/home
+
+chmod +x classifyWphylodist_contigs.py
+
+
+
+```
