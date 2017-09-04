@@ -1282,6 +1282,8 @@ mv /home/amlinz/GEODES_metaT_split/*/*fastq.gz /home/amlinz/GEODES_metaT_split/
 rmdir /home/amlinz/GEODES_metaT_split/*
 ls /home/amlinz/GEODES_metaT_split/ > path2splitfastqs.txt
 
+for file in /home/amlinz/GEODES_metaT_split/*gz; do name=$(basename $file |cut -d'.' -f1);echo $name; done > path2splitfastqs.txt
+
 ```
 
 01rRNA_removal.sub
