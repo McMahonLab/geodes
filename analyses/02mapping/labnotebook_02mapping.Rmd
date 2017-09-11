@@ -3046,3 +3046,351 @@ chmod +x classifyWphylodist_contigs.py
 
 
 ```
+
+####2017-09-05
+
+Well, after much headbashing and discussion with CHTC, I think I've got my rRNA removal code running under the new 400 file gluster limit. It was a pain. It's nearly done. 
+
+Meanwhile, I was also running the phylodist classification code, but it doesn't finish in 3 days for half the files (even if I give it gobs of RAM). Also, something's off about GEODES006 that results in no output. Looks like I'll need to split the phylodist files and classify them in bits - without splitting up any parts of contigs. To do this, I'm giving each job a list of 1500 contig names rather than a piece of the file. The executable will need to grep genes from those contigs out of the phylodist file, then classify. I'll turn off the header in output so I can simply concatenate the output.
+
+I'm testing in GEODES006 since I suspect there's a line off somewhere that is ruining the whole file. Here's my start of splitting:
+```{bash, eval = F}
+# Get the contig names for each gene, which is the 1st 18 characters of the gene name
+mkdir contig_lists
+awk '{print substr($1,1,18)}' GEODES006.assembled.phylodist | sort | uniq > /home/amlinz/contig_lists/GEODES006-contigs.txt
+
+# Split into bite-sized chunks
+mkdir contig_lists/GEODES006
+split -l 1500 -a 4 -d contig_lists/GEODES006-contigs.txt contig_lists/GEODES006/GEODES006-contigs
+
+# Make a list of files to run - only doing a couple to test
+#Modified later!
+ls contig_lists | head -2 > metaG_contigs.txt
+
+```
+
+Modify the phylodist submit file to queue each contig name file
+```{bash, eval = F}
+# 02phylodist.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02phylodist_$(Cluster).log
+error = 02phylodist_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/02phylodist.sh
+arguments = $(contigs)
+output = 02phylodist_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,scripts/classifyWphylodist_contigs.py,$(contigs)
+transfer_output_files = $(contigs).contig.classification.perc70.minhit3.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 40GB
+request_disk = 1GB
+#
+# run from list
+queue contigs from metaG_contigs.txt
+
+```
+
+Modify the executable
+```{bash, eval = F}
+
+#!/bin/bash
+#Classify contigs based on their gene's USEARCH hits provided by JGI
+
+name=$(basename $1)
+mv $name $name.phylodist
+#add header
+echo $'locus_tag\thomolog_gene_oid\thomolog_taxon_oid\tpercent_identity\tlineage' | cat - $name.phylodist > temp.phylodist && mv temp.phylodist $name.phylodist
+
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+chmod +x classifyWphylodist_contigs.py
+
+python classifyWphylodist_contigs.py -pd $name.phylodist -pc .70 -hm 3 -conlen 18
+mkdir contig_lists
+mkdir contig_lists/GEODES006
+mv *contig.classification.perc70.minhit3.txt $1.contig.classification.perc70.minhit3.txt
+
+rm *phylodist
+rm *py
+rm -rf python/
+rm -r home/
+rm python.tar.gz
+
+
+```
+
+Try on just one file to start. My concern is the output file.
+
+Nope. Tons of errors. Try an interactive file.
+
+
+It's throwing errors because I tried to classify a list of contigs instead of a phylodist file from those contigs. Yikes. This is what I get for coding between talks on symposium day!
+
+
+```{bash, eval = F}
+
+#!/bin/bash
+#Classify contigs based on their gene's USEARCH hits provided by JGI
+
+name=$(basename $1)
+
+cat $name | while read line
+  do grep $line /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/GEODES006.assembled.phylodist;
+  done > $name.phylodist
+
+#add header
+echo $'locus_tag\thomolog_gene_oid\thomolog_taxon_oid\tpercent_identity\tlineage' | cat - $name.phylodist > temp.phylodist && mv temp.phylodist $name.phylodist
+
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+chmod +x classifyWphylodist_contigs.py
+
+python classifyWphylodist_contigs.py -pd $name.phylodist -pc .70 -hm 3 -conlen 18
+
+rm *phylodist
+rm *py
+rm -rf python/
+rm -r home/
+rm python.tar.gz
+
+
+```
+ Well I think that works. Just need to rename my input file to make getting the output easier and change my variable scheme. And keep in mind that it seems as if a substantial number of contigs have no good classification.
+ 
+ 
+New metaG_contig list
+
+```{bash, eval = F}
+mkdir contig_lists
+cat metagenome.txt | while read line;
+  do awk '{print substr($1,1,18)}' /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/$line.assembled.phylodist | sort | uniq >   /home/amlinz/$line-contigs.txt;
+  split -l 1500 -a 4 -d $line-contigs.txt contig_lists/$line-contigs;
+done
+
+# Make a list of files to run - only doing a couple to test
+ls contig_lists > metaG_contigs.txt
+```
+
+5144 files off to the races! Here's the new submits and executables
+
+02phylodist.sub
+```{bash, eval = F}
+# 02phylodist.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02phylodist_$(Cluster).log
+error = 02phylodist_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/02phylodist.sh
+arguments = $(contigs)
+output = 02phylodist_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,scripts/classifyWphylodist_contigs.py,contig_lists/$(contigs)
+transfer_output_files = $(contigs).contig.classification.perc70.minhit3.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 1GB
+#
+# run from list
+queue contigs from metaG_contigs.txt
+
+```
+
+02phylodist.sh
+```{bash, eval = F}
+
+#!/bin/bash
+#Classify contigs based on their gene's USEARCH hits provided by JGI
+
+cat $1 | while read line
+  do grep $line /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/GEODES006.assembled.phylodist;
+  done > $1.phylodist
+
+#add header
+echo $'locus_tag\thomolog_gene_oid\thomolog_taxon_oid\tpercent_identity\tlineage' | cat - $1.phylodist > temp.phylodist && mv temp.phylodist $1.phylodist
+
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+chmod +x classifyWphylodist_contigs.py
+
+python classifyWphylodist_contigs.py -pd $1.phylodist -pc .70 -hm 3 -conlen 18
+
+rm *phylodist
+rm *py
+rm -rf python/
+rm -r home/
+rm python.tar.gz
+```
+
+####2017-09-06
+
+The phylodist jobs ran overnight and look good! But 1 job was held - GEODES006-contigs0873. When I was running the full files, GEODES006 kept failing and I suspected it was due to one line. Is this the issue? Will boot into interactive mode to try and get this one working.
+
+```{bash, eval = F}
+cat GEODES006-contigs0873 | while read line
+  do grep $line /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/GEODES006.assembled.phylodist;
+  done > GEODES006-contigs0873.phylodist
+  
+echo $'locus_tag\thomolog_gene_oid\thomolog_taxon_oid\tpercent_identity\tlineage' | cat - GEODES006-contigs0873.phylodist > temp.phylodist && mv temp.phylodist GEODES006-contigs0873.phylodist
+
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+chmod +x classifyWphylodist_contigs.py
+
+python classifyWphylodist_contigs.py -pd GEODES006-contigs0873.phylodist -pc .70 -hm 3 -conlen 18
+
+#Here's the error: File "classifyWphylodist_contigs.py", line 34, in <module>
+#    "lineage column has too many or two few ';' seps"
+# AssertionError: lineage column has too many or two few ';' seps
+#Looks like the last line was cutoff - only has 6 ; fields. 
+#I looked up the gene hit number - the IMG classification only has 6 fields. A strain but no species. Interesting.
+#I'm going to make a dummy species field in nano of Curvibacter;sp;Curvibacter PAE-UM
+
+```
+
+It worked! I'm going to try copying these to gluster so I don't have to rerun. Should change this in the original file, or check that it didn't get truncated. 
+
+Was not truncated, at least from my hard drive to CHTC. Could have happened in Globus but unlikely.
+
+Got the new file into my home directory. Now concat by metagenome.
+
+```{bash, eval = F}
+mkdir phylodist_results
+cat GEODES005-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES005.contig.classification.perc70.minhit3.txt
+
+cat GEODES006-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES006.contig.classification.perc70.minhit3.txt
+
+cat GEODES057-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES057.contig.classification.perc70.minhit3.txt
+
+cat GEODES058-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES058.contig.classification.perc70.minhit3.txt
+
+cat GEODES117-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES117.contig.classification.perc70.minhit3.txt
+
+cat GEODES118-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES118.contig.classification.perc70.minhit3.txt
+
+
+```
+
+I'm on fire! Time to take a break to get my PCR stuff ready. Then I'll download these and run the R summary script so that I can update Trina and Sarah on the results.
+
+
+####2017-09-07
+
+Time to rename genes in the JGI files and add them to my DAG. I'll steal the code from 03ref_MAGs_SAGs and modify it, testing interactively.
+
+05metagenomes.sh
+```{bash, eval = F}
+#!/bin/bash
+#Rename genes to include relevant info from the gff file, then extract a fasta of only coding regions
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#no top of file characters
+grep -v "##\|#!" /mnt/gluster/amlinz/metagenome_assemblies/gff/$1.assembled.gff > bottom_of_file.txt #take headers off the top of the file
+
+awk -F'\t' -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt #split by first 8 columns - metagenome assembly has issue with whitespace in the fields.
+awk -F'\t' '{print $9}' bottom_of_file.txt > part2.txt #put the last of column of tags in its own file
+awk -F ";" '{print $2}' part2.txt > locust.txt #These files have the relevant info in locustag instead of id
+awk '{print substr($1,11)}' locust.txt > IDS.txt
+# from product name file
+while read line;
+  do grep $line /mnt/gluster/amlinz/metagenome_assemblies/product_names/$1.assembled.product_names;
+  done < IDS.txt > gene.txt
+awk -F'\t' '{print $2}' gene.txt > product.txt
+
+rows=$(wc -l bottom_of_file.txt | awk '{print $1}')
+yes $1 | head -n $rows > genome.txt
+#look up phylogeny and make that column, too
+
+sed -i -e 's/^$/NA/' contigs.txt
+while read line;
+  do line2=`grep -wF "$line" GEODES005.contig.classification.perc70.minhit3.txt`;
+  [ ! -z "$line2" ] && echo $line2 || echo "NA   No_classification"
+  done < contigs.txt > class.txt
+  
+awk '{print $2}' class.txt > classification.txt
+
+#add the ID tag back in
+sed -i -e 's/^/ID=/' IDS.txt
+
+awk -F'\t' '{print $4}' bottom_of_file.txt > start.txt #get the gene start location
+paste -d "\t" part1.txt IDS.txt > cat1.txt #paste first 8 columns to ID tag
+paste -d "_" cat1.txt start.txt > cat2.txt #paste start location to ID
+paste -d "_" cat2.txt genome.txt > cat3.txt #paste genome to ID
+paste -d "_" cat3.txt classification.txt > cat4.txt #paste phylogeny to ID
+paste -d "_" cat4.txt product.txt > new.gff #paste product name to ID
+
+#Fix the strand issue in the assemblies
+awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' new.gff > f1.gff
+
+#Add first comment line to the assemblies
+echo '##gff-version 3' | cat - f1.gff > temp && mv temp f1.gff
+
+awk -F'\t' -vOFS='\t' '{gsub(";", ":", $9); print}' f1.gff > temp && mv temp f1.gff
+
+gt gff3 -sort yes -tidy -retainids -o sorted_$1.gff f1.gff #clean up the the gff sorter
+
+
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile /mnt/gluster/amlinz/metagenome_assemblies/fastas/$1.assembled.fna -matchdescstart sorted_$1.gff >  CDS_$1.fna
+
+rm *tar.gz
+rm -r genometools
+rm *txt
+rm *gff
+
+```
+
+Some notes: I also need to send over my product names and new classifications. The classifications are small enough to send with the job, the product name and gff (and for sure the fna) need to be sent from gluster.
+Sarah mentioned not needing to copy things from gluster-just interact with them there-so I'll try that here.
+
+####2017-09-10
+
+Grepping the classifications out of my phylodist is going to take awhile, and this one I can easily split up and put back together. Will run a small chunk in the test interactive to make sure everything's working, then try splitting and concatenating. Will then need another script to format and sort the concatenate gff files.
+
+The above script works! I do really need to change my seps in the gene names. This is really confusing. I was also thinking I can run the merge concurrent with all the other types of genomes - no reason to merge this to merge it again.
+
+

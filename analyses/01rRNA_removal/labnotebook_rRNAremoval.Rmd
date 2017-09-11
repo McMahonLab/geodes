@@ -1385,4 +1385,13 @@ SCRIPT POST 00split_fastq /home/amlinz/scripts/path2splitfastqs.sh
 SCRIPT POST 01rRNA_removal /home/amlinz/scripts/cat_files.sh
 ```
 
-####2017-08-21
+####2017-09-06
+
+Finally I finished! The issue wasn't the code, it was the new file limit on Gluster. Long story short, 200 files does not cut if my input is 110, my output is 110, and I'd like to have 20 files for figuring out the phylodist classifications, and directories count against my file limit. I now have 400 files. Re-ran the 2nd portion of my files that got killed last time and backed those up on both my hard drive and the lakes drive. Before I delete unnecessary files, I'll run checksums to make sure everything transferred:
+
+```{bash, eval = F}
+
+```
+
+I'm checking the downloaded files from my PC using 7-Zip. Just checking the lakes drive ones, I assume that if they made it there uncorrupted via my hard drive, the ones on my hard drive are just fine.
+
