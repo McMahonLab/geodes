@@ -3393,4 +3393,184 @@ Grepping the classifications out of my phylodist is going to take awhile, and th
 
 The above script works! I do really need to change my seps in the gene names. This is really confusing. I was also thinking I can run the merge concurrent with all the other types of genomes - no reason to merge this to merge it again.
 
+####2017-09-12
 
+Today, I need to figure out how to split my gff files - by line number, probably - and then add the script to my DAG. I also need to check on the internal standard fasta. I think it's included in the refMAGsSAGs but I'm not 100% sure.
+
+yep, the standard ran successfully from the refMAGSAGS folder.
+
+Here's the script to split the metagenome gffs:
+split_metagenome_gffs.sh
+```{bash, eval = F}
+#!/bin/bash
+mkdir metaG_gffs
+cat metagenome.txt | while read line;
+  do ;split -l 5000 -a 4 -d /mnt/gluster/amlinz/metagenome_assemblies/gff/$line.assembled.gff metaG_gffs/;
+done
+#2500 should aim for about 1000 jobs per metagenome assembly, so 6000 total
+# Make a list of files to run - only doing a couple to test
+ls metaG_gffs > metaG_gffs.txt
+```
+
+05metagenome_assemblies.sh
+```{bash, eval = F}
+#!/bin/bash
+
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#no top of file characters
+grep "CDS" $1 > bottom_of_file.txt
+metaG=$(echo $1 | cut -c1-9)
+
+grep ";conf=" bottom_of_file.txt > bottom_of_file.1.txt
+grep -v ";conf=" bottom_of_file.txt > bottom_of_file.2.txt
+awk -F ";" '{print $4}' bottom_of_file.1.txt > locust.1.txt
+awk -F ";" '{print $2}' bottom_of_file.2.txt > locust.2.txt
+cat locust.1.txt locust.2.txt > locust.txt
+cat bottom_of_file.1.txt bottom_of_file.2.txt > bottom_of_file.txt
+
+awk -F'\t' -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt #split by first 8 columns - metagenome assembly has issue with whitespace in the fields.
+awk -F'\t' '{print $9}' bottom_of_file.txt > part2.txt #put the last of column of tags in its own file
+awk -F ";" '{print $2}' part2.txt > locust.txt #These files have the relevant info in locustag instead of id
+awk '{print substr($1,11)}' locust.txt > IDS.txt
+# from product name file
+while read line;
+  do grep -wF $line /mnt/gluster/amlinz/metagenome_assemblies/product_names/$metaG.assembled.product_names;
+  done < IDS.txt > gene.txt
+awk -F'\t' '{print $2}' gene.txt > product.txt
+
+rows=$(wc -l bottom_of_file.txt | awk '{print $1}')
+yes $metaG | head -n $rows > genome.txt
+#look up phylogeny and make that column, too
+
+while read line; do echo $line | cut -c1-18; done < IDS.txt > contigs.txt
+sed -i -e 's/^$/NA/' contigs.txt
+while read line;
+  do line2=`grep -wF "$line" /mnt/gluster/amlinz/phylodist_results/$metaG.contig.classification.perc70.minhit3.txt`;
+  [ ! -z "$line2" ] && echo $line2 || echo "NA   No_classification"
+  done < contigs.txt > class.txt
+  
+awk '{print $2}' class.txt > classification.txt
+
+#add the ID tag back in
+sed -i -e 's/^/ID=/' IDS.txt
+
+awk -F'\t' '{print $4}' bottom_of_file.txt > start.txt #get the gene start location
+paste -d "\t" part1.txt IDS.txt > cat1.txt #paste first 8 columns to ID tag
+paste -d "," cat1.txt start.txt > cat2.txt #paste start location to ID
+paste -d "," cat2.txt genome.txt > cat3.txt #paste genome to ID
+paste -d "," cat3.txt classification.txt > cat4.txt #paste phylogeny to ID
+paste -d "," cat4.txt product.txt > new.gff #paste product name to ID
+
+#Fix the strand issue in the assemblies
+awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' new.gff > f1.gff
+
+#Add first comment line to the assemblies
+echo '##gff-version 3' | cat - f1.gff > temp && mv temp f1.gff
+
+awk -F'\t' -vOFS='\t' '{gsub(";", ":", $9); print}' f1.gff > temp && mv temp f1.gff
+
+gt gff3 -sort yes -tidy -retainids -o sorted_$1.gff f1.gff #clean up the the gff sorter
+
+
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile /mnt/gluster/amlinz/metagenome_assemblies/fastas/$metaG.assembled.fna -matchdescstart sorted_$1.gff >  CDS_$1.fna
+
+rm *tar.gz
+rm -r genometools
+rm *txt
+rm *gff
+rm $1
+```
+
+05metagenome_assemblies.sub
+```{bash, eval = F}
+# 05metagenome_assemblies.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 05metagenome_assemblies_$(Cluster).log
+error = 05metagenome_assemblies_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/05metagenome_assemblies.sh
+arguments = $(samplename)
+output = 05metagenome_assemblies_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,/home/amlinz/metaG_gffs/$(samplename)
+transfer_output_files = CDS_$(samplename).fna
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from /home/amlinz/testmetaG_gffs.txt
+
+
+```
+
+1st three test files worked great! One more sticking point before I start the whole DAG - the seperator values. I'd been using _ but realized there's one in the metagenome assembly names. ; is out, that's the gff sep. So is :, I switched that in for the phylogeny.
+
+Nevermind, only 1/3 of the files finished. Why? 
+One failed due to:
+gt gff3: error: the multi-feature with ID "_1_GEODES0050001_No_classification_" on line 2815 in file "f1.gff" has a different sequence id than its counterpart on line 2643
+
+and the other says:
+gt gff3: error: token "ID" on line 3703 in file "f1.gff" does not contain exactly one '='
+
+both of which resulted in sorted.gff being empty. The first problem could probably be solved by keeping only CDS regions - maybe that would solve the second as well. For reference, before grepping for CDS lines, the output of GEODES0050000 has 9854 lines and 4927 sequences.
+
+that worked! Same gene count for 0000 as before, and the others all have genes too. Also sped it up quite nicely. Last challenge, I'm going to try commas for the sep. I think this should only potentially popup in the product names and I can deal with that. Would make loading as a csv simple. Testing on the three metagenome assembly files to see if genometools has any issue with that.
+
+Looks good! only issue that I didn't notice before is that instead of "NO CLASSIFICATION" it just says "NO", which is actually kind of funny and gets the point across. I'll leave it!
+
+I'm going to run this on the full metaG list just to make sure there are no more oopsies, then change _ to , in the other genome types and run the whole DAG.
+
+Still some failing due to mismatches on lines. GEODEs0050005 is one of those - booting into interactive mode to diagnose. Looks like for some reason, some gene names are lost in the IDS tag, and when the start is the same by coincidence, gt interprets it as the same gene. So I need to fix blank lines in the IDS tag. 
+
+There are some extra lines saying "conf=" and "gc=" in positions 2 and 3, so taht the locus tag is in position 4. These lines are CDS regions that look normal. How can I remove or skip these regions?
+
+```{bash, eval = F}
+#old awk -F ";" '{print $2}' part2.txt > locust.txt
+awk -F ";" '$2 ~ /conf/ {print $4}' <part2.txt> || awk -F ";" '{print $2}' part2.txt > locust.txt
+
+awk -F ";" '{
+if ($2 == "conf"*) 
+  print $4; 
+else 
+  print $2;}' testpart2.txt
+
+cat testpart2.txt | while read line; do
+  hit=$(echo $line | grep "conf");
+  if [ -z "$hit" ]
+    then
+    awk -F ";" '{print $2}' $line
+  else
+    awk -F ";" '{print $4}' $line
+  fi;
+  done > testlocust.txt
+  
+grep ";conf=" bottom_of_file.txt > bottom_of_file.1.txt
+grep -v ";conf=" bottom_of_file.txt > bottom_of_file.2.txt
+awk -F ";" '{print $4}' bottom_of_file.1.txt > locust.1.txt
+awk -F ";" '{print $2}' bottom_of_file.2.txt > locust.2.txt
+cat locust.1.txt locust.2.txt > locust.txt
+cat bottom_of_file.1.txt bottom_of_file.2.txt > bottom_of_file.txt
+
+# re-run all following parsing to maintain order
+```
+
+New issue - too many product names. How did this happen? Some IDS must have duplicate entries in the product names file. 
+
+Update: I forgot to include grep -w, which matches only whole words. Problem solved.
