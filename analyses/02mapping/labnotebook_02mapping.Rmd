@@ -3423,16 +3423,11 @@ export PATH=$(pwd)/genometools/bin:$PATH
 grep "CDS" $1 > bottom_of_file.txt
 metaG=$(echo $1 | cut -c1-9)
 
-grep ";conf=" bottom_of_file.txt > bottom_of_file.1.txt
-grep -v ";conf=" bottom_of_file.txt > bottom_of_file.2.txt
-awk -F ";" '{print $4}' bottom_of_file.1.txt > locust.1.txt
-awk -F ";" '{print $2}' bottom_of_file.2.txt > locust.2.txt
-cat locust.1.txt locust.2.txt > locust.txt
-cat bottom_of_file.1.txt bottom_of_file.2.txt > bottom_of_file.txt
 
 awk -F'\t' -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt #split by first 8 columns - metagenome assembly has issue with whitespace in the fields.
 awk -F'\t' '{print $9}' bottom_of_file.txt > part2.txt #put the last of column of tags in its own file
-awk -F ";" '{print $2}' part2.txt > locust.txt #These files have the relevant info in locustag instead of id
+awk -F";" '{for(i=1;i<=NF;i++){if ($i ~ /locus_tag=*/){print $i}}}' part2.txt > locust.txt
+#These files have the relevant info in locustag instead of id
 awk '{print substr($1,11)}' locust.txt > IDS.txt
 # from product name file
 while read line;
@@ -3574,3 +3569,18 @@ cat bottom_of_file.1.txt bottom_of_file.2.txt > bottom_of_file.txt
 New issue - too many product names. How did this happen? Some IDS must have duplicate entries in the product names file. 
 
 Update: I forgot to include grep -w, which matches only whole words. Problem solved.
+
+Still failed runs - looks like some have "codon =" in the 2nd postion, locus tag in the third. Others are less clear. Is there a way I can split up the columns and keep only the one that says locus tag, no matter what column it's in?
+
+```{bash, eval = F}
+head -15 metaG_gffs/GEODES0050039 > test.txt
+awk -F'\t' -v OFS='\t' '{print $9}' test.txt > tags.txt
+awk -F ";" '{print $1,$2,$3,$4,$5,$6,$7,$8}' tags.txt > splittags.txt
+
+#or
+awk -F";" '{for(i=1;i<=NF;i++){if ($i ~ /locus_tag=*/){print $i}}}' tags.txt
+
+#2nd one works!
+```
+
+CRISPR strikes again! Add the grep CDS line from the metagenome assembly to the other two.
