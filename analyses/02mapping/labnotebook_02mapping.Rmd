@@ -3584,3 +3584,74 @@ awk -F";" '{for(i=1;i<=NF;i++){if ($i ~ /locus_tag=*/){print $i}}}' tags.txt
 ```
 
 CRISPR strikes again! Add the grep CDS line from the metagenome assembly to the other two.
+
+
+####2017-09-14
+
+Looks like about 1/3 of metaG pieces failed :( Here's how I'm checking:
+```{bash, eval = F}
+#List empty files
+find CDS_GEODES*fna -type f -size 0 | wc -l
+
+#list non empty files
+find CDS_GEODES*fna -type f ! -size 0 | wc -l
+
+#move non empty files into the results folder
+find CDS_GEODES*fna -type f ! -size 0 | while read line; do mv $line CDS_fastas/; done
+
+#make a list of emtpy files
+ls CDS_GEODES*fna  > tryagain_metaGs.txt
+sed -i 's/CDS_//' tryagain_metaGs.txt
+sed -i 's/.fna//' tryagain_metaGs.txt
+
+```
+
+Modify the submit file for this. I've only looked through a handful of the +1000 error messages, but they seem to be a) 32 bit instead of 64 bit system b) ran out of RAM c) I have no idea. But I can address the first two, at least. Added "(Arch == "X86_64")" to the submit, upped the specs to 4GB hard drive and 16GB RAM. I also think there may be an issue with programs continually writing output over each other in gluster - I'll have them each copy the fasta file over instead. Zipping for the transfer.
+
+####2017-09-15
+Looks like 1/5 of test files worked? What are the errors of the other 4?
+- gt extractfeat: error: no description matched sequence ID 'Ga0164295_10083215'
+- gt extractfeat: error: no description matched sequence ID 'Ga0164295_10085076'
+- gt extractfeat: error: no description matched sequence ID 'Ga0164295_10086941'
+- gt extractfeat: error: no description matched sequence ID 'Ga0164295_10088832'
+
+From github, the code that produces this error is:
+
+Name "gt inlineseq_add (missing sequence)"
+Keywords "gt_inlineseq_add gt_inlineseq"
+Test do
+  run "cp #{$testdata}fasta_seq.fas invalid.fas"
+  run_test "#{$bin}gt inlineseq_add -seqfile invalid.fas -matchdesc #{$testdata}eden.gff3", :retval => 1
+  grep(last_stderr, "no description matched sequence ID")
+end
+
+Still unclear. Are those gene names in the gff files or the fasta?
+They are in the gff files, but missing from the fasta file. That is odd. Maybe the file got truncated in downloading? Check the lakes drive version. Checksum looks fine - maybe it got corrupted during the first download? Will try re-downloading. Meanwhile, I'll try running the full list and seeing what else fails :/
+
+####2017-09-16
+
+Not everything failed! So upping the RAM, restraining computers to 64 bit, and copying the gluster files over helped something. 271 files worked, 873 did not. My hypothesis is that the ones that failed are from GEODES006, which has missing sequences according to the gt errors. And it's true! So I'll move the successful files over, remake the list of files that failed, and checksum my hard drive copy. If that matches what's on gluster, I'll re-download the fasta file and try again. 
+
+Re run the phylodist steps - remember GEODES006 had that funky Curvibacter line. Was it the truncated locaton?
+Grep says it looks that way! There are lots of curvibacter lines and the sp. field is repeated twice to make 8 fields total. Move on to splitting, run phylodist, and concatenate.
+
+```{bash, eval = F}
+mkdir contig_lists
+cat metagenome.txt | while read line;
+  do awk '{print substr($1,1,18)}' /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/$line.assembled.phylodist | sort | uniq >   /home/amlinz/$line-contigs.txt;
+  split -l 1500 -a 4 -d $line-contigs.txt contig_lists/$line-contigs;
+done
+
+# Make a list of files to run - only doing a couple to test
+ls contig_lists > metaG_contigs.txt
+
+
+condor_submit submits/02phylodist.sub
+#if no errors
+mkdir phylodist_results
+cat GEODES005-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES005.contig.classification.perc70.minhit3.txt
+
+cat GEODES006-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES006.contig.classification.perc70.minhit3.txt
+
+
+```
