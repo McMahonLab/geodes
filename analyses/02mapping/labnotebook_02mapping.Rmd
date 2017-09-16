@@ -3648,10 +3648,14 @@ ls contig_lists > metaG_contigs.txt
 
 condor_submit submits/02phylodist.sub
 #if no errors
-mkdir phylodist_results
-cat GEODES005-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES005.contig.classification.perc70.minhit3.txt
 
 cat GEODES006-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES006.contig.classification.perc70.minhit3.txt
 
+
+```
+
+I want to redo all of the GEODES006 gff parts.
+
+```{bash, eval = F}
 
 ```
