@@ -1,0 +1,31 @@
+# 07nrdb_gff.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 07nrdb_gff_$(Cluster).log
+error = 07nrdb_gff_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/07nrdb_gff.sh
+output = 07nrdb_gff_$(Cluster).out
+arguments=$(thing)
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT_OR_EVICT
+transfer_input_files = /home/amlinz/splitfastaheaders/$(thing)
+transfer_output_files = $(thing)-nrdb.gff
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 2GB
+#
+# run from list
+queue thing from splitfastaheaders.txt

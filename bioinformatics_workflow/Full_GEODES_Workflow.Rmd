@@ -1,0 +1,931 @@
+---
+title: "Full GEODES Workflow"
+author: "Alex Linz"
+date: "April 25, 2017"
+output: html_document
+---
+
+This document contains detailed instructions on how to run the full GEODES analysis workflow, from quality-filtered metatranscriptomic file to a table of hits per gene. See the directories in analyses/ for lab notebooks and scripts.
+
+Last updated 2017-06-16
+
+# rRNA removal
+
+####Goal of this analysis
+
+To remove ribosomal reads from the metatranscriptomes. We used an rRNA removal kit before sequencing, but 50-70% of the reads in the sample are still rRNA. We're not interested in these biased reads with little information about gene expression. Luckily the samples are big enough that 30-50% of reads is still plenty to look at non-rRNA expression.
+
+####Approach
+
+Starting with the quality filtered fastq files provided by the JGI through the Genome Portal, I will use Sortmerna to separate rRNA and non-rRNA reads into two separate files. I'll save both, but use the non-rRNA reads for downstream analyses.
+
+#### A quick word on high-throughput computing
+
+Because of the large amount of data from this project, I'm running my analyses in a high-throughput computing environment. I submit "jobs" (bits of analyses) from my "submit node" (computer where my home directory is located) and these jobs are sent off to open processors ("execute nodes") around campus. There are two files needed for this - ".sub" files state how many jobs to run, where to find the scripts, and what specs are needed. These are all stored in submits/ in my home folder. The executables, ".sh", are bash scripts that run the actual analysis, found in executables/. The more jobs I can split a task into, the more efficiently it will run - however, sometimes combining the results of many split jobs is prohibitively difficult. In some steps of this workflow, I've chosen to split each sample into many smaller files, while others I've submit one job per sample or even one job for all samples at once. This choice depends on the computational power required by each job and the ease of programming splitting and concatenation scripts.
+
+Running my analyses as many separate jobs presents issues for installation - I need a portable, easy-to-use file I can open and immediately start running a bioinformatics program on a new computer. This means the program can't have any dependencies, and it can't go downloading something from the internet every time I want to run a job. To solve this, I've created tarballs containing a pre-installed version of a program that can be unzipped with executables and databases ready to go. This also means I can be sure that my jobs are using the same version of programs like Python!
+
+UW-Madison Center for High-Throughput Computing (CHTC) runs on HTCondor, so all commands for submitting, checking, or removing jobs are from this program. If you want to run our workflow NOT in massive parallel, you can still use the bash (.sh) scripts. They accept one argument that is the input file name, path, or part of an input file name. So if you had one sample named "My_Favorite_Sample.fastq" you could run:
+
+```{bash, eval = F}
+./01rRNA_removal.sh /Path/To/My_Favorite_Sample.fastq
+```
+
+and receive files "My_Favorite_Sample_rRNA.fastq" and "My_Favorite_Sample_nonrRNA.fastq", as long as you had the program tarball sortmerna-2.1-linux-64.tar.gz in the same directory as 01rRNA_removal.sh. If you want to run several samples in sequence, you could use a for loop; if you have access to multiple threads, you could use a program to run a handful of samples in parallel on one computer.
+
+Happy Coding!
+
+## Most recent workflow. 
+####Use this if you want to replicate our protocol. Updated 2017-03-15
+
+First, a word on where all of our files are located:
+
+- We run things through UW-Madison's Center for High Throughput Computing, specifically on submit-3.chtc.wisc.edu. I submit jobs and store short-term, small files on this submit node in /home/amlinz/
+- The actual data files are still way too large to be stored on the submit node. Instead, I have a gluster account where I keep the data files - from submit-3.chtc.wisc.edu, it is located at /mnt/gluster/amlinz. This means that instead of transferring data files with my executable in the submit node, I instead wrote a line in the executable that says "go to gluster and download this file." Therefore, I can only run my programs on computers with access to gluster. Also, please note that gluster is not for long-term storage.
+- Backup copies of data and results are stored on the GEODES external hard drive.
+
+All the code below is run from my submit node, and frequently references my gluster account. Keep this in mind if you are trying to replicate the workflow! Also, if you copied the .sh and .sub files directly from this github repo, you'll need to run "dos2unix" on them to get rid of my silly Windows line endings before running.
+
+1. The first thing we need to do is split the giant fastq files into many smaller pieces. I'm starting with the reads that went through quality control at the JGI (extension .filter-MTF.fastq), located in /mnt/gluster/amlinz/GEODES_metaT.
+
+From the submit node:
+
+```{bash, eval = F}
+# Make a new directory for the split files
+mkdir /mnt/gluster/amlinz/GEODES_metaT_split/
+# Alternatively, if you've done this before, just make sure this directory is empty
+# rm /mnt/gluster/amlinz/GEODES_metaT_split/*
+
+# Make a list of samples to run
+for file in /mnt/gluster/amlinz/GEODES_metaT/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > samplenames.txt
+
+# Don't want to run all of your samples just yet? The line below will keep just the first 3 files in the list.
+# head -3 samplenames.txt > test_samplenames.txt; mv test_samplenames.txt samplenames.txt
+
+# Double check!
+cat samplenames.txt
+
+# You should have both 00split_fastq.sub and 00split_fastq.sh in your home folder. The .sub file references the .sh file.
+# I've set my executable to split files into 1,000,000 reads each, but you can change that.
+
+# Check that your submit and executable files are referencing the right places, then submit your jobs:
+condor_submit submits/00split_fastq.sub
+
+# Check status with this command:
+condor_q
+# For a more detailed report of computers available while your job is idle:
+# condor_q -analyze
+# Something stuck or not going well? Remove jobs with:
+# condor_rm -all, condor_rm -amlinz or condor_rm -8222164 (job id)
+
+# Check to see if there's anything in the error file
+ls -ltr 00*.err
+
+# Check to make sure the output is what you wanted:
+ls -ltr /mnt/gluster/amlinz/GEODES_metaT_split/
+find /mnt/gluster/amlinz/GEODES_metaT_split/ -type f
+  
+```
+
+Here are the scripts used:
+00splitfastqs.sub
+```{bash, eval = F}
+# 00split_fastq.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 00split_fastq_$(Cluster).log
+error = 00split_fastq_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/00split_fastq.sh
+arguments = $(sample)
+output = 00split_fastq_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 2 GB
+request_disk = 12 GB
+#
+# Submit jobs
+queue sample from samplenames.txt
+
+```
+
+00splitfastqs.sh
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_metaT/$1.filter-MTF.fastq.gz .
+gzip -d $1.filter-MTF.fastq.gz
+
+sed -i '/^$/d' $1.filter-MTF.fastq
+
+maxreads=$((`wc -l < $1.filter-MTF.fastq` / 8 - 1))
+startpoints=$(seq 0 500000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 499999));
+  bbmap/getreads.sh in=$1.filter-MTF.fastq id=$num-$endpoint out=$1_filter-MTF_$endpoint.fastq overwrite=T;
+  done
+
+rm $1.filter-MTF.fastq
+gzip $1*
+cp $1* /mnt/gluster/amlinz/GEODES_metaT_split
+rm $1*
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+```
+
+
+2. Sort that RNA! I'm using sortmerna-2.1-linux-64.tar.gz from http://bioinfo.lifl.fr/RNA/sortmerna/ . Make sure to have the program tarball in your home folder. I'm using all of the provided databases as my alignment references.
+
+```{bash, eval = F}
+# Make some directories to store the output, or alternatively, empty these directories as above:
+mkdir /mnt/gluster/amlinz/GEODES_nonrRNA_split/
+mkdir /mnt/gluster/amlinz/GEODES_rRNA_split/
+
+# Make a file that contains the paths to all of the file parts:
+find /mnt/gluster/amlinz/GEODES_metaT_split/ -type f > path2splitfastqs.txt
+cat path2splitfastqs.txt
+
+# Submit the rRNA sorting jobs
+condor_submit submits/01rRNA_removal.sub
+
+#Bonus: my jobs got stuck in limbo. Here's how CHTC Help recommend fixing.
+# Check to see where the jobs are:
+condor_q -run -nobatch
+# My stuck files were all on the same server, so likely a problem with that execute node, not my script.
+# Move stuck jobs to hold and then restart:
+condor_hold amlinz
+condor_release amlinz
+
+#On my full run, I ran 7,987 jobs from 85 original fastq files. 7,986 finished in 4.5 hours. 1 got stuck and produced error to that effect.
+
+# Check the output when all jobs have finished:
+ls -ltr /mnt/gluster/amlinz/GEODES_nonrRNA/
+ls -ltr /mnt/gluster/amlinz/GEODES_rRNA/
+  
+# Are the error files empty?
+ls -ltr 01*.err
+```
+
+01rRNA_removal.sub
+```{bash, eval = F}
+
+# 01rRNA_removal.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 01rRNA_removal_$(Cluster).log
+error = 01rRNA_removal_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/01rRNA_removal.sh
+arguments = $(fastqfile)
+output = 01rRNA_removal_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/sortmerna-2.1-linux-64.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 2GB
+request_disk = 5GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue fastqfile from path2splitfastqs.txt
+
+
+```
+
+01rRNA_removal.sh
+```{bash, eval = F}
+#!/bin/bash
+#Sort metatranscriptomic reads into rRNA and non-rRNA files
+
+#Transfer the fasta file from gluster
+cp $1 ./
+name=$(basename $1 |cut -d'.' -f1)
+
+#Unzip files
+tar -xvf sortmerna-2.1-linux-64.tar.gz
+gzip -d $name.fastq
+cd sortmerna-2.1-linux-64
+
+#Index the rRNA databases
+./indexdb_rna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac-16s-db:\./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db
+
+#Run the sorting program
+./sortmerna --ref ./rRNA_databases/silva-bac-16s-id90.fasta,./index/silva-bac-16s-db:./rRNA_databases/silva-bac-23s-id98.fasta,./index/silva-bac-23s-db:./rRNA_databases/silva-arc-16s-id95.fasta,./index/silva-arc-16s-db:./rRNA_databases/silva-arc-23s-id98.fasta,./index/silva-arc-23s-db:./rRNA_databases/silva-euk-18s-id95.fasta,./index/silva-euk-18s-db:./rRNA_databases/silva-euk-28s-id98.fasta,./index/silva-euk-28s:./rRNA_databases/rfam-5s-database-id98.fasta,./index/rfam-5s-db:./rRNA_databases/rfam-5.8s-database-id98.fasta,./index/rfam-5.8s-db --reads ../${name}.fastq  --fastx --aligned ${name}_rRNA --other ${name}_nonrRNA --log -v -m 1 -a 1
+
+#Let's unpack the parameters I've chosen. --ref refers to the databases I've just indexed. --reads says use the fastq file provided. --fastx means I would like a fastq file as output. --aligned is the name for rRNA reads, --other is the name for non-rRNA reads. --log says compute statistics about the run. -v means verbose. I've left the alignment setting at the default, --best. There's a faster setting, but I'm hoping I won't need it. And finally, -m tells sortmerna it can use 3GB of RAM to hold each piece of the fastq file as it processes. Hopefully that will give it a fighting chance.
+#Move the output files back to gluster
+mv ${name}_rRNA.fastq /mnt/gluster/amlinz/GEODES_rRNA_split/
+mv ${name}_nonrRNA.fastq /mnt/gluster/amlinz/GEODES_nonrRNA_split/
+
+#Remove files
+cd ..
+rm ${name}.fastq
+rm sortmerna-2.1-linux-64.tar.gz
+rm -r sortmerna-2.1-linux-64
+
+```
+
+
+3. Put everything back together. This is a pretty simple program - all it does it copy files generated from the same sample, concatenate them into a single file, count the number of lines, zip it up, and send it back to gluster.
+
+```{bash, eval = F}
+# We'll be using samplenames.txt again as our reference file.
+
+# Submit the jobs:
+condor_submit submits/02cat_files.sub
+
+# You'll get a file back in your home folder that has the number of lines in both the rRNA and nonrRNA files. Concatenate these into a single file:
+cat *_rRNA_results.txt > GEODES_rRNA_ratios.txt
+cat GEODES_rRNA_ratios.txt
+
+# Check the output!
+ls -ltr /mnt/gluster/amlinz/GEODES_nonrRNA_concat/
+ls -ltr /mnt/gluster/amlinz/GEODES_rRNA_concat/
+  
+# Are the error files empty?
+ls -ltr 02*.err
+```
+
+02cat_files.sub
+```{bash, eval = F}
+
+# 02cat_files.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 02cat_files_$(Cluster).log
+error = 02cat_files_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/02cat_files.sh
+arguments = $(sample)
+output = 02cat_files_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files =
+#transfer_output_files = $(sample)_rRNA_results.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 10GB
+request_disk = 10GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue sample from samplenames.txt
+
+```
+
+
+02cat_files.sh
+```{bash, eval = F}
+#!/bin/bash
+#Concatenate sortmerna output
+
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_split/$1*_nonrRNA.fastq ./
+cat $1*_nonrRNA.fastq > $1_nonrRNA.fastq
+nonrRNAcount=$(wc -l $1_nonrRNA.fastq)
+gzip $1_nonrRNA.fastq
+mv $1_nonrRNA.fastq.gz /mnt/gluster/amlinz/GEODES_nonrRNA_concat/
+rm *_nonrRNA.fastq
+
+cp /mnt/gluster/amlinz/GEODES_rRNA_split/$1*_rRNA.fastq ./
+cat $1*_rRNA.fastq > $1_rRNA.fastq
+rRNAcount=$(wc -l $1_rRNA.fastq)
+gzip $1_rRNA.fastq
+mv $1_rRNA.fastq.gz /mnt/gluster/amlinz/GEODES_rRNA_concat/
+rm *_rRNA.fastq
+
+echo ${nonrRNAcount},${rRNAcount} > $1_rRNA_results.txt
+```
+
+
+4. Clean up after yourself. Gluster is not meant for long term storage of files! Download these somewhere else and delete the copies on gluster once you're confident in the analysis.
+
+On my computer:
+Open up WinSCP and log into submit-3.chtc.wisc.edu. Download the GEODES_rRNA_ratios.txt file to my github repo, geodes/analyses/01rRNA_removal/. Download the most recent versions of the scripts used here while you're at it. I like to take a quick look at the results in R using the following code:
+
+```{r, echo = T, fig.width = 4, fig.height = 10, eval = F}
+library(ggplot2)
+rRNA_ratio <- read.table("C:/Users/Alex/Desktop/geodes/analyses/01rRNA_removal/GEODES_rRNA_ratios.txt", header = F, sep = ",", colClasses = c("character"))
+split1 <- strsplit(rRNA_ratio$V1, " ")
+split2 <- strsplit(rRNA_ratio$V2, " ")
+nonrRNA_count <- c()
+rRNA_count <- c()
+samplenames <- c()
+for(i in 1:length(split1)){
+  nonrRNA_count[i] <- split1[[i]][1]
+  rRNA_count[i] <- split2[[i]][1]
+  samplenames[i] <- substr(split2[[i]][2], start = 1, stop = 9)
+}
+nonrRNA_count <- as.numeric(nonrRNA_count)/4
+rRNA_count <- as.numeric(rRNA_count)/4
+percent_rRNA <- rRNA_count/(rRNA_count + nonrRNA_count) * 100
+rRNA_ratios <- data.frame(samplenames, percent_rRNA)
+ggplot(rRNA_ratios, aes(x = samplenames, y = percent_rRNA)) + theme_bw() + geom_bar(stat = "identity") + coord_flip()
+
+```
+
+On submit-3.chtc.wisc.edu:
+
+```{bash, eval = F}
+# Delete all the .log, .out, and .err files in your home directory
+rm *.err
+rm *.log
+rm *.out
+
+# Remove the rRNA ratios report and the sample name files
+rm *.txt
+
+```
+
+Congratulations! You now have files of just nonrRNA reads from your metatranscriptomes, and are ready to run the next step.
+
+##Mapping
+
+So far, we've removed rRNA reads from the metatranscriptomes (see ../01rRNA_removal/). What I need to do next is map those reads to our database of reference genomes. The issue is that the database is enormous. Splitting the files doesn't work as we want to perform competitive mapping (report best hit from entire database only). To solve this issue, I'm building the database index once, storing it in gluster, and then referencing all other mapping jobs to this index. 
+
+1. First things first, build that database. Right now I'm just using the metagenome assemblies, but soon I hope to add the reference MAGs and SAGs from previous projects and the new SAGs we're sequencing.
+
+Right now the reference files I'm using are located in /mnt/gluster/amlinz/metagenome_assemblies/.
+
+Set up system and then run the build index script :
+```{bash, eval = F}
+mkdir /mnt/gluster/amlinz/GEODES_mapping_results/
+condor_submit submits/04build_index.sub
+
+#Check for errors
+ls -ltr 04*.err
+
+#Check that the output is in gluster
+ls -lh /mnt/gluster/amlinz
+```
+
+
+Building the mapping database and its index. Download BBMap here: https://sourceforge.net/projects/bbmap/
+
+BBMap doesn't have a complicated install - just unzip it and go. Note that I'm using the flags -Xmx30g (ups Java's RAM limit from 20 to 30) and -usemodulo=T (increases speed at the cost of some sensitivity). FYI, this is a really slow program. Mine took about 2 days to complete.
+
+04build_index.sh:
+```{bash, eval = F}
+#!/bin/bash
+#Build a re-usable mapping index
+cat /mnt/gluster/amlinz/metagenome_assemblies/fastas/*.fna > mapping_database.fna
+
+tar -xvzf BBMap_36.99.tar.gz
+
+#Unzip bbmap and build the index
+bbmap/bbmap.sh ref=mapping_database.fna usemodulo=T -Xmx30g
+
+# make ref/ a tarball and move to gluster
+tar czvf ref.tar.gz ref/
+
+cp ref.tar.gz /mnt/gluster/amlinz/
+rm ref.tar.gz
+gzip mapping_database.fna
+cp mapping_database.fna.gz /mnt/gluster/amlinz
+rm mapping_database.fna.gz
+
+```
+
+04build_index.sub:
+```{bash, eval = F}
+# 04build_index.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04build_index_$(Cluster).log
+error = 04build_index_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/04build_index.sh
+output = 04build_index_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 30GB
+request_disk = 60GB
+#
+#
+queue
+```
+
+2. Run the mapping step. I'll need samtools to convert from SAM to BAM format (BAM is compressed and better for storage), so first order of business is to build the samtools installation tarball in an interactive session.
+
+install_samtools.sub:
+```{bash, eval = F}
+
+#install_samtools.sub
+#
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines.
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = zipped/samtools-1.3.1.tar.bz2
+
+# It's still important to request enough computing resources. The below
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 10GB
+
+queue
+
+```
+
+
+```{bash, eval = F}
+condor_submit -i install_samtools.sub
+# Wait for job to start
+tar xvfj samtools-1.3.1.tar.bz2
+cd samtools-1.3.1
+make
+make prefix=../samtools install
+cd ..
+ls samtools
+#I've got a nice bin file in there now!
+tar czvf samtools.tar.gz samtools/
+ls
+exit
+
+#Move samtools to the zipped/ folder
+mv samtools.tar.gz zipped/samtools.tar.gz
+```
+
+Make a list of files to run, then start the jobs, then check the output.
+
+```{bash, eval = F}
+ls /mnt/gluster/amlinz/GEODES_nonrRNA_concat/ > path2mappingfastqs.txt
+condor_submit submits/05mapping.sub
+
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_results
+ls -ltr 05*err
+```
+
+05mapping.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+#Map metatranscriptome reads to my pre-indexed database of reference genomes
+#Transfer metaT from gluster
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_concat/$1 .
+cp /mnt/gluster/amlinz/ref.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf ref.tar.gz
+gzip -d $1
+name=$(basename $1 | cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.mapped.sam minid=0.8 trd=T sam=1.3 threads=1 build=1 usemodulo=T mappedonly=T -Xmx30g
+
+# I want to store the output as bam. Use samtools to convert.
+samtools view -b -S -o $name.mapped.bam $name.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.mapped.bam /mnt/gluster/amlinz/GEODES_mapping_results/
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+
+
+```
+
+05mapping.sub:
+```{bash, eval = F}
+
+# 05mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 05mapping_$(Cluster).log
+error = 05mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/05mapping.sh
+arguments = $(samplename)
+output = 05mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory =30GB
+request_disk = 25GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2mappingfastqs.txt
+
+
+```
+
+3. Clean up.
+
+On my computer:
+Open up WinSCP and log into submit-3.chtc.wisc.edu. Download the most recent versions of the scripts, programs, and text files
+
+On submit-3.chtc.wisc.edu:
+
+```{bash, eval = F}
+# Delete all the .log, .out, and .err files in your home directory
+rm *.err
+rm *.log
+rm *.out
+```
+
+Congratulations! You now have BAM files containing the best mapping hit for every metatranscriptomic read we have
+
+##Read Counting
+
+1. Set up folders in gluster for the outputs, and a list of files to run.
+```{r, eval = F}
+mkdir /mnt/gluster/amlinz/GEODES_mapping_summaries/
+
+for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
+cat bamfiles.txt
+```
+
+Build the gff file in an interactive session. Note that every gff format is different, and I'll likely need to modify this for every type of reference genome I (you) want to use. I'm using the program genometools to fix up gff files - better than wrangling around in awk - but it can't fix everything. In my case, the gff files for the metagenome assemblies produced by the JGI don't have an initial comment line and use a different strand annotation (-1, 1, instead of -, +), both of which crash genometools' gff tidy function.
+
+build_gff.sub:
+```{bash, eval = F}
+
+#build_gff.sub
+#
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines.
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = zipped/genometools-1.5.9.tar.gz
+
+# It's still important to request enough computing resources. The below
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 20GB
+request_disk = 25GB
+
+queue
+```
+
+Running the interactive session:
+```{bash, eval = F}
+condor_submit -i submits/build_gff.sub
+# Wait
+
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
+cd ..
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Copy the gff files to this directory
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/*.gff .
+cp /mnt/gluster/amlinz/ref_genomes/gff_files/*.gff .
+
+#Make and save a list of which contigs are in which file
+for file in *.gff;do awk '{print $1}' $file > temp.txt; sort -u temp.txt > $file.txt;awk '{print FILENAME $0}' $file.txt > temp2.txt;mv temp2.txt $file.txt;done
+cat *.gff.txt > contig_metadata.txt
+cp contig_metadata.txt /mnt/gluster/amlinz/
+
+#Attach the standard to one of the ref genomes files
+sed '2q;d' pFN18A_DNA_transcript.gff > line2.gff
+cat 2619619040.gff line2.gff > temp && mv temp 2619619040.gff
+
+#Fix the strand issue in the assemblies
+for file in GEODES*.gff; do awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $file > f1_$file; done
+
+#Add first comment line to the assemblies
+for file in f1*gff; do echo '##gff-version 3' | cat - $file > temp && mv temp $file; done
+
+#Sort and tidy the assemblies
+for file in f1*gff; do gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+#Fix up the ref genomes - add comment line, remove CRISPR lines, change semicolons to escaped semicolons, and sort.
+for file in 2*gff;do echo '##gff-version 3' | cat - $file > temp && mv temp $file;sed '/CRISPR/d' $file > temp && mv temp $file; sed -i 's|; |%3B |g' $file; gt gff3 -sort yes -tidy -retainids -o sorted_$file $file; done
+
+#Run the merge
+gt merge -o mapping_database.gff sorted*gff
+
+gzip mapping_database.gff
+cp mapping_database.gff.gz /mnt/gluster/amlinz/
+
+rm GEODES*gff
+rm sorted*gff
+rm f1*gff
+
+rm *.gz
+rm *.gff
+rm -r genome*
+exit
+```
+
+Last thing before running the scripts is to build an install for the FeatureCounts program. I installed it from source code and am using the Linux instructions here: http://bioinf.wehi.edu.au/subread-package/
+
+install_featurecounts.sub
+```{bash, eval = F}
+
+#install_featurecounts.sub
+#
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+
+# If you wish to compile code, you'll need the below lines.
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = zipped/subread-1.5.2-source.tar.gz
+
+# It's still important to request enough computing resources. The below
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 4GB
+
+queue
+
+```
+
+In the interactive session:
+```{bash, eval = F}
+condor_submit -i install_featurecounts.sub
+# Wait
+
+tar zxvf subread-1.5.2-source.tar.gz
+cd subread-1.5.2-source/src
+make -f Makefile.Linux
+tar czvf subread.tar.gz subread-1.5.2-source
+
+# Move tarball back to gluster
+cp subread.tar.gz /mnt/gluster/amlinz
+
+# Clean up
+rm subread.tar.gz
+rm -r subread-1.5.2.source
+exit
+
+# Move tarball into zipped folder
+mv /mnt/gluster/amlinz/subread.tar.gz zipped/subread.tar.gz
+
+```
+
+2. Peform the counting. Like Jimmy Johns, FeatureCounts is freaky fast (and seems to be freaky good as well, at least it gives the same results as HTSeq-count) so this should only take a day or so. I'm using minOverlap and fracOverlap == 1, equivalent to HTSeq's mode intersection_strict (read must be contained in a gene to be mapped to that gene). 
+
+FeatureCounts produces two files. The txt.summary has mapped and unmapped read proportions, while the mapped.txt has counts per feature. I remove unmapped reads from the file to save on space, otherwise I can't open the files.
+
+06featurecounts.sub:
+```{bash, eval = F}
+# 06featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 06featurecounts_$(Cluster).log
+error = 06featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/06featurecounts.sh
+arguments = $(samplename)
+output = 06featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 20GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+
+
+```
+
+06featurecounts.sh:
+```{bash, eval = F}
+
+
+#!/bin/bash
+#Make a count table of mapped reads
+
+#Transfer data from gluster
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam .
+cp /mnt/gluster/amlinz/mapping_database.gff.gz .
+
+#Unzip programs
+tar xvzf subreads.tar.gz
+gzip -d mapping_database.gff.gz
+
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag --minOverlap 1 --fracOverlap 1 -M --fraction -a mapping_database.gff -o $1.CDS.txt $1.mapped.bam
+
+# Keep only mapped reads
+#awk '(NR==1) || ($7 > 0 ) ' $1.CDS.txt > $1.CDS.mapped.txt
+
+#Save output to gluster. Using cp/rm instead of mv so it will overwrite old output in gluster.
+#cp $1.CDS.mapped.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
+cp $1.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_summaries/
+cp $1.CDS.txt.summary /mnt/gluster/amlinz/GEODES_mapping_summaries/
+rm $1.CDS*
+
+#Clean up
+rm *.bam
+rm mapping_database*
+rm *.tar.gz
+rm -r subread-1.5.2-source
+
+
+```
+
+Run and check the results
+
+```{r, eval = F}
+condor_submit submits/06feature_counts.sub
+
+ls -ltr 06*err
+ls -ltr /mnt/gluster/amlinz/GEODES_mapping_summaries/
+```
+
+This will also dump a bunch of files with stats on the counting in your home folder.
+
+3. Compile the result into a single table using the scripts 07maketable. Change the date in the .sh file so that you have a record of which result this is (for when you inevitably have to re-run something).
+
+07maketable.sub:
+```{bash, eval = F}
+# 03maketable.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 07maketable_$(Cluster).log
+error = 07maketable_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/07maketable.sh
+#arguments =
+output = 07maketable_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files =
+#transfer_output_files = GEODES_genes_2017-05-19.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 1GB
+request_disk = 2GB
+#
+# Only need one instance of this job
+queue
+
+```
+
+07maketable.sh
+```{r, eval = F}
+
+#!/bin/bash
+cp /mnt/gluster/amlinz/GEODES_mapping_summaries/*.CDS.txt .
+
+awk '{print $1}' GEODES001_nonrRNA.CDS.txt > rownames.txt
+for file in *.CDS.txt;do awk '{print $7}' $file > temp.txt;sample=$(basename $f$
+echo "placeholder" | cat - rownames.txt > temp3.txt && mv temp3.txt rownames.txt
+files=$(echo *CDS.txt)
+paste rownames.txt $files > GEODES_genes_2017-05-23.txt
+sed -i -e '2,3d' GEODES_genes_2017-05-23.txt
+gzip GEODES_genes_2017-05-23.txt
+cp GEODES_genes_2017-05-23.txt.gz /mnt/gluster/amlinz
+
+rm *gz
+rm *.CDS.txt
+rm rownames.txt
+rm temp*.txt
+
+```
+
+```{bash, eval = F}
+condor_submit submits/07maketable.sub
+
+ls -ltr 07*.err
+```
+
+4. Cleanup
+
+The only thing I want to save is the table itself, which I downloaded onto my computer with WinSCP. Once you've checked the table to make sure it works, delete all /*.err, /*.out, and /*.log files. Move onto the 04R_analyses directory, where you'll link those locus tags to genomes and gene products.
+
