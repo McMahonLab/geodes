@@ -1,11 +1,11 @@
 ---
 title: "GEODES"
 author: "Alex Linz"
-date: "February 1, 2017"
+date: "September 28, 2017"
 output: html_document
 ---
 
-#### Diel transcriptomics of freshwater lakes
+__Diel transcriptomics of freshwater lakes__
 
 GEODES stands for "Gene Expression in Oligotrophic, Dystrophic, and Eutrophic Systems."
 In this experiment, we collected RNA from three lakes every 4 hours for 48 hours, with the goal of analyzing diel trends.
@@ -23,21 +23,21 @@ Copyright Katherine McMahon, Alex Linz, and friends (2017)
 Want more background about GEODES? Check out these blog posts! https://uwmcmahonlab.wordpress.com/2016/05/04/introducing-geodes/ & https://uwmcmahonlab.wordpress.com/2016/11/14/geodes-data-preview/
 
 
-####Where do I get the data?
+__Where do I get the data?__
 
 Are you in the McMahon Lab or one of our collaborators?
 
-- Go to /lakes_data/Metatranscriptomes/ on our server, Zissou. Files are separated by lake from there.
-- If you can't access Zissou, ask Alex for the GEODES hard drive
+- Go to /lakes_data/Metatranscriptomes/geodes/ on our storage drive.
+- If you can't access the storage drive, see this page: https://github.com/McMahonLab/McMahon_Fileshare
 
 Not in the lab but curious about our data?
 
-- Download our data from http://genome.jgi.doe.gov/Diecycetabolisms/Diecycetabolisms.info.html . Most metatranscriptomes will become public on Aug 1, but some samples are earlier and others later.
+- Download our data from http://genome.jgi.doe.gov/Diecycetabolisms/Diecycetabolisms.info.html . Most metatranscriptomes became public on Aug 1, 2017, but some samples are earlier and others later.
 - Shoot us an email! trina.mcmahon@wisc.edu or amlinz@wisc.edu
 
-__BE WARNED__ We're not making this data available on Github because it would far exceed our space limit. The quality filtered, compressed metatranscriptome files total 153GB as of 2017-02-01, _and we don't even have all of the data yet._ Download at your own risk. 
+__BE WARNED__ We're not making the raw data or intermediate files available on Github because it would far exceed our space limit. The quality filtered, compressed metatranscriptome files total 185GB! Download at your own risk.
 
-####Repo Structure
+__Repo Structure__
 
 - protocols
 	- Field and lab protocols go here.
@@ -46,10 +46,20 @@ __BE WARNED__ We're not making this data available on Github because it would fa
 		- Files formatted for upload to the McMahon Lab SQL database
 	- for_humans
 		- Excel files that are easily interpreted by people
-- analyses
-    - 01rRNA_removal
-    - 02mapping
-    - 03process_mapping_results
-    - 04classify_unmapped_reads
-    - 05R_calculations
-      - Each of the directories in analyses/ contains a markdown document called "labnotebook_etc.Rmd". This file includes a description of the analysis being performed, the most recent workflow to run this analysis, and my notes from previous testing. You'll also find the shell executable and submit scripts, lists of the samples run, and small input/output files.
+- bioinformatics_workflow
+  - executable_files
+    - Bash scripts that actually process the data
+  - lab_notebooks
+    - My notes from writing the CHTC workflow. May contain sass.
+  - programs
+    - Pre-built tarballs of the programs used for use on CHTC
+  - R_processing
+    - Table formatting once the data was small enough to load into R
+  - submit_files
+    - Tells CHTC how to run your jobs
+  - submit_node_scripts
+    - Extremely minor tasks to run on the submit node itself that need to run between parallel tasks - like making a list of files to queue or moving files around
+    - Full_GEODES_Workflow.Rmd/.html
+      - 1st attempt at workflow. Now out of date but has some useful info on why I chose to do things the way I did. Will be updated on 2nd interation of workflow
+    - GEODES_bioinformatics_instructions.Rmd
+      - How to run the current workflow on CHTC

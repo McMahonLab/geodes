@@ -1,0 +1,52 @@
+---
+title: "GEODES Instructions"
+author: "Alex Linz"
+date: "September 28, 2017"
+output: html_document
+---
+
+##GEODES Quick Run:
+
+On your submit node, submit files should be in "submits/", executables should be in "executables/", and scripts to run from the submit node in between steps in "scripts/". All necessary programs have already been installed and tarballed, and are in "zipped/".
+
+The refence MAGs and SAGs from lakes_data drive are stored in your home folder in the submit node, as are any intermediate files less than 100MB. Total space on submit-4 is 1TB and no file limit.
+
+In gluster, initial RNA files are in "filtered/" and metagenome assemblies and their information from lakes_data are in "metagenome_assemblies".
+
+```{bash, eval = F}
+# Parts 1 and 2 do not depend on each other and can be run concurrently
+
+# Part 1 - rRNA removal
+./scripts/samplenames.sh
+condor_submit submits/00split_fastq.sub
+./scripts/path2splitfastqs.sh
+condor_submit submits/01rRNA_removal.sub
+./scripts/cat_files.sh
+
+# Part 2 - Nonredundant database building
+./scripts/prephylodist.sh
+condor_submit submits/02phylodist.sub
+./scripts/postphylodist.sh
+./scripts/refMAGs_SAGs_list.sh
+condor_submit submits/03refMAGs_SAGs.sub
+./scripts/algae_list.sh
+condor_submit submits/04algae.sub
+./scripts/split_metagenome_gffs.sh
+condor_submit submits/05metagenome_assemblies.sh
+./scripts/move_CDS_output.sh
+condor_submit submits/06cd-hit.sub
+# Note: can start the mapping now
+./scripts/split_fastaheaders.sh
+condor_submit submits/07nrdb_gff.sub
+./scripts/cat_nrdbgff.sh
+condor_submit submits/07.2nrdb.gff.sub
+
+# Part 3 - mapping
+# Note: must be run after Part 1. Can be started during Part 2 once you have the fasta file of the nonredundant database and before the gff file is finished processing.
+condor_submit submits/08build_index.sub
+condor_submit submits/09mapping.sub
+
+# Part 4 - mapped read counting
+
+```
+
