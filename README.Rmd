@@ -5,7 +5,7 @@ date: "September 28, 2017"
 output: html_document
 ---
 
-#### Diel transcriptomics of freshwater lakes
+__Diel transcriptomics of freshwater lakes__
 
 GEODES stands for "Gene Expression in Oligotrophic, Dystrophic, and Eutrophic Systems."
 In this experiment, we collected RNA from three lakes every 4 hours for 48 hours, with the goal of analyzing diel trends.
@@ -23,7 +23,7 @@ Copyright Katherine McMahon, Alex Linz, and friends (2017)
 Want more background about GEODES? Check out these blog posts! https://uwmcmahonlab.wordpress.com/2016/05/04/introducing-geodes/ & https://uwmcmahonlab.wordpress.com/2016/11/14/geodes-data-preview/
 
 
-####Where do I get the data?
+__Where do I get the data?__
 
 Are you in the McMahon Lab or one of our collaborators?
 
@@ -37,7 +37,7 @@ Not in the lab but curious about our data?
 
 __BE WARNED__ We're not making the raw data or intermediate files available on Github because it would far exceed our space limit. The quality filtered, compressed metatranscriptome files total 185GB! Download at your own risk.
 
-####Repo Structure
+__Repo Structure__
 
 - protocols
 	- Field and lab protocols go here.
@@ -50,7 +50,7 @@ __BE WARNED__ We're not making the raw data or intermediate files available on G
   - executable_files
     - Bash scripts that actually process the data
   - lab_notebooks
-    - My notes from writing this scripts. May contain sass.
+    - My notes from writing the CHTC workflow. May contain sass.
   - programs
     - Pre-built tarballs of the programs used for use on CHTC
   - R_processing
