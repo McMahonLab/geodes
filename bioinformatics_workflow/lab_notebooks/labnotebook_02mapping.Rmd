@@ -3758,9 +3758,35 @@ In retrospect, I also need to remove whitespace from fasta headers before indexi
 
 Run a few test files through
 
+####2017-09-26
 
+There's one line causing an issue in the gff file. It looks like no cluster was found for a single gene, so that row is short a column. I tried fixing with awk or sed (below) with no success. Removed this one gene (it was a Sox and there are 300 more like it) for now but will need to address the underlying issue of the missing cluster when I add the SAGs to the database.
+
+```{bash, eval = F}
 awk '{gsub(/CDS/,"Unknown\tCDS",$2);print}' /mnt/gluster/amlinz/unprocessed-nrdb.gff > /mnt/gluster/amlinz/semiprocessed-nrdb.gff
 
 awk 'FNR == 9311290 {print $2}' /mnt/gluster/amlinz/semiprocessed-nrdb.gff
 awk 'FNR == 9311290 {print}' /mnt/gluster/amlinz/semiprocessed-nrdb.gff
+```
 
+Restarted with that line deleted.
+
+####2017-09-27
+
+Started the mapping! One test file worked great so I started the rest. Only changes needed to the existing 09mapping scripts was paths.
+
+####2017-09-28
+
+Looks like some files are failing because the execute node cannot find samtools? That's odd that some would find it and others wouldn't. Will wait to see how many do this.
+
+####2017-10-02
+
+About 1/4 of the files failed, all for that same reason. Added a specification for 64 bit system (this solved a similar issue with genometools earlier this month) and started rerunning the files that failed.
+
+####2017-10-03
+
+1/4 of the files are still failing, although that leaves me with only 8. Still the same reason - can't find samtools executable. Tried changing the script to specify the direct path of samtools instead of adding it to PATH variable - this worked on 1 file but hard to tell as it seems to be random execute nodes causing the problem.
+
+####2017-10-04
+
+Nearly done - only 3 files left! The direct path seems to be working (or maybe I'm just lucky). 
