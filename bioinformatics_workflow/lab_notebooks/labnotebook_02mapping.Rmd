@@ -3790,3 +3790,80 @@ About 1/4 of the files failed, all for that same reason. Added a specification f
 ####2017-10-04
 
 Nearly done - only 3 files left! The direct path seems to be working (or maybe I'm just lucky). 
+
+####2017-10-05
+
+The mapping is all done! Modifying the old featurecounts scripts now and will run on one to test. The only change I'm planning to make is to reference files directly in gluster instead of copying the massive things to an execute node, and saving output to my home folder instead of gluster since each individual file shouldn't be too large (but will check that on the test file).
+
+Unzip the gff file and make a list of the samples (no file extensions)
+
+```{bash, eval = F}
+gzip -d /mnt/gluster/amlinz/nonredundant_database.gff.gz
+
+for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
+
+# make it a test file for now
+head -1 bamfiles.txt > temp.txt && mv temp.txt bamfiles.txt
+
+```
+
+10featurecounts.sh:
+```{bash, eval = F}
+#!/bin/bash
+#Count mapped reads
+
+#Unzip programs
+tar -xvzf subreads.tar.gz
+
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g locus_tag --minOverlap 1 --fracOverlap 1 -M --fraction -a /mnt/gluster/amlinz/nonredundant_database.gff -o $1.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.bam
+
+#Clean up - don't delete the text file, that is being sent back to the submit node
+rm *.tar.gz
+rm -r subread-1.5.2-source
+
+```
+
+10featurecounts.sub:
+```{bash, eval = F}
+# 10featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 10featurecounts_$(Cluster).log
+error = 010featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/10featurecounts.sh
+arguments = $(samplename)
+output = 10featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz
+transfer_output_files = $(samplename).CDS.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 16GB
+request_disk = 8GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+
+```
+
+Testing on GEODES001
+
+Error #1: I told it to read locus_tags instead of IDS. changed and start over.
+Error #2: SAM_pairer_get_next_read_BIN: Assertion `l_name < 256' failed.
+I think this means that it doesn't like the long gene names? I can't really shorten them... can't open the executable in nano to change... ugh.
+
+Having a hard time finding the source code for the Linux version but in the Rsubreads package, there is indeed a setting of "CHROMOSOME_NAME_LENGTH = 256".
