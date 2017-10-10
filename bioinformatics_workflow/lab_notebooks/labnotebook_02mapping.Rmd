@@ -3867,3 +3867,97 @@ Error #2: SAM_pairer_get_next_read_BIN: Assertion `l_name < 256' failed.
 I think this means that it doesn't like the long gene names? I can't really shorten them... can't open the executable in nano to change... ugh.
 
 Having a hard time finding the source code for the Linux version but in the Rsubreads package, there is indeed a setting of "CHROMOSOME_NAME_LENGTH = 256".
+
+####2017-10-09
+
+I asked for help and may have solved 2 problems with one stone. Josh, Elizabeth, and Sarah helped me write a script for a Python dictionary, which will allow me to use the shorter gene IDS/locus tags with an accompanying key file, and this whole process is at least 4x faster than grep. I think the short names should solve the featurecounts error because I've gotten to run on parts of the database before. And the shorter names will allow me to better parse the cluster file.
+
+To make sure this works, I'm going to map metatranscriptomic reads to the ref MAGs SAGs because Trina wanted this anyway and make sure I can count and use the dictionary properly. After that, I'll try clustering just the ref MAGs SAGS to see if I can preferentially choose gene names. But first, I need to add a package to my Python tarball. This package processes GFF files!
+
+```{bash, eval = F}
+mkdir python
+tar -xvf Python-2.7.13.tgz
+cd Python-2.7.13
+./configure --prefix=$(pwd)/../python
+make
+make install
+cd ..
+ls python
+ls python/bin
+
+export PATH=$(pwd)/python/bin:$PATH
+wget https://bootstrap.pypa.io/get-pip.py
+python get-pip.py
+pip install numpy
+pip install matplotlib
+pip install pysam
+pip install pandas
+pip install bcbio-gff
+easy_install -f http://biopython.org/DIST/ biopython
+
+#git clone git://github.com/biopython/biopython.git
+
+#wget https://raw.github.com/chapmanb/bcbio-nextgen/master/scripts/bcbio_nextgen_install.py -->
+#python bcbio_nextgen_install.py $(pwd)/python/local/share/bcbio --tooldir=$(pwd)/python/local --nodata -->
+
+tar -czvf python.tar.gz python/
+exit
+
+```
+
+Tested Josh's script and it is working! Now to try a ref MAG gff file.
+
+```{bash, eval = F}
+
+#!/bin/bash
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+###old
+grep "##\|#!" $1.gff > top_of_file.txt
+grep -v "##\|#!" $1.gff > bottom_of_file.txt #take headers off the top of the file
+grep "CDS" bottom_of_file.txt > temp.txt && mv temp.txt bottom_of_file.txt
+
+awk -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt #split by first 8 columns
+awk '{print $9}' bottom_of_file.txt > part2.txt #put the last of column of tags in its own file
+awk -F ";" '{print $1}' part2.txt > IDs.txt #take out just the ID tag
+awk -F "product=" '{print $2}' part2.txt > gene.txt #get the product name
+rows=$(wc -l bottom_of_file.txt | awk '{print $1}')
+yes $1 | head -n $rows > genome.txt
+#look up phylogeny and make that column, too
+assignment=$(grep -n $1 Readme.csv | awk -F "," '{print $3,$4,$5,$6,$7,$8}' OFS=",")
+yes $assignment | head -n $rows > classification.txt
+awk '{print $4}' bottom_of_file.txt > start.txt #get the gene start location
+paste -d "\t'" part1.txt IDs.txt > cat1.txt #paste first 8 columns to ID tag
+paste -d "," cat1.txt start.txt > cat2.txt #paste start location to ID
+paste -d "," cat2.txt genome.txt > cat3.txt #paste genome to ID
+paste -d "," cat3.txt classification.txt > cat4.txt #paste phylogeny to ID
+paste -d "," cat4.txt gene.txt > newbottom.txt #paste product name to ID
+cat top_of_file.txt newbottom.txt > new.gff #put the top of the file back on
+gt gff3 -sort yes -tidy -retainids -o sorted_$1.gff new.gff #clean up the the gff sorter
+
+
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile $1.fna -matchdescstart sorted_$1.gff >  CDS_$1.fna
+
+rm *tar.gz
+rm -r genometools
+rm *txt
+rm *gff
+
+```
+
+```{python, eval = F}
+taxonFile = "Readme.csv"
+readme = pandas.read_csv(taxonFile)
+readme["TaxString"] = readme['Phylum'] + ';' + readme['Class'] + ';' + readme['Order'] + ';' + readme['Lineage'] + ';' + readme['Clade'] + ';' + readme['Tribe']
+taxonDict = readme.set_index('IMG OID').to_dict()['TaxString']
+
+
+
+```
