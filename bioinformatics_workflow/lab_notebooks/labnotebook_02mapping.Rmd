@@ -4202,4 +4202,36 @@ rm *.gz
 
 ```
 
-I capitolized an S where I shouldn't have. Oops. It's 7PM so let's go for broke, submit the whole thing, and see if it's done by morning.ls 
+I capitolized an S where I shouldn't have. Oops. It's 7PM so let's go for broke, submit the whole thing, and see if it's done by morning.
+
+#2017-10-13
+
+Not quite done yet (17/109 left) but they're all working! Meanwhile, I'll test out the featurecounts script. Hopefully it works now that I've got shorter gene names.
+
+```{bash, eval = F}
+#!/bin/bash
+#Count mapped reads
+
+#Unzip programs
+tar -xvzf subreads.tar.gz
+#Pair reads
+#./subread-1.5.2-source/bin/utilities/repair -i /mnt/gluster/amlinz/GEODES_mapping_results/$1.mapped.MAGsSAGs.bam -o $1.repaired.bam -T 1
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g ID --minOverlap 1 --fracOverlap 1 -M --fraction -a /mnt/gluster/amlinz/ref_MAGs_SAGs_database.gff -o $a.MAGsSAGs.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_results/$a.MAGsSAGs.mapped.bam
+
+#Clean up - don't delete the text file, that is being sent back to the submit node
+rm *.tar.gz
+rm -r subread-1.5.2-source
+
+```
+
+There no ID feature in the gff file? That's weird. Redo the gff merge with better toggling of genometools options
+
+```{bash, eval = F}
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+
+gt merge -retainids yes -tidy yes -o ref_MAGs_SAGs_database.gff *gff
+
+mv ref_MAGs_SAGs_database.gff /mnt/gluster/amlinz/
+``
