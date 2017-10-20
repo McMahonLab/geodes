@@ -1093,3 +1093,233 @@ rm -r subread-1.5.2-source
 ```
 
 I will update the workflows to reflect this change.
+
+
+####2017-10-16
+
+Running the test case of python dictionary approach to storing info. The featurecounts script worked with only minor naming modificatons:
+
+10featurecounts.sub:
+```{bash, eval = F}
+
+# 10featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 10featurecounts_$(Cluster).log
+error = 010featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/10featurecounts.sh
+arguments = $(samplename)
+output = 10featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz
+transfer_output_files = $(samplename).MAGsSAGs.CDS.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 4GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+
+```
+
+10featurecounts.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+#Count mapped reads
+
+#Unzip programs
+tar -xvzf subreads.tar.gz
+#Pair reads
+
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g ID --minOverlap 1 --fracOverlap 1 -M --fraction -a /mnt/gluster/amlinz/ref_MAGs_SAGs_database.gff -o $1.MAGsSAGs.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_results/$1.MAGsSAGs.mapped.bam
+
+#Clean up - don't delete the text file, that is being sent back to the submit node
+rm *.tar.gz
+rm -r subread-1.5.2-source
+
+```
+
+All the output files are in my home dir. Sidenote, I didn't save the summary files, so I'm going to eventually need to calculate how many reads are in my samples to get the proportion mapped/unmapped.
+
+Now see if my maketable script still works
+
+maketable.sh
+```{r, eval = F}
+
+#!/bin/bash
+#cp /mnt/gluster/amlinz/GEODES_mapping_summaries/*.CDS.txt .
+
+awk '{print $1}' GEODES001-nonrRNA.MAGsSAGs.CDS.txt | tail -n +2 > rownames.txt
+for file in *.CDS.txt;do awk '{print $7}' $file | tail -n +3 > temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt > temp2.txt && mv temp2.txt $file;done
+                                                                    
+files=$(echo *.MAGsSAGs.CDS.txt)
+paste rownames.txt $files > pasted_table.txt
+# remove duplicate whitespaces
+ tr -s "\t" < pasted_table.txt > GEODES_genes_2017-10-16.txt
+#sed -i -e '2,3d' GEODES_genes_2017-10-16.txt
+#gzip GEODES_genes_2017-05-23.txt
+
+```
+
+
+I made some minimal test cases. Now to make a python script to process that table. I can reduce the size of both the table and the associated dictionary by removing genes with no mapped reads.
+
+```{python, eval = F}
+
+#%%#############################################################################
+### Import packages
+################################################################################
+
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+readcounts = 'endtable_testcase.txt'
+genekey  = 'endproduct_testcase.txt'
+outputcounts = 'slim_endtable.txt'
+outputkey = 'slim_key.txt'
+
+#%%#############################################################################
+### Remove rows of all 0s from the table of read counts and sort rows alphabetically
+### Remove the same genes from the gene key and sort alphabetically
+################################################################################
+
+# Open files
+
+df = pandas.read_table(readcounts)
+inKey = pandas.read_table(genekey, header=None)
+outTable = open(outputcounts, 'w')
+outKey = open(outputkey, 'w')
+
+# Remove rows that sum to 0
+df = df.loc[(df.sum(axis=1) != 0),]
+
+# Sort rows by gene name
+df = df.sort_values(by = 'Geneid')
+
+df.to_csv(outputcounts, index=False)
+
+# Remove genes in the key file that are no longer in the table
+# Or maybe keep only genes that are still in the table
+inKey = inKey[inKey[0].isin(df['Geneid'])]
+inKey = inKey.sort_values(by = 0)
+inKey.to_csv(outKey, index=False)
+```
+
+
+####2017-10-17
+
+One problem I'd encountered was that there are extra tabs between the rownames and the 1st column of data. 2 tabs, to be specific (checking with cat -A). Fixed with tr -s (squeeze option), added to maketable.sh.  Now to finish my test case files, I need to grep for the first 10 genes or so in the key file.
+
+```{bash, eval = F}
+awk {'print $1'} endtable_testcase.txt | tail -n +2 > testgenes.txt
+
+while read line; do grep $line /mnt/gluster/amlinz/ref_MAGs_SAGs_key.txt; done < testgenes.txt > endproduct_testcase.txt
+```
+
+Manually added some non-zero values in case there aren't any in these genes. Now try the python interactive again.
+
+tar xvzf python.tar.gz
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+Last column (GEODES164) is all NaNs? That's not right. Maybe removing the extra whitespace shifted the columns.
+For the sake of the script, I'm deleting that column for now and will fix next. It does say there are the right number of columns without that last one (109 samples + rownames). Where was that last one coming from?
+
+Script works! BAck in my home folder, I had an extra blank CDS.txt file. Specifying MAGsSAGS.CDS.txt instead, which also solved the whitespace. Shall we try a full run here?
+
+11tableprocessing.sh:
+```{bash, eval = F}
+#!/bin/bash
+tar xvzf python.tar.gz
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+cp /mnt/gluster/amlinz/ref_MAGs_SAGs_key.txt .
+chmod +x genekey.py
+
+python genekey.py
+
+rm GEODES_genes_2017-10-16.txt
+rm ref_MAGs_SAGs_key.txt
+rm genekey.py
+rm -r home
+rm -rf python
+rm python.tar.gz
+
+```
+
+
+11tableprocessing.sub:
+```{bash, eval = F}
+# 11tableprocessing.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 11tableprocessing_$(Cluster).log
+error = 11tableprocessing_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/11tableprocessing.sh
+output = 11tableprocessing_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,GEODES_genes_2017-10-16.txt,scripts/genekey.py
+transfer_output_files = GEODES2refMAGsSAGs_readcounts.txt,GEODES2refMAGsSAGS_geneinfo.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue
+
+```
+
+readcounts = 'GEODES_genes_2017-10-16.txt'
+genekey  = 'ref_MAGs_SAGs_key.txt'
+
+outputcounts = 'GEODES2refMAGsSAGs_readcounts.txt'
+outputkey = 'GEODES2refMAGsSAGS_geneinfo.txt'
+
+
+Bigger issue: there are no genes with mapped reads. Do an interactive test on a Mendota sample where I reduce the overlap thresholds. If not, I'll have to try mapping.
+
+Removed product qualifiers, hopefually that fixes featurecounts issue
+
+Nope. Remove everything after the last semicolon.
+
+```{bash, eval = F}
+awk -F';' {'print $1'} /mnt/gluster/amlinz/ref_MAGs_SAGs_database.gff > test.gff
+```

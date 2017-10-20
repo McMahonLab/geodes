@@ -4234,4 +4234,205 @@ export PATH=$(pwd)/genometools/bin:$PATH
 gt merge -retainids yes -tidy yes -o ref_MAGs_SAGs_database.gff *gff
 
 mv ref_MAGs_SAGs_database.gff /mnt/gluster/amlinz/
-``
+```
+
+####2017-10-18
+
+Well featurecounts still isn't working. If I have to guess, the problem is that I did not readjust the start and end positions of the genes to 1 - length of gene. This wasn't an issue the 1st time around because I used whole contigs, and it wasn't an issue the 2nd time around because I reset the lengths after clustering. So this won't be an issue in the full run. For now, I'll move on to working on the full run. 1st up, test the gff parsing python script on the metagenome assemblies and the ref algae. Then grab a new SAG.
+
+```{bash, eval = F}
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Remove CRISPRs
+grep -v "CRISPR" $a.gff > temp.gff && mv temp.gff $a.gff
+grep -v "#!" $a.gff > temp.gff && mv temp.gff $a.gff
+#Setup and run python script
+chmod +x ref_MAGs_SAGs.py
+python ref_MAGs_SAGs.py $a
+
+#Remove all the duplicate gff-version lines
+grep -v "##gff-version 3" $1.parsed.gff > int1.gff
+# Move sequence region lines to top of file 
+grep "##sequence-region" int1.gff > sequence_regions.gff
+grep -v "##sequence-region" int1.gff > not_sequence_regions.gff
+
+# Put it all back together and clean up
+echo '##gff-version 3' | cat - sequence_regions.gff not_sequence_regions.gff > $1.fixed.gff 
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.fixed.gff #clean up the the gff sorter
+
+# Extract the coding regions from the fasta file
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile $1.fna -matchdescstart sorted$1.gff >  CDS$1.fna
+
+rm *tar.gz
+rm *csv
+rm *py
+rm -r genometools
+rm -r home
+rm -rf python
+rm *.fna
+rm $1.fna.*
+rm *gff
+```
+
+Modify the python script to read the algae phylogeny file
+
+```{python, eval = F}
+
+###############################################################################
+# CodeTitle.py
+# Copyright (c) 2017, Joshua J Hamilton and Alex Linz
+# Affiliation: Department of Bacteriology
+#              University of Wisconsin-Madison, Madison, Wisconsin, USA
+# URL: http://http://mcmahonlab.wisc.edu/
+# All rights reserved.
+################################################################################
+# Make table of info from gff files
+################################################################################
+
+#%%#############################################################################
+### Import packages
+################################################################################
+
+from BCBio import GFF # Python package for working with GFF files
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+genome = sys.argv[1]
+#genome = '2582580615'
+taxonFile = 'algae_phylogeny.txt'
+inputGff = genome + '.gff'
+outputGff = genome + '.parsed.gff'
+outputTable = genome + '.table.txt'
+
+#%%#############################################################################
+### Update the inputGff file. Replace ID with 'locus tag' field
+### Make a separate table with taxonomy and product name info
+################################################################################
+
+# Store the classification file as a dictionary
+
+readme = pandas.read_table(taxonFile, names = ["Genome", "Taxonomy"])
+taxonDict = readme.set_index('Genome').to_dict()['Taxonomy']
+
+# Read in the GFF file
+# Each record contains all sequences belonging to the same contig
+# For each sequence within the record, replace the ID with the locus_tag
+
+inFile = open(inputGff, 'r')
+outFile1 = open(outputGff, 'w')
+outFile2 = open(outputTable, 'w')
+
+for record in GFF.parse(inFile):
+    for seq in record.features:
+        seq.qualifiers['ID'][0] = seq.qualifiers['ID'][0] + genome
+        if 'product' in seq.qualifiers.keys():
+            product = seq.qualifiers['product'][0]
+            del seq.qualifiers['product']
+        else:
+            product = 'None given'
+
+        taxonomy = taxonDict[genome]
+        outFile2.write(seq.id+'\t'+genome+'\t'+str(taxonomy)+'\t'+product+'\n')
+    GFF.write([record], outFile1)
+
+inFile.close()
+outFile1.close()
+outFile2.close()
+```
+
+####2017-10-19
+
+I had another thought as I battled the sniffles yesterday. Why do I need the intermediate gff files? All I need is something good enough to extract CDS regions. Then I make the gff file that featurecounts will read from the clustering ouptut. All I need pre-clustering is to extract the info from the gff file into table form.
+
+My tasks at hand:
+- remove the gff building from the refMAGs SAGs script
+- finish the algae script
+- write a script for the metagenome assemblies
+- download some of the new SAGs and write scripts for that
+- cluster and write a script to make a gff file from the output
+- see if featurecounts works
+
+I just had a brilliant idea to fix the featurecounts issue in the MAGs SAGs run. Map to the whole genomes instead of just CDS regions. That way the numbers still match up, and the database size is still small enough that it doesn't matter if I'm mapping to extra. I still only need to count CDS regions.
+
+####2017-10-20
+
+```{bash, eval = F}
+# Easy enough to concat the fna files from my submit node
+
+cat ref_MAGs_SAGs/fastas/*pFN18A_DNA_transcript*.fna > /mnt/gluster/amlinz/ref_MAGs_SAGs_database.fna
+
+#run 08buildindex2
+#run 09mapping
+
+for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
+awk -F';' {'print $1'} /mnt/gluster/amlinz/ref_MAGs_SAGs_database.gff > temp.gff
+mv temp.gff /mnt/gluster/amlinz/ref_MAGs_SAGs_database.gff
+#run 10featurecounts
+
+```
+
+```{bash, eval = F}
+
+#!/bin/bash
+#Count mapped reads
+
+#Unzip programs
+tar -xvzf subreads.tar.gz
+#Pair reads
+
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g ID --minOverlap 1 --fracOverlap 1 -M --fraction -a gffs/2582580615.gff -o test.MAGsSAGs.CDS.txt GEODES121-nonrRNA.MAGsSAGs.mapped.bam
+
+#Clean up - don't delete the text file, that is being sent back to the submit node
+rm *.tar.gz
+rm -r subread-1.5.2-source
+
+```
+
+No problem here - try the mapping?
+```{bash, eval = F}
+
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/GEODES_nonrRNA/$1 .
+cp /mnt/gluster/amlinz/ref.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf ref.tar.gz
+gzip -d $1
+name=$(basename $1 | cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.MAGsSAGs.mapped.sam minid=0.95 trd=T sam=1.3 threads=1 build=1 mappedonly=T -Xmx20g
+
+# I want to store the output as bam. Use samtools to convert.
+./samtools/bin/samtools view -b -S -o $name.MAGsSAGs.mapped.bam $name.MAGsSAGs.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.MAGsSAGs.mapped.bam /mnt/gluster/amlinz/GEODES_mapping_results/
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+
+```
+
+I'm an idiot. I told it the wrong index name.
