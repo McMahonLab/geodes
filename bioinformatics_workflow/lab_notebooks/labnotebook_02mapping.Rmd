@@ -4155,7 +4155,7 @@ In an interactive session (since I'm not going to write a whole script for one j
 tar xvzf genometools.tar.gz
 export PATH=$(pwd)/genometools/bin:$PATH
 
-gt merge -o ref_MAGs_SAGs_database.gff *gff
+gt merge -retainids -tidy -o ref_MAGs_SAGs_database.gff *gff
 
 mv ref_MAGs_SAGs_database.gff /mnt/gluster/amlinz/
 ```
@@ -4436,3 +4436,103 @@ rm *.gz
 ```
 
 I'm an idiot. I told it the wrong index name.
+
+
+####2017-10-23
+
+Back to working on the algae gff parsing
+
+```{bash, eval = F}
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+a="GCF_000149405.2_ASM14940v2_genomic"
+gzip -d fastas/$a.fna.gz
+mv fastas/$a.fna .
+gzip -d gffs/$a.gff.gz
+mv gffs/$a.gff .
+
+```
+
+ref_algae.py
+```{python, eval = F}
+
+from BCBio import GFF # Python package for working with GFF files
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+# genome = sys.argv[1]
+genome = "GCF_000149405.2_ASM14940v2_genomic"
+taxonFile = 'algae_phylogeny.txt'
+inputGff = genome + '.gff'
+outputGff = genome + 'parsed.gff'
+outputTable = genome + 'table.txt'
+
+#%%#############################################################################
+### Update the inputGff file. Replace ID with 'locus tag' field
+### Make a separate table with taxonomy and product name info
+################################################################################
+
+# Store the classification file as a dictionary
+
+readme = pandas.read_table(taxonFile, names = ["Genome", "Taxonomy"])
+taxonDict = readme.set_index('Genome').to_dict()['Taxonomy']
+taxonomy  = taxonDict[genome]
+
+# Read in the GFF file
+# Extract product information
+# Rename genes including species name because they are just numbered
+
+inFile = open(inputGff, 'r')
+outFile1 = open(outputGff, 'w')
+outFile2 = open(outputTable, 'w')
+
+for record in GFF.parse(inFile, target_lines = 10):
+    for seq in record.features:
+        seq.qualifiers['ID'][0] = seq.qualifiers['locus_tag'][0]
+        if 'product' in seq.qualifiers.keys():
+          product = seq.qualifiers['product'][0]
+        else:
+          product = 'None given'
+        print seq.id+'\t'+genome+'\t'+str(taxonomy)+'\t'+product+'\n'
+        outFile2.write(seq.id+'\t'+genome+'\t'+str(taxonomy)+'\t'+product+'\n')
+    GFF.write([record], outFile1)
+
+inFile.close()
+outFile1.close()
+outFile2.close()
+####
+limit_info = dict(gff_source = ["CDS"],)
+
+for record in GFF.parse(inFile, target_lines = 100):
+    print record
+```
+
+
+####2017-10-24
+
+Upon inspecting the refMAGs SAGS run files, it looks like the gff files are wrong. There's no IDs and there's no standard. Take 2 to fix this:
+
+```{bash, eval = F}
+sed '2q;d' pFN18A_DNA_transcript.gff > line2.gff
+cat sorted.2619619040.gff line2.gff > temp && mv temp sorted.2619619040.gff
+gt gff3 -sort yes -tidy -force -retainids -o ref_MAGs_SAGs_database.gff *gff
+```
+
+I get warnings about ids not being unique but I think that's ok for now. Try featurecouns with this file - at the very least, it should pick up the standard.
+
+Taht worked! re run the bamfiles.txt list and count em all.
+
+
+

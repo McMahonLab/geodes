@@ -1,0 +1,234 @@
+---
+title: "Untitled"
+author: "Alex Linz"
+date: "October 24, 2017"
+output: html_document
+---
+
+1. Installations
+
+1a. install python in interactive session
+```{bash, eval = F}
+mkdir python
+tar -xvf Python-2.7.13.tgz
+cd Python-2.7.13
+./configure --prefix=$(pwd)/../python
+make
+make install
+cd ..
+ls python
+ls python/bin
+
+export PATH=$(pwd)/python/bin:$PATH
+wget https://bootstrap.pypa.io/get-pip.py
+python get-pip.py
+pip install numpy
+pip install matplotlib
+pip install pysam
+pip install pandas
+pip install bcbio-gff
+easy_install -f http://biopython.org/DIST/ biopython
+
+tar -czvf python.tar.gz python/
+exit
+
+```
+
+1b. install genometools in interactive session
+
+```{bash, eval = F}
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
+cd ..
+
+tar cvzf genometools.tar.gz genometools/
+
+```
+
+1d. move programs to zipped/ in my home directory
+```{bash, eval = F}
+mv python.tar.gz zipped/
+mv genometools.tar.gz zipped/
+mv subreads.tar.gz zipped/
+```
+
+2. Process genomes for use as mapping database
+
+2a. make list of genomes to run
+```{bash, eval = F}
+# Don't include the standard
+for file in ref_MAGs_SAGs/fasta/2*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > refMAGs_SAGs_list.txt
+
+```
+
+2b. Submit job that runs my python script on each genome to extract gene info and rename genes
+
+03refMAGs_SAGs.sub:
+```{bash, eval = F}
+# 03refMAGs_SAGs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03refMAGs_SAGs_$(Cluster).log
+error = 03refMAGs_SAGs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Arch == "X86_64")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/03refMAGs_SAGs.sh
+arguments = $(samplename)
+output = 03refMAGs_SAGs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,/home/amlinz/ref_MAGs_SAGs/gffs/$(samplename).gff,/home/amlinz/ref_MAGs_SAGs/Readme.csv,scripts/ref_MAGs_SAGs.py,zipped/python.tar.gz
+transfer_output_files = sorted.$(samplename).gff,$(samplename).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from /home/amlinz/refMAGs_SAGs_list.txt
+
+```
+
+03refMAGs_SAGs.sh:
+```{bash, eval = F}
+#!/bin/bash
+#Install genome tools and python
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Remove CRISPRs
+grep -v "CRISPR" $1.gff > temp.gff && mv temp.gff $1.gff
+#Setup and run python script
+chmod +x ref_MAGs_SAGs.py
+python ref_MAGs_SAGs.py $1
+
+#Remove all the duplicate gff-version lines
+grep -v "##gff-version 3" $1.parsed.gff > int1.gff
+# Move sequence region lines to top of file
+grep "##sequence-region" int1.gff > sequence_regions.gff
+grep -v "##sequence-region" int1.gff > not_sequence_regions.gff
+
+# Put it all back together and clean up
+echo '##gff-version 3' | cat - sequence_regions.gff not_sequence_regions.gff > $1.fixed.gff
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.fixed.gff #clean up the gff sorter
+
+rm *tar.gz
+rm *csv
+rm *py
+rm -r genometools
+rm -r home
+rm -rf python
+rm $1.fna
+rm $1.fna.*
+rm $1.*.gff
+rm int1.gff
+rm sequence_regions.gff
+rm not_sequence_regions.gff
+
+```
+
+scripts/ref_MAGs_SAGs.py:
+```{python, eval = F}
+###############################################################################
+# CodeTitle.py
+# Copyright (c) 2017, Joshua J Hamilton and Alex Linz
+# Affiliation: Department of Bacteriology
+#              University of Wisconsin-Madison, Madison, Wisconsin, USA
+# URL: http://http://mcmahonlab.wisc.edu/
+# All rights reserved.
+################################################################################
+# Make table of info from gff files
+################################################################################
+
+#%%#############################################################################
+### Import packages
+################################################################################
+
+from BCBio import GFF # Python package for working with GFF files
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+genome = sys.argv[1]
+#genome = '2582580615'
+taxonFile = 'Readme.csv'
+inputGff = genome + '.gff'
+outputGff = genome + 'parsed.gff'
+outputTable = genome + 'table.txt'
+
+#%%#############################################################################
+### Update the inputGff file. Replace ID with 'locus tag' field
+### Make a separate table with taxonomy and product name info
+################################################################################
+
+# Store the classification file as a dictionary
+
+taxonFile = "Readme.csv"
+readme = pandas.read_csv(taxonFile)
+readme = readme.fillna(value='')
+readme["TaxString"] = readme['Phylum'] + ';' + readme['Class'] + ';' + readme['Order'] + ';' + readme['Lineage'] + ';' + readme['Clade'] + ';' + readme['Tribe']
+readme['IMG OID'] = readme['IMG OID'].apply(str)
+taxonDict = readme.set_index('IMG OID').to_dict()['TaxString']
+
+# Read in the GFF file
+# Each record contains all sequences belonging to the same contig
+# For each sequence within the record, replace the ID with the locus_tag
+
+inFile = open(inputGff, 'r')
+outFile1 = open(outputGff, 'w')
+outFile2 = open(outputTable, 'w')
+
+limit_info = dict(gff_source = ["CDS"],)
+for record in GFF.parse(inFile, limit_info=limit_info):
+    for seq in record.features:
+        seq.id = seq.qualifiers['locus_tag'][0] # this is a list for some reason
+        seq.qualifiers['ID'][0] = genome + "_" + seq.id
+        if 'product' in seq.qualifiers.keys():
+            product = seq.qualifiers['product'][0]
+        else:
+            product = 'None given'
+        del seq.qualifiers['locus_tag']
+
+        taxonomy = taxonDict[genome]
+        outFile2.write(seq.qualifiers['ID'][0]+'\t'+genome+'\t'+str(taxonomy)+'\t'+product+'\n')
+    GFF.write([record], outFile1)
+
+inFile.close()
+outFile1.close()
+outFile2.close()
+
+```
+
+2c. Concatenate .fna files (using whole genomes, not CDS regions) and table.txt files. Move gff files to their own folder and concatenate the standard to one of them.
+
+```{bash, eval = F}
+cat ref_MAGs_SAGs/fastas/*.fna > /mnt/gluster/amlinz/ref_MAGs_SAGs_database.fna
+cat *.table.txt > /mnt/gluster/amlinz/ref_MAGs_SAGs_key.txt
+mv sorted*gff ref_MAGs_SAGs_processed_gffs/
+```
+
+2d. Move gff files to their own folder
+``
+2e. Merge processed .gff files in an interactive sessions

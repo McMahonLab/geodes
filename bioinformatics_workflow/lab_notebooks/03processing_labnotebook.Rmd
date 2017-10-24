@@ -153,6 +153,7 @@ condor_submit -i install_featurecounts.sub
 tar zxvf subread-1.5.2-source.tar.gz
 cd subread-1.5.2-source/src
 make -f Makefile.Linux
+cd ../..
 tar czvf subread.tar.gz subread-1.5.2-source
 
 # Move tarball back to gluster
