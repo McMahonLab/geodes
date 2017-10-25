@@ -225,10 +225,413 @@ outFile2.close()
 
 ```{bash, eval = F}
 cat ref_MAGs_SAGs/fastas/*.fna > /mnt/gluster/amlinz/ref_MAGs_SAGs_database.fna
+
 cat *.table.txt > /mnt/gluster/amlinz/ref_MAGs_SAGs_key.txt
+
 mv sorted*gff ref_MAGs_SAGs_processed_gffs/
+
+sed '2q;d' ref_MAGs_SAGs/gffs/pFN18A_DNA_transcript.gff > line2.gff
+cat ref_MAGs_SAGs_processed_gffs/sorted.2619619040.gff line2.gff > temp && mv temp ref_MAGs_SAGs_processed_gffs/sorted.2619619040.gff
 ```
 
-2d. Move gff files to their own folder
-``
-2e. Merge processed .gff files in an interactive sessions
+2d. Merge processed .gff files in an interactive session (input as ref_MAGs_SAGs_processed_gffs/) and save to gluster
+
+```{bash, eval = F}
+#Install genome tools
+tar xvzf genometools.tar.gz
+
+#Update the path variable
+export PATH=$(pwd)/genometools/bin:$PATH
+
+gt gff3 -sort yes -tidy -retainids -o ref_MAGs_SAGs_database.gff *gff
+
+mv ref_MAGs_SAGs_database.gff /mnt/gluster/amlinz/
+
+rm *gff
+rm -r genometools
+rm genometools.tar.gz
+```
+
+
+3. Mapping the metatranscriptomes
+
+3a. Build an index database from the concatenated fasta file
+
+08buildindex2.sub:
+```{bash, eval = F}
+# build_metaG_index.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 08build_index_$(Cluster).log
+error = 08build_index_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/08build_index2.sh
+output = 08build_index_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 16GB
+request_disk = 8GB
+#
+#
+queue
+
+```
+
+08buildindex2.sh:
+```{bash, eval = F}
+#!/bin/bash
+#Build a re-usable mapping index
+cp /mnt/gluster/amlinz/ref_MAGs_SAGs_database.fna .
+
+tar -xvzf BBMap_36.99.tar.gz
+bbmap/bbmap.sh ref=ref_MAGs_SAGs_database.fna -Xmx10g
+
+# Make ref/ a tarball and move to gluster
+tar czvf ref_MAGs_SAGs.tar.gz ref/
+
+cp ref_MAGs_SAGs.tar.gz /mnt/gluster/amlinz/
+rm ref_MAGs_SAGs.tar.gz
+rm *database.fna
+rm -rf bbmap/
+
+```
+
+3b. Do the actual mapping, starting with previously QC'd and rRNA filtered metatranscriptomes
+
+Make a list of metatranscriptomes to run:
+```{bash, eval = F}
+ls /mnt/gluster/amlinz/GEODES_nonrRNA > path2mappingfastqs.txt
+```
+
+
+09mapping.sub:
+```{bash, eval = F}
+# 09mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 09mapping_$(Cluster).log
+error = 09mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6) && (Arch == "X86_64")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/09mapping.sh
+arguments = $(samplename)
+output = 09mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory =20GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2mappingfastqs.txt
+
+```
+
+09mapping.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+#Map metatranscriptome reads to my pre-indexed database of reference genomes
+#Transfer metaT from gluster
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/GEODES_nonrRNA/$1 .
+cp /mnt/gluster/amlinz/ref_MAGs_SAGs.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf ref_MAGs_SAGs.tar.gz
+gzip -d $1
+name=$(basename $1 | cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.MAGsSAGs.mapped.sam minid=0.95 trd=T sam=1.3 threads=1 build=1 mappedonly=T -Xmx20g
+
+# I want to store the output as bam. Use samtools to convert.
+./samtools/bin/samtools view -b -S -o $name.MAGsSAGs.mapped.bam $name.MAGsSAGs.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.MAGsSAGs.mapped.bam /mnt/gluster/amlinz/GEODES_mapping_results/
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+
+```
+
+
+4. Count and tabulate mapped reads.
+
+4a. Run featureCounts to count reads against the gff reference index
+
+Make list of files to run:
+```{bash, eval = F}
+for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
+```
+
+Run 10featurcounts.sub:
+```{bash, eval = F}
+
+# 10featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 10featurecounts_$(Cluster).log
+error = 010featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/10featurecounts.sh
+arguments = $(samplename)
+output = 10featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz
+transfer_output_files = $(samplename).MAGsSAGs.CDS.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 4GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+
+```
+
+10featurecounts.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+#Count mapped reads
+
+#Unzip programs
+tar -xvzf subreads.tar.gz
+
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g ID --fracOverlap 0.75 -M --fraction --donotsort -a /mnt/gluster/amlinz/ref_MAGs_SAGs_database.gff -o $1.MAGsSAGs.CDS.txt /mnt/gluster/amlinz/GEODES_mapping_results/$1.MAGsSAGs.mapped.bam
+
+#Clean up - don't delete the text file, that is being sent back to the submit node
+rm *.tar.gz
+rm -r subread-1.5.2-source
+
+```
+
+4b. Put the individual files together into a table
+
+```{bash, eval = F}
+# get rownames
+awk '{print $1}' GEODES001-nonrRNA.MAGsSAGs.CDS.txt | tail -n +2 > rownames.txt
+
+# remove unnecessary info from each individual file
+for file in *.CDS.txt;do awk '{print $7}' $file | tail -n +3 > temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt > temp2.txt && mv temp2.txt $file;done
+
+# get list of files to compile                                                                 
+files=$(echo *.MAGsSAGs.CDS.txt)
+
+# combine into table
+paste rownames.txt $files > pasted_table.txt
+
+# remove duplicate whitespaces
+ tr -s "\t" < pasted_table.txt > GEODES_genes_2017-10-25.txt
+```
+
+4c. Remove blank rows from the table and in the key file, keep only genes with mapped reads.
+
+11tableprocessing.sub:
+```{bash, eval = F}
+
+# 11tableprocessing.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 11tableprocessing_$(Cluster).log
+error = 11tableprocessing_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/11tableprocessing.sh
+output = 11tableprocessing_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,GEODES_genes_2017-10-25.txt,scripts/genekey.py
+transfer_output_files = GEODES2refMAGsSAGs_readcounts.txt,GEODES2refMAGsSAGS_geneinfo.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+queue
+```
+
+11tableprocessing.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+tar xvzf python.tar.gz
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+cp /mnt/gluster/amlinz/ref_MAGs_SAGs_key.txt .
+chmod +x genekey.py
+
+python genekey.py
+
+rm GEODES_genes_2017-10-25.txt
+rm ref_MAGs_SAGs_key.txt
+rm genekey.py
+rm -r home
+rm -rf python
+rm python.tar.gz
+```
+
+genekey.py:
+```{bash, eval = F}
+#%%#############################################################################
+### Import packages
+################################################################################
+
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+readcounts = 'GEODES_genes_2017-10-25.txt'
+genekey  = 'ref_MAGs_SAGs_key.txt'
+outputcounts = 'GEODES2refMAGsSAGs_readcounts.txt'
+outputkey = 'GEODES2refMAGsSAGS_geneinfo.txt'
+
+#%%#############################################################################
+### Remove rows of all 0s from the table of read counts and sort rows alphabetically
+### Remove the same genes from the gene key and sort alphabetically
+################################################################################
+
+# Open files
+
+df = pandas.read_table(readcounts)
+inKey = pandas.read_table(genekey, header=None)
+outTable = open(outputcounts, 'w')
+outKey = open(outputkey, 'w')
+
+# Remove rows that sum to 0
+df = df.loc[(df.sum(axis=1) != 0),]
+
+# Sort rows by gene name
+df = df.sort_values(by = 'Geneid')
+
+df.to_csv(outputcounts, index=False)
+
+# Remove genes in the key file that are no longer in the table
+# Or maybe keep only genes that are still in the table
+inKey = inKey[inKey[0].isin(df['Geneid'])]
+inKey = inKey.sort_values(by = 0)
+inKey.to_csv(outKey, index=False)
+
+```
+
+
+5. Normalize read counts to transcripts per liter
+
+```{r, eval = F}
+readCounts <- read.csv("D:/GEODES2refMAGsSAGs_readcounts.txt", header = T, row.names = 1)
+sample_data <- read.csv("C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv")
+
+# Remove samples with poor std
+std <- readCounts[which(rownames(readCounts) == "pFN18A_DNA_transcript"),]
+readCounts2 <- readCounts[1:248805, which(std > 50)]
+# Calculate standard normalization factor
+
+std2 <- readCounts2[which(rownames(readCounts2) == "pFN18A_DNA_transcript"),]
+std_factor <- std2/614000000
+
+# Calculate volume factor
+
+new_sample_data <- sample_data[match(substr(start = 1, stop = 9, colnames(readCounts2)), sample_data$Sample[1:109]), ]
+vol_factor <- new_sample_data$Vol_Filtered
+
+norm_val <- std_factor * vol_factor
+# Normalize to transcripts/L
+
+for(i in 1:length(norm_val)){
+  readCounts2[,i] <- readCounts2[,i]/as.numeric(norm_val[i])
+}
+
+# Save normalized table
+write.csv(readCounts2, "D:/GEODES2refMAGsSAGs_normalized_readcounts.csv", quote = F)
+
+```
+
+Bonus: Make a table of normalized counts aggregated by genome
+
+```{r, eval = F}
+# Make a table summed by genome
+all_genomes <- substr(rownames(readCounts2), start = 1, stop = 10)
+genomes <- unique(all_genomes)
+genome_table <- readCounts2[1,]
+
+for(i in 1:length(genomes)){
+  genes <- readCounts2[which(all_genomes == genomes[i]), ]
+  genome_row <- colSums(genes)
+  genome_table <- rbind(genome_table, genome_row)
+}
+
+genome_table <- genome_table[2:267,]
+rownames(genome_table) <- genomes
+
+# save genome table
+
+write.csv(genome_table, "D:/GEODES2refMAGsSAGs_normalized_genomecounts.csv", quote = F)
+
+```
