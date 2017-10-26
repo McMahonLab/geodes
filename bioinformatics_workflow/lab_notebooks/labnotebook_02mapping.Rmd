@@ -3867,3 +3867,5 @@ Error #2: SAM_pairer_get_next_read_BIN: Assertion `l_name < 256' failed.
 I think this means that it doesn't like the long gene names? I can't really shorten them... can't open the executable in nano to change... ugh.
 
 Having a hard time finding the source code for the Linux version but in the Rsubreads package, there is indeed a setting of "CHROMOSOME_NAME_LENGTH = 256".
+
+Actually, looks like my genome names are more around 100-150 characters long, and the error seems to be specific for the chromosome names. But my chromosome name is always "NR_gene_database", or ">Cluster 1". I see 2 potential issues - one is the space in the cluster name. The other is there's a ### line in between all of my gff entries and I don't know why. I'm going to make a very small gff file that I can run tests on.
