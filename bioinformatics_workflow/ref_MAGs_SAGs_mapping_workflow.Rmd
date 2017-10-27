@@ -1,11 +1,11 @@
 ---
-title: "Untitled"
+title: "GEODES mapping to time series MAGs + SAGs "
 author: "Alex Linz"
 date: "October 24, 2017"
 output: html_document
 ---
 
-1. Installations
+##1. Installations
 
 1a. install python in interactive session
 ```{bash, eval = F}
@@ -30,7 +30,7 @@ pip install bcbio-gff
 easy_install -f http://biopython.org/DIST/ biopython
 
 tar -czvf python.tar.gz python/
-exit
+cp python.tar.gz /mnt/gluster/amlinz
 
 ```
 
@@ -44,17 +44,32 @@ make prefix=$(pwd)/../genometools/ cairo=no install
 cd ..
 
 tar cvzf genometools.tar.gz genometools/
+cp genometools.tar.gz /mnt/gluster/amlinz
+```
+
+1c. install featureCounts in interactive session
+
+```{bash, eval = F}
+tar zxvf subread-1.5.2-source.tar.gz
+cd subread-1.5.2-source/src
+make -f Makefile.Linux
+cd ../..
+tar czvf subread.tar.gz subread-1.5.2-source
+
+# Move tarball back to gluster
+cp subread.tar.gz /mnt/gluster/amlinz
 
 ```
+
 
 1d. move programs to zipped/ in my home directory
 ```{bash, eval = F}
-mv python.tar.gz zipped/
-mv genometools.tar.gz zipped/
-mv subreads.tar.gz zipped/
+mv /mnt/gluster/amlinz/python.tar.gz zipped/
+mv /mnt/gluster/amlinz/genometools.tar.gz zipped/
+mv /mnt/gluster/amlinz/subreads.tar.gz zipped/
 ```
 
-2. Process genomes for use as mapping database
+##2. Process genomes for use as mapping database
 
 2a. make list of genomes to run
 ```{bash, eval = F}
@@ -253,7 +268,7 @@ rm genometools.tar.gz
 ```
 
 
-3. Mapping the metatranscriptomes
+##3. Mapping the metatranscriptomes
 
 3a. Build an index database from the concatenated fasta file
 
@@ -393,7 +408,7 @@ rm *.gz
 ```
 
 
-4. Count and tabulate mapped reads.
+##4. Count and tabulate mapped reads.
 
 4a. Run featureCounts to count reads against the gff reference index
 
@@ -402,7 +417,7 @@ Make list of files to run:
 for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
 ```
 
-Run 10featurcounts.sub:
+Run 10featurecounts.sub:
 ```{bash, eval = F}
 
 # 10featurecounts.sub
@@ -582,7 +597,7 @@ inKey.to_csv(outKey, index=False)
 ```
 
 
-5. Normalize read counts to transcripts per liter
+##5. Normalize read counts to transcripts per liter
 
 ```{r, eval = F}
 readCounts <- read.csv("D:/GEODES2refMAGsSAGs_readcounts.txt", header = T, row.names = 1)
