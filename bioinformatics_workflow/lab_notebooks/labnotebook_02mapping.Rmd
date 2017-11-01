@@ -4536,3 +4536,368 @@ Taht worked! re run the bamfiles.txt list and count em all.
 
 
 
+####2017-10-30
+
+Everything worked great post-mapping last week, and I was able to get a table of read counts (normalized to transcripts/L) by sample, and aggregate that by genome. Now that I have that working, I have several challenges left to get the full database up and running. One, I need to make the gff renaming and key file generating script generalizable to all my types of data (I already started this with the algae, and the new SAGs look the same as the old SAGs, so really the assemblies are the problem). Two, I need to make a new gff file from the clustering output, preferably without using grep. Three, I need some way to QC the clusters - how many genes/cluster? Are they all the same gene annotation/phylogeny? Can I preferentially pick a ref seq from the MAGs or SAGs since they are more likely better classified than the assemblies? And four, I need to do some QC on my database - how much redundancy is there? How well represented are the ref MAGs and SAGs in the metagenome assemblies?
+
+Let's start easy and work up. 1st up, modify my ref MAGs SAGs script to work for the full database. The changes I want are:
+- Use the gff file to extract CDS regions, but then don't save the gff file
+- Save the CDS fasta but not the other one
+- Add one of the new SAGs in and see if the script still works
+
+03refMAGs_SAGs.sub:
+```{bash, eval = F}
+
+
+# 03refMAGs_SAGs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03refMAGs_SAGs_$(Cluster).log
+error = 03refMAGs_SAGs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Arch == "X86_64")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/03refMAGs_SAGs.sh
+arguments = $(samplename)
+output = 03refMAGs_SAGs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,/home/amlinz/ref_MAGs_SAGs/gffs/$(samplename).gff,/home/amlinz/ref_MAGs_SAGs/Readme.csv,scripts/ref_MAGs_SAGs-parsing.py,zipped/python.tar.gz, ref_MAGs_SAGs/fastas/$(samplename).fna
+transfer_output_files = CDS.$(samplename).fna,$(samplename).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from /home/amlinz/refMAGs_SAGs_list.txt
+```
+
+03refMAGs_SAGs.sh:
+```{bash, eval = F}
+#!/bin/bash
+#Install genome tools and python
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Remove CRISPRs
+grep -v "CRISPR" $1.gff > temp.gff && mv temp.gff $1.gff
+#Setup and run python script
+chmod +x ref_MAGs_SAGs_parsing.py
+python ref_MAGs_SAGs_parsing.py $1
+
+#Remove all the duplicate gff-version lines
+grep -v "##gff-version 3" $1.parsed.gff > int1.gff
+# Move sequence region lines to top of file
+grep "##sequence-region" int1.gff > sequence_regions.gff
+grep -v "##sequence-region" int1.gff > not_sequence_regions.gff
+
+# Put it all back together and clean up
+echo '##gff-version 3' | cat - sequence_regions.gff not_sequence_regions.gff > $1.fixed.gff
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.fixed.gff #clean up the the gff sorter
+
+# Extract the coding regions from the fasta file
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile $1.fna -matchdescstart sorted.$1.gff >  CDS.$1.fna
+
+rm *tar.gz
+rm *csv
+rm *py
+rm -r genometools
+rm -r home
+rm -rf python
+rm $1.fna
+rm $1.fna.*
+rm *.gff
+
+```
+
+No changes needed to python script.
+ref_MAGs_SAGs_parsing.py:
+```{python, eval = F}
+
+###############################################################################
+# CodeTitle.py
+# Copyright (c) 2017, Joshua J Hamilton and Alex Linz
+# Affiliation: Department of Bacteriology
+#              University of Wisconsin-Madison, Madison, Wisconsin, USA
+# URL: http://http://mcmahonlab.wisc.edu/
+# All rights reserved.
+################################################################################
+# Make table of info from gff files
+################################################################################
+
+#%%#############################################################################
+### Import packages
+################################################################################
+
+from BCBio import GFF # Python package for working with GFF files
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+genome = sys.argv[1]
+#genome = '2582580615'
+taxonFile = 'Readme.csv'
+inputGff = genome + '.gff'
+outputGff = genome + '_parsed.gff'
+outputTable = genome + '_table.txt'
+
+#%%#############################################################################
+### Update the inputGff file. Replace ID with 'locus tag' field
+### Make a separate table with taxonomy and product name info
+################################################################################
+
+# Store the classification file as a dictionary
+
+taxonFile = "Readme.csv"
+readme = pandas.read_csv(taxonFile)
+readme = readme.fillna(value='')
+readme["TaxString"] = readme['Phylum'] + ';' + readme['Class'] + ';' + readme['Order'] + ';' + readme['Lineage'] + ';' + readme['Clade'] + ';' + readme['Tribe']
+readme['IMG OID'] = readme['IMG OID'].apply(str)
+taxonDict = readme.set_index('IMG OID').to_dict()['TaxString']
+
+# Read in the GFF file
+# Each record contains all sequences belonging to the same contig
+# For each sequence within the record, replace the ID with the locus_tag
+
+inFile = open(inputGff, 'r')
+outFile1 = open(outputGff, 'w')
+outFile2 = open(outputTable, 'w')
+
+for record in GFF.parse(inFile):
+    for seq in record.features:
+        seq.id = seq.qualifiers['locus_tag'][0] # this is a list for some reason
+        seq.qualifiers['ID'][0] = genome + "_" + seq.id
+        if 'product' in seq.qualifiers.keys():
+            product = seq.qualifiers['product'][0]
+        else:
+            product = 'None given'
+        del seq.qualifiers['locus_tag']
+
+        taxonomy = taxonDict[genome]
+        outFile2.write(seq.qualifiers['ID'][0]+'\t'+genome+'\t'+str(taxonomy)+'\t'+product+'\n')
+    GFF.write([record], outFile1)
+
+inFile.close()
+outFile1.close()
+outFile2.close()
+
+```
+
+Lastly, add table.txt file moving to the postprocessing script.
+move_CDS_output.sh:
+```{bash, eval = F}
+#!/bin/bash
+
+mv /home/amlinz/CDS*.fna /home/amlinz/CDS_fastas
+cat /home/amlinz/CDS_fastas/* > /mnt/gluster/amlinz/CDS_regions.fna
+cat /home/amlinz/*.table.txt > /mnt/gluster/amlinz/CDS_regions_genekey.txt
+gzip /mnt/gluster/amlinz/CDS_regions.fna
+
+```
+
+
+For testing purposes, modify the ref MAGs SAGs list to include one time series MAG or SAG and one new SAG. 2754412703
+
+Success! Looks like I can just dump the new SAGs in with the old ones and append their phylogeny info to the Readme.csv file.
+
+Next up, run an interactive session to write the python script for the metagenome assemblies. Will work on that after lunch, though.
+
+
+####2017-10-31
+
+Happy Halloween! Got caught up in meetings/emails/ordering yesterday afternoon so coming back to the metagenome assemblies now. I'll grab one of the assemblies and the ref MAGs SAGs script and work on modifying it in an interactive session.
+
+testinteractive.sub:
+```{bash, eval = F}
+#interactive1.sub
+#
+universe = vanilla
+# Name the log file:
+log = interactive.log
+
+# Name the files where standard output and error should be saved:
+output = process.out
+error = process.err
+#arguments=$(metagenome)
+# If you wish to compile code, you'll need the below lines.
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+#arguments = $(samplename)
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+#transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_input_files = contig_lists/GEODES006-contigs0873,scripts/classifyWphylodist_contigs.py,zipped/python.tar.gz,executables/02phylodist.sh
+#transfer_input_files=zipped/cd-hit.tar.gz,zipped/genometools.tar.gz,metaG_gffs/GEODES0050005
+#transfer_input_files = zipped/sortmerna-2.1-linux-64.tar.gz,/home/amlinz/GEODES_metaT_split/GEODES164-999999.fastq.gz
+#transfer_input_files = splitfastaheaders/fastaheaders1001,executables/07nrdb_gff.sh
+#transfer_input_files = zipped/samtools.tar.gz
+#transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,/home/amlinz/ref_MAGs_SAGs/fastas/$(samplename).fna,/home/amlinz/ref_MAGs_SAGs/gffs/$(samplename).gff,/home/amlinz/ref_MAGs_SAGs/Readme.csv,scripts/ref_MAGs_SAGs.py,zipped/python.tar.gz
+#transfer_input_files = zipped/genometools.tar.gz,ref_MAGs_SAGs_processed_gffs/
+#transfer_input_files = zipped/subreads.tar.gz,zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_input_files = genekey.py,endproduct_testcase.txt,endtable_testcase.txt,zipped/python.tar.gz
+transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,refseq_algae/,scripts/ref_MAGs_SAGs.py
+#transfer_input_files = zipped/genometools.tar.gz,ref_MAGs_SAGs_processed_gffs/
+
+# It's still important to request enough computing resources. The below
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 16GB
+request_disk = 8GB
+
+queue
+
+```
+
+In the interactive sesssion:
+```{bash, eval = F}
+# Set test variable
+a="GEODES006"
+
+# Copy fasta, gff, phylodist, and product_names from gluster
+cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/$a.assembled.fna.gz .
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/$a.assembled.gff .
+cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/$a.assembled.phylodist .
+cp /mnt/gluster/amlinz/metagenome_assemblies/product_names/$a.assembled.product_names .
+
+# Unzip fasta file
+gzip -d $a.assembled.fna.gz
+
+# What needs to change in the python script?
+# - Keep renaming in the gff but that's all it's good for
+# - Use phylodist for phylogeny information, but this is now by contig rather than by genome
+# - Look up annotations in product_names instead of gff
+
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+mv ref_MAGs_SAGs_parsing.py metaG_parsing.py
+chmod +x metaG_parsing.py
+```
+
+```{python, eval = F}
+
+###############################################################################
+# CodeTitle.py
+# Copyright (c) 2017, Joshua J Hamilton and Alex Linz
+# Affiliation: Department of Bacteriology
+#              University of Wisconsin-Madison, Madison, Wisconsin, USA
+# URL: http://http://mcmahonlab.wisc.edu/
+# All rights reserved.
+################################################################################
+# Make table of info from gff files
+################################################################################
+
+#%%#############################################################################
+### Import packages
+################################################################################
+
+from BCBio import GFF # Python package for working with GFF files
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+genome = sys.argv[1]
+#genome = 'GEODES006'
+taxonFile = genome + '.assembled.phylodist'
+productFile = genome + '.assembled.product_names'
+inputGff = genome + '.assembled.gff'
+outputGff = genome + '.parsed.gff'
+outputTable = genome + '.table.txt'
+
+#%%#############################################################################
+### Update the inputGff file. Replace ID with 'locus tag' field
+### Make a separate table with taxonomy and product name info
+################################################################################
+
+# Store the classification file as a dictionary
+
+readme = pandas.read_csv(taxonFile, sep='\t')
+readme.columns = ['Contig', 'Thing1', 'Thing2', 'Conf', 'TaxString']
+taxonDict = readme.set_index('Contig').to_dict()['TaxString']
+
+# Store the product info as a dictionary
+
+product_table = pandas.read_csv(productFile, sep='\t')
+product_table.columns = ['Gene', 'Product', 'KO']
+productDict = product_table.set_index('Gene').to_dict()['Product']
+
+# Read in the GFF file
+# Each record contains all sequences belonging to the same contig
+# For each sequence within the record, replace the ID with the locus_tag
+
+inFile = open(inputGff, 'r')
+outFile1 = open(outputGff, 'w')
+outFile2 = open(outputTable, 'w')
+
+limit_info = dict(gff_type = ["CDS"],)
+for record in GFF.parse(inFile, limit_info=limit_info):
+    for seq in record.features:
+        seq.id = seq.qualifiers['locus_tag'][0] # this is a list for some reason
+        seq.qualifiers['ID'][0] = genome + "_" + seq.id
+        del seq.qualifiers['locus_tag']
+
+        taxonomy = taxonDict.get(seq.id[0:17])
+        product = productDict.get(seq.id)
+        outFile2.write(seq.qualifiers['ID'][0]+'\t'+genome+'\t'+str(taxonomy)+'\t'+str(product)+'\n')
+    GFF.write([record], outFile1)
+
+inFile.close()
+outFile1.close()
+outFile2.close()
+```
+
+So it doesn't work when I run the full script, but does work when I do large subsets (and fast). Is there a weird line in GEODES006? Tomorrow I'll try removing CRISPR lines or splitting up into chunks to see which lines don't work.
+
+
+####2017-11-01
+
+Let's try interactive mode again, but with GEODES117 this time.
+Nope. Try removing CRISPR sequences.
+Nope. Try running the full gff fixing thing I did originally.
+
+```{bash, eval = F}
+
+#Fix the strand issue in the assemblies
+for file in GEODES*.gff; do awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $file > f1_$file; done
+
+#Add first comment line to the assemblies
+for file in f1*gff; do echo '##gff-version 3' | cat - $file > temp && mv temp $file; done
+
+```
+
+ITS WORKING. Slowly but surely. it's done ~800,000 in the last hour so may need to split? Maybe not. Total is 4-5 million so 6hrs or so isn't a bad time.
+
+Actually it got stuck at 850000. Maybe there is a bum line in there?
