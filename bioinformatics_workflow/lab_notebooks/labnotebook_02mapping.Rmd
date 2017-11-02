@@ -4901,3 +4901,223 @@ for file in f1*gff; do echo '##gff-version 3' | cat - $file > temp && mv temp $f
 ITS WORKING. Slowly but surely. it's done ~800,000 in the last hour so may need to split? Maybe not. Total is 4-5 million so 6hrs or so isn't a bad time.
 
 Actually it got stuck at 850000. Maybe there is a bum line in there?
+
+####2017-11-2
+
+Try again, trying to find the problem line. I'll run gt tidy 1st and split the gff file into smaller sections.
+
+Split the gff file by line numbers:
+```{bash, eval = F}
+mkdir gff_test
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES006.assembled.gff
+cd ..
+# make list of files to run
+ls gff_test > gff_test.txt
+```
+
+gff_test.sh:
+```{bash, eval = F}
+#!/bin/bash
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/GEODES006.assembled.phylodist .
+cp /mnt/gluster/amlinz/metagenome_assemblies/product_names/GEODES006.assembled.product_names .
+
+mv $1 GEODES006.assembled.gff
+chmod +x metaG_parsing.py
+
+awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' GEODES006.assembled.gff > f1_GEODES006.assembled.gff
+echo '##gff-version 3' | cat - f1_GEODES006.assembled.gff > temp && mv temp f1_GEODES006.assembled.gff
+gt gff3 -sort yes -tidy -retainids -force -o GEODES006.assembled.gff f1_GEODES006.assembled.gff
+
+python metaG_parsin.py "GEODES006"
+
+mv GEODES006.parsed.gff $1.parsed.gff
+mv GEODES006.table.txt $1.table.txt
+
+rm GEODES006*
+rm f1_GEODES006*
+rm metaG_parsing.py
+rm *tar.gz
+rm -r genometools
+rm -r home
+rm -rf python
+
+```
+
+gff_test.sub
+```{bash,eval = F}
+# gff_test.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = gff_test_$(Cluster).log
+error = gff_test_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Arch == "X86_64") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/gff_test.sh
+arguments = $(samplename)
+output = gff_test_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,scripts/metaG_parsing.py,gff_test/$(samplename)
+transfer_output_files = $(samplename).parsed.gff,$(samplename).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from gff_test.txt
+
+```
+
+
+Woohoo, that worked! Nothing failed, even. Not sure why. One quick test to see if anything come through that was classified
+
+```{bash, eval = F}
+for file in x*table.txt; do awk {'print $3'} $file | grep -v "None" | wc -l; done
+
+```
+
+Nothing. That's odd. Is there anything classified in the phylodist file? Yes, which means I probably wrote that part of the python script wrong. Yep, looks like I'm short 1 character of the contig name. Darn python.
+
+I'll test this while I'm adding on the CDS fasta bit to script.
+
+```{bash, eval = F}
+#!/bin/bash
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/GEODES006.assembled.fna.gz .
+gzip -d GEODES006.assembled.fna.gz
+cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/GEODES006.assembled.phylodist .
+cp /mnt/gluster/amlinz/metagenome_assemblies/product_names/GEODES006.assembled.product_names .
+
+mv $1 GEODES006.assembled.gff
+chmod +x metaG_parsing.py
+
+awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' GEODES006.assembled.gff > f1_GEODES006.assembled.gff
+echo '##gff-version 3' | cat - f1_GEODES006.assembled.gff > temp && mv temp GEODES006.assembled.gff
+
+python metaG_parsing.py "GEODES006"
+
+mv GEODES006.parsed.gff $1.parsed.gff
+mv GEODES006.table.txt $1.table.txt
+
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.parsed.gff #clean up the the gff sorter
+
+# Extract the coding regions from the fasta file
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile GEODES006.assembled.fna -matchdescstart sorted.$1.gff >  CDS.$1.fna
+
+
+rm GEODES006*
+rm *gff
+rm metaG_parsing.py
+rm *tar.gz
+rm -r genometools
+rm -r home
+rm -rf python
+```
+Change the submit script to keep the fasta but not the gff. Test on one file.
+
+Finished and output looks good, but still no classifications. Further testing reveals that I was giving it JGI's phylodist file instead of my contig classification file *headkeyboard*. Let's try this again...
+
+```{python, eval = F}
+
+###############################################################################
+# CodeTitle.py
+# Copyright (c) 2017, Joshua J Hamilton and Alex Linz
+# Affiliation: Department of Bacteriology
+#              University of Wisconsin-Madison, Madison, Wisconsin, USA
+# URL: http://http://mcmahonlab.wisc.edu/
+# All rights reserved.
+################################################################################
+# Make table of info from gff files
+################################################################################
+
+#%%#############################################################################
+### Import packages
+################################################################################
+
+from BCBio import GFF # Python package for working with GFF files
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+genome = sys.argv[1]
+#genome = 'GEODES006'
+taxonFile = genome + '.contig.classification.perc70.minhit3.txt'
+productFile = genome + '.assembled.product_names'
+inputGff = genome + '.assembled.gff'
+outputGff = genome + '.parsed.gff'
+outputTable = genome + '.table.txt'
+
+#%%#############################################################################
+### Update the inputGff file. Replace ID with 'locus tag' field
+### Make a separate table with taxonomy and product name info
+################################################################################
+
+# Store the classification file as a dictionary
+
+readme = pandas.read_csv(taxonFile, sep='\t', header = None)
+readme.columns = ['Contig', 'TaxString']
+taxonDict = readme.set_index('Contig').to_dict()['TaxString']
+
+# Store the product info as a dictionary
+
+product_table = pandas.read_csv(productFile, sep='\t')
+product_table.columns = ['Gene', 'Product', 'KO']
+productDict = product_table.set_index('Gene').to_dict()['Product']
+
+# Read in the GFF file
+# Each record contains all sequences belonging to the same contig
+# For each sequence within the record, replace the ID with the locus_tag
+
+inFile = open(inputGff, 'r')
+outFile1 = open(outputGff, 'w')
+outFile2 = open(outputTable, 'w')
+
+limit_info = dict(gff_type = ["CDS"],)
+for record in GFF.parse(inFile, limit_info=limit_info):
+    for seq in record.features:
+        seq.id = seq.qualifiers['locus_tag'][0] # this is a list for some reason
+        seq.qualifiers['ID'][0] = genome + "_" + seq.id
+        del seq.qualifiers['locus_tag']
+
+        taxonomy = taxonDict.get(seq.id[:18])
+        product = productDict.get(seq.id)
+        outFile2.write(seq.qualifiers['ID'][0]+'\t'+seq.id[:18]+'\t'+str(taxonomy)+'\t'+str(product)+'\n')
+    GFF.write([record], outFile1)
+
+inFile.close()
+outFile1.close()
+outFile2.close()
+
+```
