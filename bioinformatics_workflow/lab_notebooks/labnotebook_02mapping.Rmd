@@ -5121,3 +5121,205 @@ outFile1.close()
 outFile2.close()
 
 ```
+
+
+####2017-11-3
+
+IT WORKED!!!!! My next goal is to modify the algae and ref genomes to only save the CDS regions and not the gff file. In retrospect, I'm going to modify the python scripts to append genome to the end of the ID so that if anything gets truncated in the clustering key file, its that. Then I'll run everything I've got through the pipeline, cluster and start working on the next python challenge.
+
+Remake the ref MAGs SAGs list and submit jobs:
+```{bash, eval = F}
+for file in ref_MAGs_SAGs/fastas/*;do name=$(basename $file | cut -d'.' -f1); echo $name; done > refMAGs_SAGs_list.txt
+```
+
+Now the algae.
+
+Now I need to remake the gff_test scripts to span multiple metagenomes. I think if I split all of them, keep the metagenome name in the split file name, and then trim that into a variable, it should work.
+
+split_metaG_gffs.sh:
+```{bash, eval = F}
+#!/bin/bash
+
+#mkdir metaG_gffs
+cd metaG_gffs
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES005.assembled.gff GEODES005.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES006.assembled.gff GEODES006.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES057.assembled.gff GEODES057.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES058.assembled.gff GEODES058.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES117.assembled.gff GEODES117.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES118.assembled.gff GEODES118.
+cd ..
+# make list of files to run
+ls metaG_gffs > metaG_gffs.txt
+```
+So far so good. Modify the executable to take a variable
+
+```{bash, eval = F}
+#!/bin/bash
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+metaG=$(basename $1 | cut -d'.' -f1)
+
+cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/$metaG.assembled.fna.gz .
+gzip -d $metaG.assembled.fna.gz
+cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/$metaG.assembled.phylodist .
+cp /mnt/gluster/amlinz/metagenome_assemblies/product_names/$metaG.assembled.product_names .
+cp /mnt/gluster/amlinz/phylodist_results/$metaG.contig.classification.perc70.minhit3.txt .
+
+mv $1 $metaG.assembled.gff
+chmod +x metaG_parsing.py
+
+awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $metaG.assembled.gff > f1_$metaG.assembled.gff
+echo '##gff-version 3' | cat - f1_$metaG.assembled.gff > temp && mv temp $metaG.assembled.gff
+
+python metaG_parsing.py $metaG
+
+mv $metaG.parsed.gff $1.parsed.gff
+mv $metaG.table.txt $1.table.txt
+
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.parsed.gff #clean up the the gff sorter
+
+# Extract the coding regions from the fasta file
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile $metaG.assembled.fna -matchdescstart sorted.$1.gff >  CDS.$1.fna
+
+
+rm *minhit3.txt
+rm *product_names
+rm $metaG.assembled.fna
+rm *gff
+rm metaG_parsing.py
+rm *tar.gz
+rm -r genometools
+rm -r home
+rm -rf python
+```
+And a new submit file to match:
+
+```{bash, eval = F}
+# 05metaG_gffs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 05metaG_gffs_$(Cluster).log
+error = 05metaG_gffs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Arch == "X86_64") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/05metaG_gffs.sh
+arguments = $(samplename)
+output = 05metaG_gffs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,scripts/metaG_parsing.py,metaG_gffs/$(samplename)
+transfer_output_files = CDS.$(samplename).fna,$(samplename).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from 05metaG_gffs.txt
+
+```
+
+Run on 2 test files first
+
+That works great! However, I just realized I never actually changed the algae executable to run the python script. This one is fast enough that it's not a problem, but I want all the formats and sample names to match.
+
+04algae.sub:
+```{bash, eval = F}
+# 04algae.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 04algae_$(Cluster).log
+error = 04algae_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/04algae.sh
+arguments = $(samplename)
+output = 04algae_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,refseq_algae/fastas/$(samplename).fna.gz,refseq_algae/gffs/$(samplename).gff.gz,refseq_algae/algae_phylogeny.txt,scripts/ref_algae_parsing.py
+transfer_output_files = CDS_$(samplename).fna,$(samplename).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from /home/amlinz/algae_list.txt
+
+```
+
+New executable:
+04algae.sh
+```{bash, eval = F}
+#!/bin/bash
+#Install genome tools and python
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+gzip -d *.gz
+
+#Remove CRISPRs
+grep -v "CRISPR" $1.gff > temp.gff && mv temp.gff $1.gff
+#Setup and run python script
+chmod +x ref_algae_parsing.py
+python ref_algae_parsing.py $1
+
+#Remove all the duplicate gff-version lines
+grep -v "##gff-version 3" $1.parsed.gff > int1.gff
+# Move sequence region lines to top of file
+grep "##sequence-region" int1.gff > sequence_regions.gff
+grep -v "##sequence-region" int1.gff > not_sequence_regions.gff
+
+# Put it all back together and clean up
+echo '##gff-version 3' | cat - sequence_regions.gff not_sequence_regions.gff > $1.fixed.gff
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.fixed.gff #clean up the the gff sorter
+
+# Extract the coding regions from the fasta file
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile $1.fna -matchdescstart sorted.$1.gff >  CDS.$1.fna
+
+rm *tar.gz
+rm algae_phylogeny.txt
+rm *py
+rm -r genometools
+rm -r home
+rm -rf python
+rm $1.fna
+rm $1.fna.*
+rm *.gff
+
+```
