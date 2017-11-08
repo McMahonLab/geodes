@@ -5513,3 +5513,115 @@ for record in GFF.parse(inFile, limit_info = limit_info):
 inFile.close()
 outFile2.close()
 ```
+
+####2017-11-08
+
+Back in my submit folder, I modified the algae executable and python script to match what I did in the interactive session above. The submit file doesn't need to change. Testing on one algal genome to start.
+
+Woohoo! Success! Now to put all the various scripts together. I'm going to take those commands plus the split metaG gff script and put them together into a single script.
+
+pre_gff_parsing.sh
+```{bash, eval = F}
+#!/bin/bash
+
+#mkdir metaG_gffs
+cd metaG_gffs
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES005.assembled.gff GEODES005.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES006.assembled.gff GEODES006.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES057.assembled.gff GEODES057.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES058.assembled.gff GEODES058.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES117.assembled.gff GEODES117.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES118.assembled.gff GEODES118.
+cd ..
+# make list of files to run
+ls metaG_gffs > metaG_gffs.txt
+
+for file in ref_MAGs_SAGs/fastas/*;do name=$(basename $file | cut -d'.' -f1); echo $name; done > refMAGs_SAGs_list.txt
+for file in refseq_algae/fastas/*;do name=$(basename $file .fna.gz); echo $name; done > algae_list.txt
+
+```
+Submit the jobs. They can all be started at the same time.
+```{bash, eval = F}
+condor_submit submits/03refMAGs_SAGs.sub
+condor_submit submits/04algae.sub
+condor_submit submits/05metaG_gffs.sub
+
+```
+
+Modify post processin script to include the standard
+```{bash, eval = F}
+#!/bin/bash
+
+mv /home/amlinz/CDS*.fna /home/amlinz/CDS_fastas
+cat /home/amlinz/CDS_fastas/* /home/amlinz/ref_MAGs_SAGs/fastas/pFN18A_DNA_transcript.fna > /mnt/gluster/amlinz/CDS_regions.fna
+echo "pFN18A_DNA_transcript internal standard internal standard internal standard" > std.table.txt
+cat /home/amlinz/*.table.txt > /mnt/gluster/amlinz/CDS_regions_genekey.txt
+gzip /mnt/gluster/amlinz/CDS_regions.fna
+
+```
+
+All good! Now the clustering. upping the RAM and hard drive space because my zipped .fna file isalready 5GB. And I'm not going to keep/make the fasta headers file since I'll be writing a more sophisticated python script for that.
+
+06cd-hit.sub:
+```{bash, eval = F}
+# 06cd-hit.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 06cd-hit_$(Cluster).log
+error = 06cd-hit_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6) && (Arch == "X86_64")
+
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/06cd-hit.sh
+#arguments = $(samplename)
+output = 06cd-hit_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/cd-hit.tar.gz
+#transfer_output_files = 
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 16
+request_memory = 24GB
+request_disk = 24GB
+#
+# run one instance
+queue
+
+```
+
+In the executable, change the mapping ID level and remove the fastaheaders part
+06cd-hit.sh
+```{bash, eval = F}
+
+#!/bin/bash
+#Cluster coding regions to get nonredundant genes and make a dummy gff file to go with it
+
+tar xvzf cd-hit.tar.gz
+
+cp /mnt/gluster/amlinz/CDS_regions.fna.gz .
+gzip -d CDS_regions.fna.gz
+
+./cd-hit-v4.6.8-2017-0621/cd-hit-est -i CDS_regions.fna -o nonredundant_database.fna -c 0.80 -M 24000 -T 16
+
+gzip nonredundant_database.fna
+mv nonredundant_database.fna.gz /mnt/gluster/amlinz
+mv nonredundant_database.fna.clstr /mnt/gluster/amlinz
+
+rm *tar.gz
+rm *fna
+rm *clstr
+rm *gff
+rm *txt
+rm -r cd-hit-v4.6.8-2017-0621
+
+```
