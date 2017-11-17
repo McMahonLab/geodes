@@ -5323,3 +5323,11 @@ rm $1.fna.*
 rm *.gff
 
 ```
+
+
+I'm resorting to awk
+```{bash, eval = F}
+awk -F'\t' -v OFS='\t' '{print $9}' $a.parsed.gff > tags.txt
+awk -F";" '{for(i=1;i<=NF;i++){if ($i ~ /ID=*/){print $i}}}' tags.txt > IDs.txt
+
+
