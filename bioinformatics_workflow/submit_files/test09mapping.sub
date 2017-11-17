@@ -9,7 +9,7 @@ requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6) && (Arch == "X86_64")
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
-executable = executables/09mapping.sh
+executable = executables/test09mapping.sh
 arguments = $(samplename)
 output = 09mapping_$(Cluster).out
 #
@@ -24,9 +24,9 @@ transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
 #  each job will need on the computer where it runs.
 Requirements = (Target.HasGluster == true)
 request_cpus = 1
-request_memory =20GB
-request_disk = 12GB
+request_memory =30GB
+request_disk = 25GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
-queue samplename from path2mappingfastqs.txt
+queue samplename from testpath2mappingfastqs.txt
 
