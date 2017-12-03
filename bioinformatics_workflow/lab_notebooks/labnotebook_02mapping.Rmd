@@ -5720,9 +5720,141 @@ rm $metaG.assembled.*
 
 ```
 
-05metagenome_assemblies.sub:
-```{bash, eval = F}
+#### 2017-12-02
 
-ech
+Realized I need the version with the python script, 05metaG_gffs. The squid stuff worked and should transfer over neatly, though.
+
+05metaG_gffs.sh:
+```{bash, eval = F}
+#!/bin/bash
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+metaG=$(echo $1 | cut -c1-9)
+tar xvzf $metaG.datafiles2.tar.gz
+gzip -d $metaG.assembled.fna.gz
+
+
+mv $1 $metaG.assembled.gff
+chmod +x metaG_parsing.py
+
+awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $metaG.assembled.gff > f1_$metaG.assembled.gff
+echo '##gff-version 3' | cat - f1_$metaG.assembled.gff > temp && mv temp $metaG.assembled.gff
+
+python metaG_parsing.py $metaG
+
+mv $metaG.parsed.gff $1.parsed.gff
+mv $metaG.table.txt $1.table.txt
+
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.parsed.gff #clean up the the gff sorter
+
+# Extract the coding regions from the fasta file
+gt extractfeat -type CDS -seqid no -retainids yes -seqfile $metaG.assembled.fna -matchdescstart sorted.$1.gff >  CDS.$1.fna
+
+
+rm *minhit3.txt
+rm *product_names
+rm $metaG.assembled.fna
+rm *gff
+rm metaG_parsing.py
+rm *tar.gz
+rm -r genometools
+rm -r home
+rm -rf python
 
 ```
+
+05metaG_gffs.sub
+```{bash, eval = F}
+# 05metaG_gffs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 05metaG_gffs_$(Cluster).log
+error = 05metaG_gffs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Arch == "X86_64")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/05metaG_gffs.sh
+arguments = $(samplename)
+output = 05metaG_gffs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,scripts/metaG_parsing.py,metaG_gffs/$(samplename),http://proxy.chtc.wisc.edu/SQUID/amlinz/GEODES165.datafiles2.tar.gz
+transfer_output_files = CDS.$(samplename).fna,$(samplename).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from metaG_gffs.txt
+
+```
+
+Test worked! I made datafile2.tar.gz tarballs for all of the metagenomes. Unfortunately, I think I'm going to need a seperate submit file for each metagenome, which is a bit of a pain. I'll modify the splitting script to split all, but then make separate lists for each 
+```{bash, eval = F}
+
+#!/bin/bash
+
+#mkdir metaG_gffs
+cd metaG_gffs
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES005.assembled.gff GEODES005.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES006.assembled.gff GEODES006.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES057.assembled.gff GEODES057.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES058.assembled.gff GEODES058.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES117.assembled.gff GEODES117.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES118.assembled.gff GEODES118.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES165.assembled.gff GEODES167.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES166.assembled.gff GEODES166.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES167.assembled.gff GEODES167.
+split -500000 /mnt/gluster/amlinz/metagenome_assemblies/gff/GEODES168.assembled.gff GEODES168.
+cd ..
+# make list of files to run
+ls metaG_gffs/GEODES005* > 005metaG_gffs.txt
+ls metaG_gffs/GEODES006* > 006metaG_gffs.txt
+ls metaG_gffs/GEODES057* > 057metaG_gffs.txt
+ls metaG_gffs/GEODES058* > 058metaG_gffs.txt
+ls metaG_gffs/GEODES117* > 117metaG_gffs.txt
+ls metaG_gffs/GEODES118* > 118metaG_gffs.txt
+ls metaG_gffs/GEODES165* > 165metaG_gffs.txt
+ls metaG_gffs/GEODES166* > 166metaG_gffs.txt
+ls metaG_gffs/GEODES167* > 167metaG_gffs.txt
+ls metaG_gffs/GEODES168* > 168metaG_gffs.txt
+
+```
+
+It's working! I started ALL of my CDS regions :) Modifying the post CDS processing script to not save everything to gluster once this is done.
+
+move_CDS_output.sh
+```{bash, eval = F}
+
+#!/bin/bash
+
+#make dummy table of  "pFN18A_DNA_transcript\tinternal standard\tinternal standard\tinternal standard" 1st. Named pFN18A.table.txt
+
+mv /home/amlinz/CDS*.fna /home/amlinz/CDS_fastas
+cat /home/amlinz/CDS_fastas/* /home/amlinz/ref_MAGs_SAGs/fastas/pFN18A_DNA_transcript.fna > CDS_regions.fna
+cat /home/amlinz/*.table.txt > CDS_regions_genekey.txt
+
+gzip CDS_regions.fna
+cp CDS_regions.fna.gz /mnt/gluster/amlinz/
+cp CDS_regions_genekey.txt /mnt/gluster/amlinz/
+
+```
+
+The resulting files are 3.2GB for the fasta (zipped) and 2.5 for the genekey. They seem to be doing just find in Gluster so I will check the submit file to make sure it has enough space and start that overnight.
