@@ -31,8 +31,17 @@ condor_submit submits/02phylodist.sub
 condor_submit submits/03refMAGs_SAGs.sub
 ./scripts/algae_list.sh
 condor_submit submits/04algae.sub
-./scripts/split_metagenome_gffs.sh
-condor_submit submits/05metagenome_assemblies.sh
+./scripts/split_metaG_gffs.sh
+condor_submit submits/05.1metaG_gffs.sh
+condor_submit submits/05.2metaG_gffs.sh
+condor_submit submits/05.3metaG_gffs.sh
+condor_submit submits/05.4metaG_gffs.sh
+condor_submit submits/05.5metaG_gffs.sh
+condor_submit submits/05.6metaG_gffs.sh
+condor_submit submits/05.7metaG_gffs.sh
+condor_submit submits/05.8metaG_gffs.sh
+condor_submit submits/05.9metaG_gffs.sh
+condor_submit submits/05.10metaG_gffs.sh
 ./scripts/move_CDS_output.sh
 condor_submit submits/06cd-hit.sub
 # Note: can start the mapping now
