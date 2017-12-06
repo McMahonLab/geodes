@@ -5858,3 +5858,16 @@ cp CDS_regions_genekey.txt /mnt/gluster/amlinz/
 ```
 
 The resulting files are 3.2GB for the fasta (zipped) and 2.5 for the genekey. They seem to be doing just find in Gluster so I will check the submit file to make sure it has enough space and start that overnight.
+
+####2017-12-6
+
+Clustering finished last night! Working on a way to inform how i choose rep seqs for each cluster of nonredundant CDS regions. See clusters.Rmd for details (this file is opening kind of slowly...)
+
+```{bash, eval = F}
+maxsize=800
+touch endpoint.txt
+cat split_fastaheaders/fastaheaders0036 | while read line; do var=$(echo $line | cut -c1-19); grep -B $maxsize $var /mnt/gluster/amlinz/nonredundant_database.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; length=`tail -1 splitfile.clstr | awk '{print $2}' | sed 's/[^0-9]*//g'`; echo $length >> endpoint.txt;done > clusters.txt
+
+>ME1300DRAFT_00843_2582580525
+
+```
