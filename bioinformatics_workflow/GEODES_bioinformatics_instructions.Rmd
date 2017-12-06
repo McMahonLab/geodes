@@ -45,6 +45,7 @@ condor_submit submits/05.10metaG_gffs.sh
 ./scripts/move_CDS_output.sh
 condor_submit submits/06cd-hit.sub
 # Note: can start the mapping now
+# calculate max size to include in 07nrdb_gff.sh
 ./scripts/split_fastaheaders.sh
 condor_submit submits/07nrdb_gff.sub
 ./scripts/cat_nrdbgff.sh
