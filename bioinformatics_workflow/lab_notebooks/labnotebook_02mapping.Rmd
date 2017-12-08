@@ -5871,3 +5871,10 @@ cat split_fastaheaders/fastaheaders0036 | while read line; do var=$(echo $line |
 >ME1300DRAFT_00843_2582580525
 
 ```
+
+####2017-12-07
+
+After running all 9800 jobs, I realized I was unnecessarily truncating samplenames and not unzipping the .clster file. Started a few testers last night, which worked great, and started the rest this morning. I wrote to Josh and Sarah about CD-HIT's rep seq choosing, and they agree that the longest gene is probably the most informative rep seq, and there is no need to write a script to rename genes. So I will continue on my merry way with the mapping, once the gff file is made.
+
+But first, I need to update my workflow before I get too far and forget how I did this. 
+
