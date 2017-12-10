@@ -50,7 +50,7 @@ sort -nrk1,1 /mnt/gluster/amlinz/nonredundant_database.fna.clstr  | head -1 | cu
 ./scripts/split_fastaheaders.sh
 condor_submit submits/07nrdb_gff.sub
 ./scripts/cat_nrdbgff.sh
-condor_submit submits/07.2nrdb.gff.sub #Remove carrots from IDs in this script
+condor_submit submits/07.2nrdb.gff.sub
 
 # Part 3 - mapping
 # Note: must be run after Part 1. Can be started during Part 2 once you have the fasta file of the nonredundant database and before the gff file is finished processing.
