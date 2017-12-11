@@ -31,11 +31,22 @@ condor_submit submits/02phylodist.sub
 condor_submit submits/03refMAGs_SAGs.sub
 ./scripts/algae_list.sh
 condor_submit submits/04algae.sub
-./scripts/split_metagenome_gffs.sh
-condor_submit submits/05metagenome_assemblies.sh
+./scripts/split_metaG_gffs.sh
+condor_submit submits/05.1metaG_gffs.sub
+condor_submit submits/05.2metaG_gffs.sub
+condor_submit submits/05.3metaG_gffs.sub
+condor_submit submits/05.4metaG_gffs.sub
+condor_submit submits/05.5metaG_gffs.sub
+condor_submit submits/05.6metaG_gffs.sub
+condor_submit submits/05.7metaG_gffs.sub
+condor_submit submits/05.8metaG_gffs.sub
+condor_submit submits/05.9metaG_gffs.sub
+condor_submit submits/05.10metaG_gffs.sub
 ./scripts/move_CDS_output.sh
-condor_submit submits/06cd-hit.sub
+condor_submit submits/06cd-hit.sub #add fastaheaders back into this script
 # Note: can start the mapping now
+# calculate max size of clusters to include in 07nrdb_gff.sh with this command (add 1):
+sort -nrk1,1 /mnt/gluster/amlinz/nonredundant_database.fna.clstr  | head -1 | cut -f1
 ./scripts/split_fastaheaders.sh
 condor_submit submits/07nrdb_gff.sub
 ./scripts/cat_nrdbgff.sh
@@ -44,6 +55,7 @@ condor_submit submits/07.2nrdb.gff.sub
 # Part 3 - mapping
 # Note: must be run after Part 1. Can be started during Part 2 once you have the fasta file of the nonredundant database and before the gff file is finished processing.
 condor_submit submits/08build_index.sub
+ls /mnt/gluster/amlinz/GEODES_nonrRNA > path2mappingfastqs.txt
 condor_submit submits/09mapping.sub
 
 # Part 4 - mapped read counting

@@ -1,0 +1,32 @@
+# 10featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 10featurecounts_$(Cluster).log
+error = 010featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/10featurecounts.sh
+arguments = $(samplename)
+output = 10featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz
+transfer_output_files = $(samplename).MAGsSAGs.CDS.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 8GB
+request_disk = 4GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+

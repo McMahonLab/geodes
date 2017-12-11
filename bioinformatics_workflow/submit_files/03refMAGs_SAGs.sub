@@ -5,7 +5,7 @@
 universe = vanilla
 log = 03refMAGs_SAGs_$(Cluster).log
 error = 03refMAGs_SAGs_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+requirements = (OpSys == "LINUX") && (Arch == "X86_64")
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
@@ -17,8 +17,8 @@ output = 03refMAGs_SAGs_$(Cluster).out
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,/home/amlinz/ref_MAGs_SAGs/fastas/$(samplename).fna,/home/amlinz/ref_MAGs_SAGs/gffs/$(samplename).gff,/home/amlinz/ref_MAGs_SAGs/Readme.csv
-transfer_output_files = CDS_$(samplename).fna
+transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,/home/amlinz/ref_MAGs_SAGs/gffs/$(samplename).gff,/home/amlinz/ref_MAGs_SAGs/Readme.csv,scripts/ref_MAGs_SAGs_parsing.py,zipped/python.tar.gz,ref_MAGs_SAGs/fastas/$(samplename).fna
+transfer_output_files = CDS.$(samplename).fna,$(samplename).table.txt
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.

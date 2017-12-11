@@ -1324,3 +1324,14 @@ Nope. Remove everything after the last semicolon.
 ```{bash, eval = F}
 awk -F';' {'print $1'} /mnt/gluster/amlinz/ref_MAGs_SAGs_database.gff > test.gff
 ```
+
+
+####2017-12-09
+
+```{bash, eval = F}
+for file in fastaheaders*nrdb.gff; do
+  first=$(head -1 $file);
+  fifth=$(echo $first | awk '{print $6}');
+  len=$(echo $fifth | wc -c);
+  echo $file $len;
+  done > genelength.txt

@@ -6,11 +6,7 @@ tar xvzf cd-hit.tar.gz
 cp /mnt/gluster/amlinz/CDS_regions.fna.gz .
 gzip -d CDS_regions.fna.gz
 
-./cd-hit-v4.6.8-2017-0621/cd-hit-est -i CDS_regions.fna -o nonredundant_database.fna -c 0.95 -M 24000 -T 16
-
-grep ">" nonredundant_database.fna > fasta_headers.txt
-#remove the carrot
-sed -e 's/>//g' fasta_headers.txt > temp.txt && mv temp.txt fasta_headers.txt
+./cd-hit-v4.6.8-2017-0621/cd-hit-est -i CDS_regions.fna -o nonredundant_database.fna -c 0.97 -M 36000 -T 12 -d 50
 
 gzip nonredundant_database.fna
 mv nonredundant_database.fna.gz /mnt/gluster/amlinz
