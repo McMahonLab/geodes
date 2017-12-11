@@ -5,7 +5,7 @@
 universe = vanilla
 log = 06cd-hit_$(Cluster).log
 error = 06cd-hit_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6) && (Arch == "X86_64")
+requirements = (OpSys == "LINUX")
 
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
@@ -19,14 +19,14 @@ output = 06cd-hit_$(Cluster).out
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 transfer_input_files = zipped/cd-hit.tar.gz
-transfer_output_files = fasta_headers.txt
+#transfer_output_files = fasta_headers.txt
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.
 Requirements = (Target.HasGluster == true)
-request_cpus = 16
-request_memory = 24GB
-request_disk = 16GB
+request_cpus = 12
+request_memory = 36GB
+request_disk = 20GB
 #
 # run one instance
 queue

@@ -1,0 +1,29 @@
+# 11tableprocessing.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 11tableprocessing_$(Cluster).log
+error = 11tableprocessing_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/11tableprocessing.sh
+output = 11tableprocessing_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,GEODES_genes_2017-10-25.txt,scripts/genekey.py
+transfer_output_files = GEODES2refMAGsSAGs_readcounts.txt,GEODES2refMAGsSAGS_geneinfo.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+queue
