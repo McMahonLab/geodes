@@ -1,7 +1,7 @@
 #!/bin/bash
 #Sort metatranscriptomic reads into rRNA and non-rRNA files
 
-#Transfer the fasta file from gluster
+#Fastq files previously split into smaller pieces
 name=$(basename $1 |cut -d'.' -f1)
 
 #Unzip files
