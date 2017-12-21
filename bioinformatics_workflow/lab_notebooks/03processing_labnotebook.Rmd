@@ -1389,3 +1389,23 @@ rm -rf python
 rm python.tar.gz
 
 ```
+
+####2017-12-20
+
+The program kept producing empty output in interactive mode with only a partial file. I think I need to do this old-school - remove blank lines and grep the gene names in the genekey file. Send the processed pieces back to the submit node.
+
+```{bash, eval = F}
+
+#!/bin/bash
+gzip -d CDS_regions_genekey.txt.gz
+
+awk 'NR > 1{s=0; for (i=3;i<=NF;i++) s+=$i; if (s!=0)print}' GEODES_ID75_2017-12-17.txt > GEODES_ID75_2017-12-17.readcounts.txt
+awk '{print $1}' $a.readcounts.txt > genes.txt
+while read line; do grep $line CDS_regions_genekey.txt; done < genes.txt > $a.gene.info.txt
+
+rm $1
+rm CDS_regions_genekey.txt
+rm genes.txt
+
+
+```
