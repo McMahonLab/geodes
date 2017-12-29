@@ -1409,3 +1409,66 @@ rm genes.txt
 
 
 ```
+
+####2017-12-27
+
+Still having issues with featurecounts, despite finding and fixing a blank field in the internal standard line. I've rerun the 07 and 07.2 scripts to fix this. Now I will boot 10featurecounts into interactive mode and troubleshoot on a subset of the gff file.
+
+Here's the original executable to work off of.
+```{bash, eval = f}
+#!/bin/bash
+#Count mapped reads
+a="GEODES070-nonrRNA"
+cp /mnt/gluster/amlinz/GEODES_mapping_results/$a.75.mapped.bam .
+gzip -d nonredundant_database.gff.gz
+tar xvf samtools.tar.gz
+./samtools/bin/samtools view $a.75.mapped.bam > $a.75.sam
+
+#Unzip programs
+tar -xvzf subreads.tar.gz
+#Pair reads
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g ID --fracOverlap 0.75 -M --fraction --donotsort -a test.gff -o $a.75.CDS.txt $a.75.mapped.bam
+
+#Clean up - don't delete the text file, that is being sent back to the submit node
+rm *.tar.gz
+rm -r subread-1.5.2-source
+
+```
+
+Things I've tried that haven't worked:
+- removing carrots from names
+- fixing spaces in between lines
+- fixing spaces in standard line
+- changing Cluster region to Gene name
+
+Things that worked!
+- Adding the following line to the bottom of the file:
+pFN18A_DNA_transcript   >Cluster X      CDS     1       917     .       +      0ID=pFN18A-DNA-transcript
+- Removing carrots from the region names with the following command:
+sed -i 's/>//' new_nonredundant_database.gff  
+
+Add these lines to 07.2nrdb_gff.sh, change bamfiles.txt to test a different bam file, and run a tester job.
+
+
+
+New table processing script - can I grep without running in parallel?
+
+```{bash, eval = F}
+
+#!/bin/bash
+gzip -d CDS_regions_genekey.txt.gz
+gzip -d GEODES_ID75_2017-12-27.txt.gz
+
+awk 'NR > 1{s=0; for (i=3;i<=NF;i++) s+=$i; if (s!=0)print}' GEODES_ID75_2017-12-27.txt > GEODES_ID75_2017-12-27.readcounts.txt
+awk '{print $1}' GEODES_ID75_2017-12-27.readcounts.txt > genes.txt
+while read line; do grep $line CDS_regions_genekey.txt; done < test.genes.txt > test.gene.info.txt
+
+rm $1
+rm CDS_regions_genekey.txt
+rm genes.txt
+
+
+```
+
+Nope. I wrote a bash script for removing blank lines - from the first part here - and will need to write something to split genes.txt, grep on each, and put the output back together.
