@@ -1472,3 +1472,45 @@ rm genes.txt
 ```
 
 Nope. I wrote a bash script for removing blank lines - from the first part here - and will need to write something to split genes.txt, grep on each, and put the output back together.
+
+####2018-01-05
+
+Happy New Year! I ran the data through at 70 ID then found that it was way to big to process (~7million genes and 2.1GB). Tried again at 90ID and it is at 6million, 1.6GB, and also the standard is gone. Today I figured out the standard wasn't working because it is spaced with 6 spaces instead of 1 tab in the gff file - I fixed this in 07.2nrdb_gff. So now my job is figuring out how to reduce the size of the output table, preferably without removing any actual information.
+
+My 1st tactic is to remove samples that had poor amplification of the standard. I'm defining "poor" amplification as less than 1000 reads, as most samples are in the 100,000 read range for the std. I'm testing this with:
+```{bash, eval = F}
+grep "pFN18A" *.CDS.txt | awk '{print $1,$7}'
+```
+
+Out of 109 samples, I'm deleting the following 22 samples due to low standard by rm their CDS.txt files. I could write a script to do this, but this is not something I want to do lightly.
+
+<sample> <#reads mapping to standard>
+019, 12
+024, 10
+029, 0
+036, 8
+040, 6
+053, 118
+064, 0
+068, 4
+072, 0
+100, 18
+101, 4
+102, 6
+103, 6
+104, 24
+124, 9
+128, 5
+143, 8
+148, 4
+152, 4
+156, 8
+160, 12
+164, 8
+
+That's a 20% loss rate. Sucks, but I guess I knew a bunch of the TB ones would fail because of filter issues and the SP ones would fail because of low yield. No excuse for the Mendota ones. Hopefully the replicates cover the time course well enough.
+
+But I'll need to grep all those genes anyway. It makes more sense to do it once rather than repeat popular genes for each lake, so I'll continue with maketable.sh and split the table down further after that.
+
+The table with 22 fewer samples is 1.2GB and ~6million samples. So I probably cut down on a lot of columns full of zeroes. I'll go ahead and run the grep genes scripts and then split the gene table and the count table by lake afterwards.
+Next up: I'm not going to run statistical comparisons between lakes. That would be silly because lakes are obviously different from each other. So I can split my table up by lake (plus TB hypo samples). I'll need a list of the samples that go into each table, minus the ones I've just removed.
