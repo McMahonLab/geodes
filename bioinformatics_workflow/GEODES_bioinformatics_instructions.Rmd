@@ -63,6 +63,10 @@ condor_submit submits/09mapping.sub
 # Part 4 - mapped read counting (run after Part 3)
 for file in /mnt/gluster/amlinz/GEODES_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
 condor_submit submits/10featurecounts.sub
+# An optional manual curation - delete results files of samples with poor amplification of the standard (< 10 reads)
+# This saves computational time down the road, and hopefully there are not many.
+grep "pFN18A" *.CDS.txt | awk '{print $1,$7}'
+
 ./scripts/maketable.sh
 condor_submit submits/11grep_genes.sub
 
