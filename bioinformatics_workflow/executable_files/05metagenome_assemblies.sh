@@ -1,11 +1,13 @@
 #!/bin/bash
 
+metaG=$(echo $1 | cut -c1-9)
+tar xvzf $metaG.datafiles2.tar.gz
 tar xvzf genometools.tar.gz
 export PATH=$(pwd)/genometools/bin:$PATH
 
 #no top of file characters
 grep "CDS" $1 > bottom_of_file.txt
-metaG=$(echo $1 | cut -c1-9)
+
 
 awk -F'\t' -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8}' bottom_of_file.txt > part1.txt #split by first 8 columns - metagenome assembly has issue with whitespace in the fields.
 awk -F'\t' '{print $9}' bottom_of_file.txt > part2.txt #put the last of column of tags in its own file
@@ -15,7 +17,7 @@ awk -F";" '{for(i=1;i<=NF;i++){if ($i ~ /locus_tag=*/){print $i}}}' part2.txt > 
 awk '{print substr($1,11)}' locust.txt > IDS.txt
 # from product name file
 while read line;
-  do grep -wF $line /mnt/gluster/amlinz/metagenome_assemblies/product_names/$metaG.assembled.product_names;
+  do grep -wF $line $metaG.assembled.product_names;
   done < IDS.txt > gene.txt
 awk -F'\t' '{print $2}' gene.txt > product.txt
 
@@ -26,10 +28,10 @@ yes $metaG | head -n $rows > genome.txt
 while read line; do echo $line | cut -c1-18; done < IDS.txt > contigs.txt
 sed -i -e 's/^$/NA/' contigs.txt
 while read line;
-  do line2=`grep -wF "$line" /mnt/gluster/amlinz/phylodist_results/$metaG.contig.classification.perc70.minhit3.txt`;
+  do line2=`grep -wF "$line" $metaG.contig.classification.perc70.minhit3.txt`;
   [ ! -z "$line2" ] && echo $line2 || echo "NA   No_classification"
   done < contigs.txt > class.txt
-  
+
 awk '{print $2}' class.txt > classification.txt
 
 #add the ID tag back in
@@ -52,7 +54,6 @@ awk -F'\t' -vOFS='\t' '{gsub(";", ":", $9); print}' f1.gff > temp && mv temp f1.
 
 gt gff3 -sort yes -tidy -retainids -o sorted_$1.gff f1.gff #clean up the the gff sorter
 
-cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/$metaG.assembled.fna.gz .
 gzip -d $metaG.assembled.fna.gz
 gt extractfeat -type CDS -seqid no -retainids yes -seqfile $metaG.assembled.fna -matchdescstart sorted_$1.gff >  CDS_$1.fna
 
@@ -62,3 +63,4 @@ rm *txt
 rm *gff
 rm $1
 rm $metaG.assembled.*
+

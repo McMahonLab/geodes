@@ -1,17 +1,17 @@
-# 09mapping.sub
+# 13map_metaGs.sub
 #
 #
 # Specify the HTCondor Universe
 universe = vanilla
-log = 09mapping_$(Cluster).log
-error = 09mapping_$(Cluster)_$(Process).err
+log = 13map_metaGs_$(Cluster).log
+error = 13map_metaGs_$(Cluster)_$(Process).err
 requirements = (OpSys == "LINUX")
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
-executable = executables/09mapping.sh
-arguments = $(samplename)
-output = 09mapping_$(Cluster).out
+executable = executables/13map_metaGs.sh
+arguments = $(metaG)
+output = 13map_metaGs_$(Cluster).out
 #
 # Specify that HTCondor should transfer files to and from the
 #  computer where each job runs.
@@ -24,9 +24,9 @@ transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
 #  each job will need on the computer where it runs.
 Requirements = (Target.HasGluster == true)
 request_cpus = 1
-request_memory =35GB
-request_disk = 20GB
+request_memory =72GB
+request_disk = 48GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
-queue samplename from path2mappingfastqs.txt
+queue metaG from path2metaGfastqs.txt
 

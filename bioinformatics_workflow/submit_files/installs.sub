@@ -1,0 +1,29 @@
+#intstalls.sub
+#
+universe = vanilla
+# Name the log file:
+log = intstalls.log
+
+# Name the files where standard output and error should be saved:
+output = installs.out
+error = installs.err
+
+# If you wish to compile code, you'll need the below lines. 
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
++IsBuildJob = true
+requirements = (OpSysMajorVer == 7) && ( IsBuildSlot == true )
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = MaxBin-2.2.4.tar.gz
+
+# It's still important to request enough computing resources. The below 
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+
+queue

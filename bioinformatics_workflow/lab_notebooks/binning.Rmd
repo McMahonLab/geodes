@@ -1,0 +1,337 @@
+---
+title: "GEODES MAGs"
+author: "Alex Linz"
+date: "January 11, 2018"
+output: html_document
+---
+
+### 2018-01-11
+We've decided that I need to bin the GEODES metaG assemblies to make some MAGs. I wouldn't be analyzing these, just counting up the reads mapped. But first I need to install a binning program. I've selected MaxBin because there are 2 papers showing it works well for high-complexity data (the other 2 good ones being MetaBAT and  MetaWatt) and it looks easiest to install. My goal for today is to make an install package for CHTC. I've downloaded version 2.2.4 from https://downloads.jbei.org/data/microbial_communities/MaxBin/MaxBin.html
+
+I'm following the installation instructions here: https://downloads.jbei.org/data/microbial_communities/MaxBin/README.txt
+
+In an interactive session:
+```{bash, eval = F}
+tar xvzf MaxBin-2.2.4.tar.gz
+cd MaxBin-2.2.4
+cd src
+make
+cd ..
+./autobuild_auxiliary
+
+```
+
+Looks good!
+
+### 2018-01-14
+
+This is a long shot, but I'm going to try running a single metagenome to start. This way, I can also test if MaxBin runs properly, and maybe if I'm lucky it will finish in 3 days.
+
+13map_metaGs.sub
+```{bash, eval = F}
+# 13map_metaGs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 13map_metaGs_$(Cluster).log
+error = 13map_metaGs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/13map_metaGs.sh
+arguments = $(metaG)
+output = 13map_metaGs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory =72GB
+request_disk = 48GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue metaG from path2metaGfastqs.txt
+
+```
+
+13map_metaGs.sh
+```{bash, eval = F}
+#!/bin/bash
+#Map metagenomic reads to my pre-indexed database of reference genomes
+#Transfer metaG from gluster
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/GEODES_metagenomes/$1 .
+cp /mnt/gluster/amlinz/ref.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf ref.tar.gz
+gzip -d $1
+name=$(basename $1 | cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.90.mapped.sam minid=0.90 trd=T sam=1.3 threads=1 build=1 mappedonly=T -Xmx64g
+
+# I want to store the output as bam. Use samtools to convert.
+./samtools/bin/samtools view -b -S -o $name.90.mapped.bam $name.90.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.90.mapped.bam /mnt/gluster/amlinz/GEODES_metaG_mapping/
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+
+```
+
+### 2018-01-17
+
+THREE DAYS LATER
+
+Unless the 13map_metaG job finishes in the next 30 minutes, I'll need to split up my metagenomic reads. Talked to Sarah and this should still count as a competitive mapping, because I'm not splitting up the database. I'll need to use featurecounts (which means I'll need a gff file), and then sum each metagenomic read part by sample. Then I can use this input for a) binning (need featurecounts by contig) and b) comparison to metaTs (need featurecounts by CDS). I'll look for a gff file on IMG. Meanwhile, I'll start writing a series of scripts to split the mapping. None of it should be new concepts!
+
+1. Split fastq files into smaller (1GBish) bits (borrow from 00split_fastq)
+2. Count up mapped reads in each split part (borrow from 10featurecounts)
+3. Sum up counted reads (borrow from make_table - zero rows removal?)
+
+For all scripts, I'm testing using GEODES005 for now.
+
+get_metaGs.sh
+```{bash, eval = F}
+#!/bin/bash
+mkdir /mnt/gluster/amlinz/split_metagenomes/
+for file in /mnt/gluster/amlinz/GEODES_metagenomes/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > metaG_samples.txt
+head -1 metaG_samples.txt > test_metaG_samples.txt; mv test_metaG_samples.txt metaG_samples.txt
+
+```
+
+
+13split_metagenomes.sub
+```{bash, eval = F}
+# 13split_metagenomes.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 13split_metagenomes_$(Cluster).log
+error = 13split_metagenomes_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/13split_metagenomes.sh
+arguments = $(sample)
+output = 13split_metagenomes_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 12 GB
+request_disk = 40 GB
+#
+# Submit jobs
+queue sample from metaG_samples.txt
+
+```
+
+13split_metagenomes.sh
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_metagenomes/$1.fastq.gz .
+gzip -d $1.fastq.gz
+
+sed -i '/^$/d' $1.fastq
+
+maxreads=$((`wc -l < $1.fastq` / 8 - 1))
+startpoints=$(seq 0 1000000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 999999));
+  bbmap/getreads.sh in=$1.fastq id=$num-$endpoint out=$1-$endpoint.fastq overwrite=T;
+  done
+
+rm $1.fastq
+mkdir $1-splitfiles
+mv $1*.fastq $1-splitfiles
+tar cvzf $1-splitfiles.tar.gz $1-splitfiles
+mv $1-splitfiles /mnt/gluster/amlinz/split_metagenomes/
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+
+```
+
+Testing in interactive mode first - need to figure out things like how many reads per filepart.
+
+### 2017-01-18
+
+I'm officially declaring the metagenome files unworkable as is. It took an hour to copy to the interactive session, another 2 hours to unzip it, and then I couldn't get any of the following, fairly simple commands (wc to get max reads and sed to remove blank lines) to run, despite leaving it going all afternoon. So as a last ditch effort, I tried bbmap's reformat.sh to downsample to 10% of the metagenomic reads. This ran in 1-2 hours and I now have a much smaller version of the metagenome! I'm hoping I can feed it directly into MaxBin instead of mapping, counting reads, and summing parts.
+
+Side note, I also want to use BBmap's reformat.sh to remove small contigs before binning.
+
+So I need to rework my scripts. My new tasks are:
+1. Downsample metagenomes
+2. Remove small contigs from the assembly fasta
+3. Bin
+
+13downsample.sub:
+```{bash, eval = F}
+# 13downsample.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 13downsample_$(Cluster).log
+error = 13downsample_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/13downsample.sh
+arguments = $(sample)
+output = 13downsample_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 64 GB
+request_disk = 100 GB
+#
+# Submit jobs
+queue sample from metaG_samples.txt
+```
+
+13downsample.sh:
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_metagenomes/$1.fastq.gz .
+gzip -d $1.fastq.gz
+
+./bbmap/reformat.sh in=$1.fastq out=$1-sampled.fastq samplerate=0.1
+
+gzip $1-sampled.fastq
+rm $1.fastq
+mv $1-sampled.fastq.gz /mnt/gluster/amlinz/downsampled_metagenomes/
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+
+```
+
+14contig_filter.sub:
+```{bash, eval = F}
+# 14contig_filter.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 14contig_filter_$(Cluster).log
+error = 14contig_filter_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/14contig_filter.sh
+arguments = $(samplename)
+output = 14contig_filter_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,http://proxy.chtc.wisc.edu/SQUID/amlinz/GEODES005.datafiles2.tar.gz
+
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 16GB
+request_disk = 8GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from contigs.txt
+
+```
+
+14contig_filter.sh:
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+tar -xvzf $1.datafiles2.tar.gz
+gzip -d $1.assembled.fna.gz
+
+./bbmap/reformat.sh in=$1.assembled.fna out=$1-filtered.assembled.fna minlength=1000
+
+gzip $1-filtered.assembled.fna
+
+cp $1-filtered.assembled.fna.gz /mnt/gluster/amlinz/filtered_assemblies/
+
+rm *gz
+rm *fna
+rm *txt
+rm *product_names
+rm -r bbmap
+
+```
+
+Now modify the mapping to use the smaller assembly and metagenome files.
+
+15binning.sh:
+```{bash, eval = F}
+#!/bin/bash
+
+tar xvzf MaxBin-2.2.4.tar.gz
+cd MaxBin-2.2.4/src
+make
+cd ..
+./autobuild_auxiliary
+cd ..
+
+cp /mnt/gluster/amlinz/filtered_assemblies/GEODES005-filtered.assembled.fna.gz .
+cp /mnt/gluster/amlinz/downsampled_metagenomes/GEODES005-sampled.fastq.gz .
+
+gzip -d GEODES005-filtered.assembled.fna.gz
+gzip -d GEODES005-sampled.fastq.gz
+
+./MaxBin-2.2.4/run_MaxBin.pl -contig GEODES005-filtered.assembled.fna -out GEODES005-binned -reads GEODES005-filtered.assembled.fna
+
+mkdir GEODES005-binning
+mv GEODES005-binned* GEODES005-binning/
+tar cvzf GEODES005-binning.tar.gz GEODES005-binning/
+
+rm *assembled.fna
+rm *fastq
+rm MaxBin-2.2.4.tar.gz
+rm -rf MaxBin-2.2.4
+```
