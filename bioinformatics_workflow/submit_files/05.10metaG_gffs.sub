@@ -17,7 +17,7 @@ output = 05metaG_gffs_$(Cluster).out
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,scripts/metaG_parsing.py,metaG_gffs/$(samplename),http://proxy.chtc.wisc.edu/SQUID/amlinz/GEODES167.datafiles2.tar.gz
+transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,scripts/metaG_parsing.py,metaG_gffs/$(samplename),http://proxy.chtc.wisc.edu/SQUID/amlinz/GEODES168.datafiles2.tar.gz
 
 transfer_output_files = CDS.$(samplename).fna,$(samplename).table.txt
 #
@@ -29,4 +29,4 @@ request_memory = 4GB
 request_disk = 2GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
-queue samplename from metaG_gffs.txt
+queue samplename from 168metaG_gffs.txt

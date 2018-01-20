@@ -5,7 +5,7 @@
 universe = vanilla
 log = 08build_index_$(Cluster).log
 error = 08build_index_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+requirements = (OpSys == "LINUX")
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.

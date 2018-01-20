@@ -29,4 +29,4 @@ request_memory = 4GB
 request_disk = 2GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
-queue samplename from metaG_gffs.txt
+queue samplename from 167metaG_gffs.txt

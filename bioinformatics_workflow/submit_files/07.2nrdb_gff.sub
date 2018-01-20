@@ -17,7 +17,7 @@ output = 07.2nrdb_gff_$(Cluster).out
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = /home/amlinz/zipped/genometools.tar.gz
+transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,http://proxy.chtc.wisc.edu/SQUID/amlinz/unprocessed-nrdb.gff.gz
 #transfer_output_files = CDS_$(samplename).fna
 #
 # Tell HTCondor what amount of compute resources

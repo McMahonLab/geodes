@@ -8,13 +8,9 @@ export PATH=$(pwd)/python/bin:$PATH
 export HOME=$(pwd)/home
 export PATH=$(pwd)/genometools/bin:$PATH
 
-metaG=$(basename $1 | cut -d'.' -f1)
-
-cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/$metaG.assembled.fna.gz .
+metaG=$(echo $1 | cut -c1-9)
+tar xvzf $metaG.datafiles2.tar.gz
 gzip -d $metaG.assembled.fna.gz
-cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/$metaG.assembled.phylodist .
-cp /mnt/gluster/amlinz/metagenome_assemblies/product_names/$metaG.assembled.product_names .
-cp /mnt/gluster/amlinz/phylodist_results/$metaG.contig.classification.perc70.minhit3.txt .
 
 mv $1 $metaG.assembled.gff
 chmod +x metaG_parsing.py

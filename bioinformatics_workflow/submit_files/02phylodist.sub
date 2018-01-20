@@ -17,7 +17,7 @@ output = 02phylodist_$(Cluster).out
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = zipped/python.tar.gz,scripts/classifyWphylodist_contigs.py,contig_lists/$(contigs)
+transfer_input_files = zipped/python.tar.gz,scripts/classifyWphylodist_contigs.py,contig_lists/$(contigs),GEODES168.assembled.phylodist
 transfer_output_files = $(contigs).contig.classification.perc70.minhit3.txt
 #
 # Tell HTCondor what amount of compute resources

@@ -69,7 +69,10 @@ grep "pFN18A" *.CDS.txt | awk '{print $1,$7}'
 
 ./scripts/maketable.sh
 condor_submit submits/11grep_genes.sub
+./scripts/cat_geneinfo.sh
 
+gzip *readcounts.txt
+condor_submit submits/12genekey.sub
 
 
 ```
