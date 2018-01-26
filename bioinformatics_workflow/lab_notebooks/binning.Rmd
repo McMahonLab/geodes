@@ -311,12 +311,12 @@ Now modify the mapping to use the smaller assembly and metagenome files.
 ```{bash, eval = F}
 #!/bin/bash
 
-tar xvzf MaxBin-2.2.4.tar.gz
-cd MaxBin-2.2.4/src
-make
-cd ..
-./autobuild_auxiliary
-cd ..
+tar xvzf MaxBin.tar.gz
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/FragGeneScan1.30:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/bowtie2-2.2.3:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/hmmer-3.1b1/src:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/idba-1.1.1/bin:$PATH
+
 
 cp /mnt/gluster/amlinz/filtered_assemblies/GEODES005-filtered.assembled.fna.gz .
 cp /mnt/gluster/amlinz/downsampled_metagenomes/GEODES005-sampled.fastq.gz .
