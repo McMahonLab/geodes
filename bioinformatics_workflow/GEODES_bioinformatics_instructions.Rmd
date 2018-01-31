@@ -74,6 +74,21 @@ condor_submit submits/11grep_genes.sub
 gzip *readcounts.txt
 condor_submit submits/12genekey.sub
 
+# Part 5 - binning metagenomes - OPTIONAL
+# Can be run at any point
+# put metagenome names is metaG_samples.txt
+condor_submit submits/13sample_metaGs.sub
+# contigs.txt can be the same as metaG_samples.txt
+condor_submit submits/14contig_filter.sub
+condor_submit submits/15binning.sub
+./scripts/move_bins.sh
+ls metaG_bins > bins_to_classify.txt
+
+# Part 6 - mapping metagenomes - OPTIONAL
+# Can be run after reference database in Part 3 and after metagenome sampling in Part 5
+# modify 09mapping - 11grep_genes to reference sampled metagenomes instead of metatranscriptomes
+# then run as above
+
 
 ```
 

@@ -335,3 +335,137 @@ rm *fastq
 rm MaxBin-2.2.4.tar.gz
 rm -rf MaxBin-2.2.4
 ```
+
+####2018-01-29
+
+That worked! All 10  metagenome bins in gluster. I opened up GEODES005-binned and it looks like there are about 200 fna files, a summary file, an abundance file, a log file, and a couple on marker genes. I still need to run this in CheckM to get classifications - Sarah was super awesome and made a docker image for me! So fingers crossed, all I have to do is throw an fna file at the docker image and it'll return classification and completeness estimates. While I'm at it, I'll want to extract the names of contigs from the fna files, since that's what I actually want the classifications for.
+
+1st, put all the fna files from all the metagenomes in a single folder. If there are about 200/metagenome, I'll end up with 2000 jobs. Solid.
+
+####2018-01-31
+
+Good news everyone! After some troubleshooting, Sarah's docker works great! Things I need to keep in mind are to specify that I want to use the most recent docker image using ":latest", and to change my file extensions from .fasta to .fna. 
+
+Checkm produces a lot output, but I don't necessarily need all of it. I need a file that says what contigs are in what bin (and maybe the classification of the bin, so I can easily assign that to each contig), and a file that contains quality and taxonomy info about all the bins generated. I can get the contig lists from my bin input fasta file, and the checkm result summaries appear to be in a file at output/storage/bin_stats_ext.tsv. This file appears to be a python dictionary - can I read it as such?
+
+```{python, eval = F}
+def readDict(filename, sep):
+    with open(filename, "r") as f:
+        dict = {}
+        for line in f:
+            values = line.split(sep)
+            dict[values[0]] = {values[1:len(values)]}
+        return(dict)
+        
+        
+```
+
+Apparently reading python dictionaries from files is not as straightforward as I thought it should be. Trying awk instead.
+
+```{bash, eval = F}
+tax=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /marker lineage/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+length=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Genome size/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+complete=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Completeness/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+contamination=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Contamination/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+
+echo $tax $length $complete $contamination > results.txt
+
+```
+
+Looks good! I'll add this to my checkm scripts. Modify the submit script to send back less, too.
+
+16checkm.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+
+mkdir input
+mv $1.fna input/
+
+checkm lineage_wf input output
+
+grep ">" input/$1.fna > contigs.txt
+sed -i 's/>//g' contigs.txt
+
+tax=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /marker lineage/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+length=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Genome size/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+complete=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Completeness/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+contamination=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Contamination/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+
+echo $1 $tax $length $complete $contamination > $1-checkm.txt
+numcontigs=$(wc -l $1-contigs.txt | awk '{print $1}')
+yes $tax | head -n $numcontigs > taxcolumn.txt
+yes $1 | head -n $numcontigs > binid.txt
+paste -d "\t" contigs.txt binid.txt > cat1.txt
+paste -d "\t" cat1.txt taxcolumn.txt > $1-contigs.txt
+
+
+rm -r input/
+rm -r output/
+rm taxcolumn.txt
+rm contigs.txt
+rm binid.txt
+rm cat1.txt
+
+```
+
+16checkm.sub:
+```{bash, eval = F}
+# 16checkm.sub
+#
+#
+# Specify the HTCondor Universe
+universe = docker
+docker_image = sstevens/checkm:latest
+
+log = 16checkm_$(Cluster).log
+error = 16checkm_$(Cluster)_$(Process).err
+requirements = (OpSysMajorVer == 7)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/16checkm.sh
+arguments = $(bin)
+output = 16checkm_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = metaG_bins/$(bin).fna
+transfer_output_files = $(bin)-contigs.txt,$(bin)-checkm.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 40GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue bin from testbins_to_classify.txt
+
+```
+
+Redo the command to build bins_to_classify.txt to not include file extensions
+
+move_bins.sh
+```{bash, eval = F}
+#!/bin/bash
+
+while read line; do tar xvzf /mnt/gluster/amlinz/$line-binning.tar.gz;
+       for file in $line-binning/*fasta; do
+               name=$(basename "$file" .fasta);
+               mv $file metaG_bins/$name.fna;
+               done;
+       rm -r $line-binning;
+       done < metaG_samples.txt
+
+for file in metaG_bins/*; do
+        name=$(basename "$file" .fna);
+        echo $name;
+        done > bins_to_classify.txt
+
+head -3 bins_to_classify.txt > testbins_to_classify.txt
+
+```
