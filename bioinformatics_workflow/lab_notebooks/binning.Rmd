@@ -469,3 +469,320 @@ for file in metaG_bins/*; do
 head -3 bins_to_classify.txt > testbins_to_classify.txt
 
 ```
+
+####2018-02-06
+
+Well, Docker was down for awhile - something about the sandbox not connecting on certain execute nodes. They fixed it last night and we are back in business. Before I run the whole list of bins, I'll write the post-processing script.
+
+checkm_results.sh
+```{bash, eval = F}
+#!/bin/bash
+
+cat *-contigs.txt > GEODES_binned_contigs.txt
+echo -e "bin\ttaxonomy\tsize\tcompleteness\tcontamination" | cat - *-checkm.txt > GEODES_checkm_results.txt
+
+```
+
+Everything looks great! Starting the full run and updating the bioinformatics instructions.
+
+Got the results back and there are a lot of unclassifieds - Sarah suggests using her phylodist python script to reclassify (and I suspect Trina would say the same thing). It's a little complex, but Sarah already wrote the scripts. I just have to run them. I made a tar archive containing the files I'll need for each metagenome assembly and uploaded it to squid.
+
+The steps in the process are:
+- assembly.gff + bin.contig.list > bin.gff
+- bin.gff + assembly.phylodist > bin.phylodist
+- bin.gff + assembly.COG > bin.COG
+- bin.COG + bin.phylodist > bin.markerCOG.phylodist
+- bin.markerCOG.phylodist > classification
+
+It's in a series of python and bash scripts, so it should work with my python install. I've made the following submit script and will test in interactive mode.
+
+17classify_bins.sub
+```{bash, eval = F}
+# 17classify_bins.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 17classify_bins_$(Cluster).log
+error = 17classify_bins_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/17classify_bins.sh
+arguments = $(bin)
+output = 17classify_bins_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz
+transfer_output_files = $(contigs).contig.classification.perc70.minhit3.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 16GB
+request_disk = 16GB
+#
+# run from list
+queue bin from testbins_to_classify.txt
+
+```
+
+17classify_bins.sh
+```{bash, eval = F}
+#!/bin/bash
+
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$(pwd)/bwa:$PATH
+export HOME=$(pwd)/home
+
+# Unzip assembly data files
+tar xvzf for_bin_classification.tar.gz
+
+# Make all scripts executable
+chmod +x *.sh
+chmod +x *.py
+
+# Make list of contigs
+grep '>' $1.fna > $1.contigs
+
+# Make gff file
+./makeBinGFF.sh $1.contigs for_bin_classification/
+
+# Make phylodist file
+python makeBinPhylodist.py $1.gff for_bin_classification
+
+# Make COG file
+python makeBinCOGS.py $1.gff for_bin_classification
+
+# Filter COGs to include only phylogeny marker genes
+python filterPhyloCOGs.py $1.cog.txt
+
+# Get the consensus phylogeny
+python classifyWphylodistWcutoffs.py $1.phylodist.subphylocog.txt
+
+# Simplify output name
+mv *classonly.txt $1.perc70.minhit3.classonly.txt
+
+# Clean up
+rm *.tar.gz
+rm *.py
+rm *.sh
+rm *.tsv
+rm *.gff
+rm *.fna
+rm *.fna.contigs
+rm *cog.txt
+rm *phylodist.txt
+rm *minhit3.txt
+rm -r for_bin_classification/
+rm -rf python/
+rm -r home/
+```
+
+makeBinGFF.sh
+```{bash, eval = F}
+#!/bin/bash
+
+# This program makes a gff file for the individual bin from the assembly gff
+# Usage: makeBinGFF contiglistFile path2assemblies
+
+# Read in filename
+filename=$1
+# Get path to assemblies
+assemPath=$2
+# Put together name for assembly gff file
+gffFilename=`echo "$filename" | cut -f1 -d- `
+#gffFilename=${gffFilename##*/}
+# Make bin GFF file name
+gffOut="${filename%.contigs}".gff
+
+# Grep each line of the filename (minus first character) from the gff file 
+#    into new bin gff file
+while read line
+do
+grep "${line:1:${#line}}" $assemPath/$gffFilename.assembled.gff >> $gffOut
+done < $filename
+```
+
+makeBinPhylodist.py
+```{python, eval=F}
+# coding: utf-8
+
+"""makeBinPhylodist.py : make phyldist file for each bin"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: makeBinPhylodist.py  gffFile path2assemblies")
+
+if len(sys.argv) != 3:
+	usage()
+	sys.exit(2)
+
+gffname=sys.argv[1]
+assemName=gffname.split('-')[0]
+path2assem=sys.argv[2]
+phylodistname=path2assem+'/'+assemName+'.assembled.phylodist'
+
+gff=pd.read_table(gffname, header=None, names=['seqname','source','features','start','end','score','strand','frame','attribute'])
+#pulling out the locus tag to its own column
+gff['locus_tag']=gff['attribute'].str.split('locus_tag=').str.get(1).str.slice(start=0,stop=-1)
+phylodist=pd.read_table(phylodistname, header=None, names=['seq_id','homolog_gene_oid','homolog_taxon_oid','percent_identity','lineage'])
+## Merging and writing out to file, did inner instead of left since some of the genes don't have a hit in the phylodist file
+gff[['locus_tag']].merge(phylodist, how='inner', left_on='locus_tag', right_on='seq_id').to_csv(gffname.split('.gff')[0]+'.phylodist.txt',sep='\t', index=False)
+```
+
+makeBinCOGS.py
+```{python, eval = F}
+# coding: utf-8
+
+"""makeBinPhylodist.py : make cog file for each bin"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: makeBinCOGs.py  gffFile path2assemblies")
+
+if len(sys.argv) != 3:
+	usage()
+	sys.exit(2)
+
+gffname=sys.argv[1]
+assemName=gffname.split('-')[0]
+path2assem=sys.argv[2]
+cogname=path2assem+'/'+assemName+'.assembled.COG'
+
+gff=pd.read_table(gffname, header=None, names=['seqname','source','features','start','end','score','strand','frame','attribute'])
+#pulling out the locus tag to its own column
+gff['locus_tag']=gff['attribute'].str.split('locus_tag=').str.get(1).str.slice(start=0,stop=-1)
+cog=pd.read_table(cogname, header=None, names=['gene_id','cog_id','percent_identity','align_length','query_start','query_end','subj_start','subj_end','evalue','bit_score'])
+## Merging and writing out to file, did inner instead of left since some of the genes don't have a hit in the cog file
+gff[['locus_tag']].merge(cog, how='inner', left_on='locus_tag', right_on='gene_id').to_csv(gffname.split('.gff')[0]+'.cog.txt',sep='\t', index=False)
+```
+
+filterPhyloCOGs.py
+```{python, eval = F}
+"""makeBinPhylodist.py : make cog file for each bin, requires matching names for COG file and phylodist files, preferably made with makeBinXXX.py scripts"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: filterPhyloCOGs.py  COGsFile")
+
+if len(sys.argv) != 2:
+	usage()
+	sys.exit(2)
+
+cogname=sys.argv[1]
+prefix=cogname.split('.cog.txt')[0]
+phyloname=prefix+'.phylodist.txt'
+
+matchup=pd.read_table('Phylosift2COGs.tsv',header=0) # hard coded in path2file, add as argument?
+
+
+cogs=pd.read_table(cogname,header=0)
+phylodist=pd.read_table(phyloname,header=0)
+phylocogs=cogs[cogs.cog_id.isin(matchup.COG_num)]
+phylocogs.to_csv(prefix+'.phylocog.txt',sep='\t', index=False)
+
+phylodist[phylodist.locus_tag.isin(phylocogs.locus_tag)].to_csv(prefix+'.phylodist.subphylocog.txt',sep='\t', index=False)
+
+```
+
+classifyWphylodistWcutoffs.py
+```{python, eval = F}
+import pandas as pd, sys, os
+
+"""classifyWPhylodist.py  for each taxonomic level takes the classificaiton with the most hits,
+	removes any not matching hits for the next leve, also returns the number and avg pid for those hits"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+def usage():
+	print("Usage: classifyWPhylodistWcutoffs.py  phylodistFile")
+
+if len(sys.argv) != 2:
+	usage()
+	sys.exit(2)
+
+# Read in args
+inname=sys.argv[1]
+phylodist = pd.read_table(inname)
+perc_co = .70
+hit_min = 3
+	
+
+# Setting up output
+outname=os.path.splitext(inname)[0]+'.perc70.minhit3.txt'
+outname2=os.path.splitext(inname)[0]+'.perc70.minhit3.classonly.txt' # output file without the numbers in it
+output=open(outname,'w')
+output2=open(outname2,'w')
+output.write(inname+'\t')
+output2.write(inname+'\t')
+if phylodist.empty: # if there are no hits in phylodist file
+	print('Phylodist empty!  This maybe because it was subsetted into phylocogs and there were none.')
+	output.write('NO CLASSIFICATION BASED ON GIVEN PHYLODIST\n')
+	output2.write('NO CLASSIFICATION BASED ON GIVEN PHYLODIST\n')
+	sys.exit(0)
+
+phylodist['contig']=phylodist['locus_tag'].str[:17]
+taxon_ranks=['Kingdom','Phylum','Class','Order','Family','Genus','Species','Taxon_name']
+phylodist[taxon_ranks]=phylodist['lineage'].apply(lambda x: pd.Series(x.split(';')))
+totGenes=len(phylodist)
+genome_classification=list()
+
+
+for rank in taxon_ranks:
+	# Getting taxon, at that level, hit the most and the number of hits
+	counts=phylodist.groupby(rank).size()
+	max_ct_value=counts.max()
+	perc=phylodist.groupby(rank).size()/float(totGenes) # percent of times each classification (added float for python2)
+	max_pc_value=perc.max() # number of percentage the classification with the most hits had
+	max_pc_taxon=perc.idxmax(axis=1) # classificaiton hit the most at this rank
+	averages=phylodist.groupby(rank).mean().reset_index()[[rank,'percent_identity']] #getting average pid for best classifcation
+	max_pc_avg=averages.loc[averages[rank]==max_pc_taxon, 'percent_identity'].iloc[0]
+	result=(max_pc_taxon, round(max_pc_value, 2), round(max_pc_avg, 2), max_ct_value)
+	genome_classification.append(result)
+	rank_co_dict = {'Kingdom':.20,'Phylum':.45,'Class':.49,'Order':.53,'Family':.61,'Genus':.70,'Species':.90,'Taxon_name':.97}
+	rank_co = rank_co_dict[rank]
+	if (result[0]>.70 and result[3]>hit_min and result[1]>rank_co):
+		output.write('{}({},{},{});'.format(result[0],result[1],result[2],result[3]))
+		output2.write(result[0]+';')
+	else:
+		if rank == 'Kingdom':
+			if result[3]<=hit_min:
+				output.write('NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST')
+				output2.write('NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST')
+			else: 
+				output.write('NO CLASSIFICATION DUE TO LOW PERCENT MATCHING')
+				output2.write('NO CLASSIFICATION DUE TO LOW PERCENT MATCHING')
+		output.write('\n')
+		output2.write('\n')
+		output.close()
+		output2.close()
+		sys.exit(0)
+	phylodist=phylodist[phylodist[rank]==max_pc_taxon] # removing any hits which don't match the classification at this level
+
+output.write('\n')
+output.close()
+output2.write('\n')
+output2.close()
+
+```
