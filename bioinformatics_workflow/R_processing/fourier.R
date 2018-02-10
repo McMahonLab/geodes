@@ -29,7 +29,7 @@ plot.frequency.spectrum <- function(X.k, xlimits=c(0,length(X.k))) {
 # - plot periodogram/spectrogram
 
 timepoints <- metadata$Timepoint[match(colnames(mnorm), metadata$Sample)]
-index = 1
+index = 65
 input_data <- as.numeric(mnorm[index,])
 to.agg <- data.frame(timepoints, input_data)
 ggplot(data = to.agg, aes(x = timepoints, y = input_data)) + geom_point()
@@ -39,7 +39,7 @@ fourier <- fft(averaged$input_data)
 plot.frequency.spectrum(fourier)
 gstat <- max(Mod(fourier))/sum(Mod(fourier)[1:5])
 
-fdr.out <- fdrtool(fisher.g.test(t(mnorm[1:10000,])), statistic = "pvalue")
+fdr.out <- fdrtool(fisher.g.test(t(mnorm[1:100,])), statistic = "pvalue")
 length(which(fdr.out$qval < 0.05))
 length(which(fdr.out$pval < 0.05))
 

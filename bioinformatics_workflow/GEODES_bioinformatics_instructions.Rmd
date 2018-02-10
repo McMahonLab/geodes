@@ -85,12 +85,23 @@ condor_submit submits/15binning.sub
 ls metaG_bins > bins_to_classify.txt
 condor_submit submits/16checkm.sub
 ./scripts/checkm_results.sh
+condor_submit submits/17classify_phylodist.sub
+cat *classonly.txt > phylodist_bin_classifications.txt
 
 # Part 6 - mapping metagenomes - OPTIONAL
 # Can be run after reference database in Part 3 and after metagenome sampling in Part 5
 # modify 09mapping - 11grep_genes to reference sampled metagenomes instead of metatranscriptomes
 # then run as above
 
-
+# Part 7 - R processing
+# These scripts can be sourced once paths are changed or run interactively. Make sure to NOT save large files in your github repo. Run one lake at a time to save RAM.
+# Remove any remaining samples with poor standard amplification and normalize read counts to transcripts/L
+transcripts_per_liter.R
+# Process gene keys to include bin classifications
+add_bin_classifications.R
+# Calculate summary stats of the metagenomes and metatranscriptomes
+summary_stats.R
+# Identify genes with diel trends in gene expression
+fourier_and_wgcna.R
 ```
 

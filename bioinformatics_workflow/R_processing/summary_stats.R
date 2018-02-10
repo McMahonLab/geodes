@@ -9,13 +9,13 @@ library(reshape2)
 ### Load data (start with only one to save RAM and comment the rest out)
 # Normalized read tables
 snorm <- read.csv("D:/geodes_data_tables/Sparkling_normalized.csv", header = T, row.names = 1)
-#tnorm <- read.csv("D:/geodes_data_tables/Trout_normalized.csv", header = T, row.names = 1)
-#mnorm <- read.csv("D:/geodes_data_tables/Mendota_normalized.csv", header = T, row.names = 1)
+tnorm <- read.csv("D:/geodes_data_tables/Trout_normalized.csv", header = T, row.names = 1)
+mnorm <- read.csv("D:/geodes_data_tables/Mendota_normalized.csv", header = T, row.names = 1)
 
 # Gene keys
-#mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey.csv", header = T)
-spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey.csv", header = T)
-#trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey.csv", header = T)
+mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey_reclassified.csv", header = T)
+spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey_reclassified.csv", header = T)
+trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey_reclassified.csv", header = T)
 
 # Sample data
 metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
@@ -36,7 +36,15 @@ mnorm$Taxonomy <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadace
 mnorm$Taxonomy <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("NO CLASSIFICATION MH", "Unclassified", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("NO CLASSIFICATION LP", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("None", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified unclassified", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified Oligohymenophorea", "Ciliophora", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Unclassified ", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mnorm$Taxonomy)
 averaged_tax <- aggregate(value ~ Taxonomy + Timepoint, data = mnorm, mean)
 wide_mnorm <- reshape(averaged_tax, idvar = "Taxonomy", timevar = "Timepoint", direction = "wide")
 rownames(wide_mnorm) <- wide_mnorm$Taxonomy
@@ -44,18 +52,18 @@ wide_mnorm <- wide_mnorm[, 2:dim(wide_mnorm)[2]]
 wide_mnorm <- wide_mnorm[which(rowSums(wide_mnorm) > 3000),]
 
 mendota_phyla <- data.frame(Taxonomy = rownames(wide_mnorm), Sums = rowSums(wide_mnorm))
-mendota_phyla$Taxonomy <- c("Unclassified", "Acidobacteria", "Actinobacteria", "Armatimonadetes", "Arthropoda", "Ascomycota", "Bacillariophyta", "Bacteroidetes", "Chlamydiae", "Chloroflexi", "Chlorophyta", "Chytridiomycota", "Cryptophyta", "Cyanobacteria", "Fibrobacteres", "Firmicutes", "Gemmatimonadetes", "Haptophyta", "Heterokonta", "Ignavibacteriae", "Planctomycetes", "Proteobacteria", "Spirochaetes", "Streptophyta", "Tenericutes", "Unclassified", "Unclassified", "Unclassified", "Oligohymenophorea", "Unclassified", "Isochyrysidales", "Perkinsida", "Verrucomicrobia", "Viruses")
+mendota_phyla$Taxonomy <- c("Unclassified", "Acidobacteria", "Actinobacteria", "Armatimonadetes", "Arthropoda", "Ascomycota", "Bacillariophyta", "Bacteroidetes", "TM7", "Chlamydiae", "Chloroflexi", "Chlorophyta", "Chytridiomycota", "Ciliophora", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Fibrobacteres", "Firmicutes", "Gemmatimonadetes", "Haptophyta", "Heterokonta", "Ignavibacteriae", "Perkinsoa", "Planctomycetes", "Proteobacteria", "Spirochaetes", "Streptophyta", "Tenericutes", "Unclassified", "Verrucomicrobia", "Viruses")
 unclassified <- mendota_phyla[which(mendota_phyla$Taxonomy == "Unclassified"), ]
 mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy != "Unclassified"), ]
 mendota_phyla <- rbind(mendota_phyla, c("Unclassified", sum(unclassified$Sums)))
 mendota_phyla$Sums <- as.numeric(mendota_phyla$Sums)
 mendota_phyla$Taxonomy <- factor(mendota_phyla$Taxonomy, levels = mendota_phyla$Taxonomy[order(mendota_phyla$Sums, decreasing = T)])
-mendota_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Bacteria", "Protists", "Algae", "Protists", "Bacteria", "Viruses", "Unclassified")
+mendota_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Protists", "Bacteria", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Viruses", "Unclassified")
 
 
 p <- ggplot(mendota_phyla, aes(x = Taxonomy, y = Sums, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Lake Mendota Metatranscriptomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/mendota_expression_by_phyla.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/mendota_expression_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
 
 trout_key$Taxonomy <- gsub("Bacteria;", "", trout_key$Taxonomy)
 trout_key$Taxonomy <- gsub("Eukaryota;", "", trout_key$Taxonomy)
@@ -74,7 +82,15 @@ tnorm$Taxonomy <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylace
 tnorm$Taxonomy <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", tnorm$Taxonomy)
 tnorm$Taxonomy <- gsub("NO CLASSIFICATION MH", "Unclassified", tnorm$Taxonomy)
 tnorm$Taxonomy <- gsub("NO CLASSIFICATION LP", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", tnorm$Taxonomy)
 tnorm$Taxonomy <- gsub("None", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified unclassified", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified Oligohymenophorea", "Ciliophora", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("Unclassified ", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", tnorm$Taxonomy)
 averaged_tax <- aggregate(value ~ Taxonomy + Timepoint, data = tnorm, mean)
 wide_tnorm <- reshape(averaged_tax, idvar = "Taxonomy", timevar = "Timepoint", direction = "wide")
 rownames(wide_tnorm) <- wide_tnorm$Taxonomy
@@ -82,18 +98,18 @@ wide_tnorm <- wide_tnorm[, 2:dim(wide_tnorm)[2]]
 wide_tnorm <- wide_tnorm[which(rowSums(wide_tnorm) > 3000),]
 
 trout_phyla <- data.frame(Taxonomy = rownames(wide_tnorm), Sums = rowSums(wide_tnorm))
-trout_phyla$Taxonomy <- c("Acidobacteria", "Actinobacteria", "Armatimonadetes", "Arthropoda", "Bacillariophyta", "Bacteroidetes", "Chlorobi", "Chloroflexi", "Chlorophyta", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Firmicutes", "Haptophyta", "Heterokonta", "Ignavibacteriae", "Planctomycetes", "Porifera", "Proteobacteria", "Streptophyta", "Unclassified", "Unclassified", "Unclassified", "Isochyrysidales", "Verrucomicrobia", "Viruses")
+trout_phyla$Taxonomy <- c("Acidobacteria", "Actinobacteria", "Armatimonadetes", "Arthropoda", "Bacillariophyta", "Bacteroidetes", "TM7", "Chlorobi", "Chloroflexi", "Chlorophyta", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Firmicutes", "Haptophyta", "Heterokonta", "Ignavibacteriae", "Planctomycetes", "Porifera", "Proteobacteria", "Streptophyta", "Unclassified", "Verrucomicrobia", "Viruses")
 unclassified <- trout_phyla[which(trout_phyla$Taxonomy == "Unclassified"), ]
 trout_phyla <- trout_phyla[which(trout_phyla$Taxonomy != "Unclassified"), ]
 trout_phyla <- rbind(trout_phyla, c("Unclassified", sum(unclassified$Sums)))
 trout_phyla$Sums <- as.numeric(trout_phyla$Sums)
 trout_phyla$Taxonomy <- factor(trout_phyla$Taxonomy, levels = trout_phyla$Taxonomy[order(trout_phyla$Sums, decreasing = T)])
-trout_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria", "Animals", "Bacteria", "Algae", "Algae", "Bacteria", "Viruses", "Unclassified")
+trout_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria", "Animals", "Bacteria", "Algae", "Bacteria", "Viruses", "Unclassified")
 
 
 p <- ggplot(trout_phyla, aes(x = Taxonomy, y = Sums, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Trout Bog Metatranscriptomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/trout_expression_by_phyla.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/trout_expression_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
 
 spark_key$Taxonomy <- gsub("Bacteria;", "", spark_key$Taxonomy)
 spark_key$Taxonomy <- gsub("Eukaryota;", "", spark_key$Taxonomy)
@@ -113,6 +129,15 @@ snorm$Taxonomy <- gsub("unclassified unclassified unclassified unclassified uncl
 snorm$Taxonomy <- gsub("NO CLASSIFICATION MH", "Unclassified", snorm$Taxonomy)
 snorm$Taxonomy <- gsub("NO CLASSIFICATION LP", "Unclassified", snorm$Taxonomy)
 snorm$Taxonomy <- gsub("None", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified unclassified", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified Oligohymenophorea", "Ciliophora", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("Unclassified ", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("UnclassifiedUnclassified", "Unclassified", snorm$Taxonomy)
 averaged_tax <- aggregate(value ~ Taxonomy + Timepoint, data = snorm, mean)
 wide_snorm <- reshape(averaged_tax, idvar = "Taxonomy", timevar = "Timepoint", direction = "wide")
 rownames(wide_snorm) <- wide_snorm$Taxonomy
@@ -120,18 +145,18 @@ wide_snorm <- wide_snorm[, 2:dim(wide_snorm)[2]]
 wide_snorm <- wide_snorm[which(rowSums(wide_snorm) > 3000),]
 
 spark_phyla <- data.frame(Taxonomy = rownames(wide_snorm), Sums = rowSums(wide_snorm))
-spark_phyla$Taxonomy <- c("Unclassified", "Actinobacteria", "Armatimonadetes", "Arthropoda", "Bacillariophyta", "Bacteroidetes", "Chlamydiae", "Chlorobi", "Chloroflexi", "Chlorophyta", "Chytridiomycota", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Firmicutes", "Gemmatimonadetes", "Haptophyta", "Heterokonta", "Nitrospirae", "Phaeophyceae", "Planctomycetes", "Proteobacteria", "Spirochaetes", "Streptophyta", "Unclassified", "Unclassified","Oligohymenophorea", "Unclassified", "Isochyrysidales","Unclassified", "Verrucomicrobia", "Viruses")
+spark_phyla$Taxonomy <- c("Unclassified", "Acidobacteria", "Actinobacteria", "Armatimonadetes", "Arthropoda", "Bacillariophyta", "Bacteroidetes", "TM7", "Chlamydiae", "Chlorobi", "Chloroflexi", "Chlorophyta", "Chytridiomycota", "Ciliophora", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Firmicutes", "Gemmatimonadetes", "Haptophyta", "Heterokonta", "Nitrospirae", "Phaeophyceae", "Planctomycetes", "Proteobacteria", "Spirochaetes", "Streptophyta", "Unclassified", "Verrucomicrobia", "Viruses")
 unclassified <- spark_phyla[which(spark_phyla$Taxonomy == "Unclassified"), ]
 spark_phyla <- spark_phyla[which(spark_phyla$Taxonomy != "Unclassified"), ]
 spark_phyla <- rbind(spark_phyla, c("Unclassified", sum(unclassified$Sums)))
 spark_phyla$Sums <- as.numeric(spark_phyla$Sums)
 spark_phyla$Taxonomy <- factor(spark_phyla$Taxonomy, levels = spark_phyla$Taxonomy[order(spark_phyla$Sums, decreasing = T)])
-spark_phyla$Type <- c("Bacteria", "Bacteria", "Animals", "Fungi", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Algae", "Bacteria", "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Viruses", "Unclassified")
+spark_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Algae", "Bacteria", "Bacteria", "Bacteria", "Algae", "Unclassified","Bacteria", "Viruses")
 
 
 p <- ggplot(spark_phyla, aes(x = Taxonomy, y = Sums, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Sparkling Lake Metatranscriptomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_expression_by_phyla.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_expression_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
 
 # How does expression compare to abundance (ie the metagenomes?)
 # No internal standard in the metagenomes, so normalized by library size (or report in % reads)
@@ -186,7 +211,7 @@ spark_phyla$Phylum <- factor(spark_phyla$Phylum, levels = spark_phyla$Phylum[ord
 
 p <- ggplot(spark_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Sparkling Lake Metagenomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_metagenome_by_phyla.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
 
 trout_metaG$Phylum <- metaG_key$Phylum[match(trout_metaG$Genes, metaG_key$Gene)]
 trout_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", trout_metaG$Phylum)
@@ -217,7 +242,7 @@ trout_phyla$Phylum <- factor(trout_phyla$Phylum, levels = trout_phyla$Phylum[ord
 
 p <- ggplot(trout_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Trout Bog Metagenomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/trout_metagenome_by_phyla.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/trout_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
 
 mendota_metaG$Phylum <- metaG_key$Phylum[match(mendota_metaG$Genes, metaG_key$Gene)]
 mendota_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", mendota_metaG$Phylum)
@@ -248,7 +273,7 @@ mendota_phyla$Phylum <- factor(mendota_phyla$Phylum, levels = mendota_phyla$Phyl
 
 p <- ggplot(mendota_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Mendota Metagenomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/mendota_metagenome_by_phyla.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/mendota_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
 
 spark2_metaG$Phylum <- metaG_key$Phylum[match(spark2_metaG$Genes, metaG_key$Gene)]
 spark2_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", spark2_metaG$Phylum)
@@ -279,7 +304,21 @@ spark2_phyla$Phylum <- factor(spark2_phyla$Phylum, levels = spark2_phyla$Phylum[
 
 p <- ggplot(spark2_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Sparkling Lake 2009 Metagenomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark09_metagenome_by_phyla.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark09_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
 
 # What are the top expressed genes?
 
+totals <- rowSums(snorm)
+top10 <- rownames(snorm)[order(totals, decreasing = T)]
+top10 <- top10[2:11]
+spark_key[match(top10, spark_key$Gene),]
+
+totals <- rowSums(mnorm)
+top10 <- rownames(mnorm)[order(totals, decreasing = T)]
+top10 <- top10[1:11]
+mendota_key[match(top10, mendota_key$Gene),]
+
+totals <- rowSums(tnorm)
+top10 <- rownames(tnorm)[order(totals, decreasing = T)]
+top10 <- top10[1:11]
+trout_key[match(top10, trout_key$Gene),]
