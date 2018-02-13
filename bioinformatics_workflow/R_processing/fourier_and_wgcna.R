@@ -126,7 +126,27 @@ mendota_net <- blockwiseModules(sig.mendota, maxBlockSize = 1000, power = 8, loa
 sig.mendota.key <- mendota_key[match(colnames(sig.mendota), mendota_key$Gene), ]
 sig.mendota.key$Product <- as.character(sig.mendota.key$Product)
 sig.mendota.key$Cluster <- mendota_net$colors
-# sig.mendota.key$Taxonomy <- gsub("Bacteria;", "", sig.mendota.key$Taxonomy)
+sig.mendota.key$Taxonomy <- gsub("Bacteria;", "", sig.mendota.key$Taxonomy)
+sig.mendota.key$Taxonomy <- gsub("Eukaryota;", "", sig.mendota.key$Taxonomy)
+sig.mendota.key$Phylum <- sapply(strsplit(as.character(sig.mendota.key$Taxonomy),";"), `[`, 1)
+
+sig.mendota.key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("None", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Unclassified ", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", sig.mendota.key$Phylum)
+
 # sig.mendota.key$Phylum <- sapply(strsplit(as.character(sig.mendota.key$Taxonomy),";"), `[`, 1)
 # sig.mendota.key$Class<- sapply(strsplit(as.character(sig.mendota.key$Taxonomy),";"), `[`, 2)
 # sig.mendota.key$Order <- sapply(strsplit(as.character(sig.mendota.key$Taxonomy),";"), `[`, 3)
@@ -138,6 +158,45 @@ total_reads <- rowSums(mnorm)
 sig.mendota.key$Totals <- total_reads[match(sig.mendota.key$Gene, names(total_reads))]
 write.csv(sig.mendota.key, "D:/geodes_data_tables/WGCNA_mendota_results.csv", row.names = F)
 write.csv(mendota_net$MEs, "D:/geodes_data_tables/WGCNA_mendota_eigenvectors.csv", row.names = T)
+
+# Calculate correlation matrix
+eigenvectors <- mendota_net$MEs
+adjacency <- matrix(0, nrow = dim(eigenvectors)[2], ncol = dim(eigenvectors)[2])
+rownames(adjacency) <- colnames(adjacency) <- colnames(eigenvectors)
+for(i in 1:dim(eigenvectors)[2]){
+  for(j in 1:dim(eigenvectors)[2]){
+    value <- cor(eigenvectors[1:11,i], eigenvectors[2:12,j])
+    if(value > 0.75 | value < -0.75){
+      adjacency[i,j] <- value
+    }
+  }
+}
+
+
+
+# Build eigennetwork
+net <- as.network(x = adjacency, directed = TRUE, loops = FALSE, matrix.type = "adjacency")
+plot.network(net, displaylabels = T, vertex.cex = 3, label.pos = 5)
+
+# Make pretty plot of eigengenes
+eigenvectors$Timepoint <- rownames(eigenvectors)
+long_eigenvectors <- melt(eigenvectors)
+plot.colors <- NA
+plot.colors[which(long_eigenvectors$value > 0)] <- "green"
+plot.colors[which(long_eigenvectors$value < 0)] <- "red"
+long_eigenvectors$Sign <- plot.colors
+long_eigenvectors$Timepoint <- factor(long_eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
+cluster = "ME26"
+ggplot(data = long_eigenvectors[which(long_eigenvectors$variable == cluster), ], aes(x = Timepoint, y = value, fill = Sign)) + geom_bar(stat = "identity") + labs(title = cluster) + scale_fill_manual(values = c("green", "red")) + theme(legend.position = "none")
+
+# Get genes and taxonomy from each cluster
+x <- sig.mendota.key[which(sig.mendota.key$Cluster == 26),]
+x <- x[order(x$Totals),]
+x[(dim(x)[1] - 50): dim(x)[1],]
+phyla_breakdown <- aggregate(Totals ~ Phylum, x, sum)
+ggplot(phyla_breakdown[grep("Unclassified", phyla_breakdown$Phylum, invert = T), ], aes(x = Phylum, y = Totals)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+x
+
 
 # sig.spark.key <- spark_key[match(colnames(sig.spark), spark_key$Gene), ]
 # sig.spark.key$Product <- as.character(sig.spark.key$Product)
