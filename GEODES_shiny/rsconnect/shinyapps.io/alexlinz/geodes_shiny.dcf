@@ -1,0 +1,12 @@
+name: geodes_shiny
+title:
+username:
+account: alexlinz
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 286333
+bundleId: 1233839
+url: https://alexlinz.shinyapps.io/geodes_shiny/
+when: 1519240349.22479
+asMultiple: FALSE
+asStatic: FALSE
