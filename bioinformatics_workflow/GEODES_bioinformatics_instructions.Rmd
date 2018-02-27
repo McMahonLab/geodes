@@ -11,7 +11,7 @@ On your submit node, submit files should be in "submits/", executables should be
 
 The refence MAGs and SAGs from lakes_data drive are stored in your home folder in the submit node, as are any intermediate files less than 100MB. Total space on submit-4 is 1TB and no file limit. Files larger than 100MB but less than 1GB are stored on squid, and files larger than 1GB are stored on gluster. Intermediate files are occasionally zipped and moved from gluster to squid.
 
-In gluster, initial RNA files are in "filtered/" and metagenome assemblies and their information from lakes_data are in "metagenome_assemblies/".
+In gluster, initial RNA files are in "GEODES_metaT/" and metagenome assemblies and their information from lakes_data are in "metagenome_assemblies/".
 
 ```{bash, eval = F}
 # Parts 1 and 2 do not depend on each other and can be run concurrently
@@ -21,9 +21,9 @@ In gluster, initial RNA files are in "filtered/" and metagenome assemblies and t
 condor_submit submits/00split_fastq.sub
 ./scripts/path2splitfastqs.sh
 condor_submit submits/01rRNA_removal.sub
-./scripts/cat_files.sh
+./scripts/cat_RNA.sh
 #Any time after this to get number of reads per metatranscriptome:
-condor_submit submits/MT_size.sub
+./scripts/MT_size.sh
 
 # Part 2 - Nonredundant database building
 ./scripts/prephylodist.sh

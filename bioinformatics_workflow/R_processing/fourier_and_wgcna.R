@@ -4,20 +4,21 @@
 library(ggplot2)
 library(cowplot)
 library(reshape2)
+library(GeneCycle)
 library(WGCNA)
 allowWGCNAThreads()
 enableWGCNAThreads()
 
 ### Load data (start with only one to save RAM and comment the rest out)
 # Normalized read tables
-#snorm <- read.csv("D:/geodes_data_tables/Sparkling_normalized.csv", header = T, row.names = 1)
-tnorm <- read.csv("D:/geodes_data_tables/Trout_normalized.csv", header = T, row.names = 1)
+snorm <- read.csv("D:/geodes_data_tables/Sparkling_normalized.csv", header = T, row.names = 1)
+#tnorm <- read.csv("D:/geodes_data_tables/Trout_normalized.csv", header = T, row.names = 1)
 #mnorm <- read.csv("D:/geodes_data_tables/Mendota_normalized.csv", header = T, row.names = 1)
 
 # Gene keys
 #mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey.csv", header = T)
-#spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey.csv", header = T)
-trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey.csv", header = T)
+spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey.csv", header = T)
+#trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey.csv", header = T)
 
 # Sample data
 metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
@@ -28,8 +29,8 @@ metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflo
 # I'm arbitrarily defining this as the number of samples * 1000
 
 #abun_mnorm <- mnorm[which(rowSums(mnorm) > (dim(mnorm)[2] * 1000)), ]
-#abun_snorm <- snorm[which(rowSums(snorm) > (dim(snorm)[2] * 1000)), ]
-abun_tnorm <- tnorm[which(rowSums(tnorm) > (dim(tnorm)[2] * 1000)), ]
+abun_snorm <- snorm[which(rowSums(snorm) > (dim(snorm)[2] * 1000)), ]
+#abun_tnorm <- tnorm[which(rowSums(tnorm) > (dim(tnorm)[2] * 1000)), ]
 
 ### Fourier transformations
 # I only want to include genes in my network with significant cyclic trends
@@ -45,32 +46,32 @@ abun_tnorm <- tnorm[which(rowSums(tnorm) > (dim(tnorm)[2] * 1000)), ]
 # rownames(new_abun_mnorm) <- new_abun_mnorm[, 1]
 # new_abun_mnorm <- new_abun_mnorm[, 2:dim(new_abun_mnorm)[2]]
 
-# abun_snorm$Genes <- rownames(abun_snorm)
-# abun_snorm <- melt(abun_snorm)
-# abun_snorm$Timepoint <- metadata$Timepoint[match(abun_snorm$variable, metadata$Sample)]
-# agg_abun_snorm <- aggregate(value ~ Genes + Timepoint, data = abun_snorm, mean)
-# new_abun_snorm <- reshape(agg_abun_snorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
-# rownames(new_abun_snorm) <- new_abun_snorm[, 1]
-# new_abun_snorm <- new_abun_snorm[, 2:dim(new_abun_snorm)[2]]
+abun_snorm$Genes <- rownames(abun_snorm)
+abun_snorm <- melt(abun_snorm)
+abun_snorm$Timepoint <- metadata$Timepoint[match(abun_snorm$variable, metadata$Sample)]
+agg_abun_snorm <- aggregate(value ~ Genes + Timepoint, data = abun_snorm, mean)
+new_abun_snorm <- reshape(agg_abun_snorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
+rownames(new_abun_snorm) <- new_abun_snorm[, 1]
+new_abun_snorm <- new_abun_snorm[, 2:dim(new_abun_snorm)[2]]
 
-abun_tnorm$Genes <- rownames(abun_tnorm)
-abun_tnorm <- melt(abun_tnorm)
-abun_tnorm$Timepoint <- metadata$Timepoint[match(abun_tnorm$variable, metadata$Sample)]
-agg_abun_tnorm <- aggregate(value ~ Genes + Timepoint, data = abun_tnorm, mean)
-new_abun_tnorm <- reshape(agg_abun_tnorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
-rownames(new_abun_tnorm) <- new_abun_tnorm[, 1]
-new_abun_tnorm <- new_abun_tnorm[, 2:dim(new_abun_tnorm)[2]]
-new_abun_tnorm <- new_abun_tnorm[, 1:7]
+# abun_tnorm$Genes <- rownames(abun_tnorm)
+# abun_tnorm <- melt(abun_tnorm)
+# abun_tnorm$Timepoint <- metadata$Timepoint[match(abun_tnorm$variable, metadata$Sample)]
+# agg_abun_tnorm <- aggregate(value ~ Genes + Timepoint, data = abun_tnorm, mean)
+# new_abun_tnorm <- reshape(agg_abun_tnorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
+# rownames(new_abun_tnorm) <- new_abun_tnorm[, 1]
+# new_abun_tnorm <- new_abun_tnorm[, 2:dim(new_abun_tnorm)[2]]
+# new_abun_tnorm <- new_abun_tnorm[, 1:7]
 
 # Then run the significance test for cyclic trends
 # fdr.mendota <- fdrtool(fisher.g.test(t(new_abun_mnorm)), statistic = "pvalue")
 # sig.mendota <- t(new_abun_mnorm[which(fdr.mendota$pval < 0.05),])
 
-# fdr.spark <- fdrtool(fisher.g.test(t(new_abun_snorm)), statistic = "pvalue")
-# sig.spark <- t(new_abun_snorm[which(fdr.spark$pval < 0.05),])
-#
-fdr.trout <- fdrtool(fisher.g.test(t(new_abun_tnorm)), statistic = "pvalue")
-sig.trout <- t(new_abun_tnorm[which(fdr.trout$pval < 0.05),])
+fdr.spark <- fdrtool(fisher.g.test(t(new_abun_snorm)), statistic = "pvalue")
+sig.spark <- t(new_abun_snorm[which(fdr.spark$pval < 0.05),])
+
+# fdr.trout <- fdrtool(fisher.g.test(t(new_abun_tnorm)), statistic = "pvalue")
+# sig.trout <- t(new_abun_tnorm[which(fdr.trout$pval < 0.05),])
 
 ### WGCNA
 # 1st, check the soft threshold in case removing samples changed it.
@@ -114,21 +115,21 @@ sig.trout <- t(new_abun_tnorm[which(fdr.trout$pval < 0.05),])
 # Make the modules
 # mendota_net <- blockwiseModules(sig.mendota, maxBlockSize = 1000, power = 8, loadTOM = F, saveTOMs = F, networkType = "signed", minModuleSize = 30, numericLabels = T, nThreads = 8, verbose = 3)
 
-# spark_net <- blockwiseModules(sig.spark, maxBlockSize = 1000, power = 7, loadTOM = F, saveTOMs = F, networkType = "signed", minModuleSize = 30, numericLabels = T, nThreads = 8, verbose = 3)
+spark_net <- blockwiseModules(sig.spark, maxBlockSize = 1000, power = 7, loadTOM = F, saveTOMs = F, networkType = "signed", minModuleSize = 30, numericLabels = T, nThreads = 8, verbose = 3)
 
-trout_net <- blockwiseModules(sig.trout, maxBlockSize = 1000, power = 18, loadTOM = F, saveTOMs = F, networkType = "signed", minModuleSize = 30, numericLabels = T, nThreads = 8, verbose = 3)
+# trout_net <- blockwiseModules(sig.trout, maxBlockSize = 1000, power = 18, loadTOM = F, saveTOMs = F, networkType = "signed", minModuleSize = 30, numericLabels = T, nThreads = 8, verbose = 3)
 
 # sig.mendota.key <- mendota_key[match(colnames(sig.mendota), mendota_key$Gene), ]
 # sig.mendota.key$Cluster <- mendota_net$colors
 # sig.mendota.key$Totals <- rowSums(new_abun_mnorm)[match(sig.mendota.key$Gene, rownames(new_abun_mnorm))]
 
-# sig.spark.key <- spark_key[match(colnames(sig.spark), spark_key$Gene), ]
-# sig.spark.key$Cluster <- spark_net$colors
-# sig.spark.key$Totals <- rowSums(new_abun_snorm)[match(sig.spark.key$Gene, rownames(new_abun_snorm))]
+sig.spark.key <- spark_key[match(colnames(sig.spark), spark_key$Gene), ]
+sig.spark.key$Cluster <- spark_net$colors
+sig.spark.key$Totals <- rowSums(new_abun_snorm)[match(sig.spark.key$Gene, rownames(new_abun_snorm))]
 
-sig.trout.key <- trout_key[match(colnames(sig.trout), trout_key$Gene), ]
-sig.trout.key$Cluster <- trout_net$colors
-sig.trout.key$Totals <- rowSums(new_abun_tnorm)[match(sig.trout.key$Gene, rownames(new_abun_tnorm))]
+# sig.trout.key <- trout_key[match(colnames(sig.trout), trout_key$Gene), ]
+# sig.trout.key$Cluster <- trout_net$colors
+# sig.trout.key$Totals <- rowSums(new_abun_tnorm)[match(sig.trout.key$Gene, rownames(new_abun_tnorm))]
 
 
 # Save output
