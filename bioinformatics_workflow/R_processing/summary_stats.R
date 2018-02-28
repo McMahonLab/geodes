@@ -315,10 +315,95 @@ spark_key[match(top10, spark_key$Gene),]
 
 totals <- rowSums(mnorm)
 top10 <- rownames(mnorm)[order(totals, decreasing = T)]
-top10 <- top10[1:11]
+top10 <- top10[2:11]
 mendota_key[match(top10, mendota_key$Gene),]
 
 totals <- rowSums(tnorm)
 top10 <- rownames(tnorm)[order(totals, decreasing = T)]
-top10 <- top10[1:11]
+top10 <- top10[2:11]
 trout_key[match(top10, trout_key$Gene),]
+
+# How abundant are the bins?
+bins <- read.csv("D:/geodes_data_tables/GEODES_bin_data.csv", header = T)
+contigs <- read.table("D:/geodes_data_tables/GEODES_binned_contigs.txt")
+
+# only look at reasonable quality bins:
+bins <- bins[which(bins$completeness > 30),]
+bins <- bins[which(bins$contamination < 10),]
+contigs <- contigs[which(contigs$V2 %in% bins$bin),]
+
+# For each bin:
+# grab the contigs in that bin
+# grab the genes in those contigs
+# count up read counts for those genes
+ME_sum <- c()
+SP_sum <- c()
+TB_sum <- c()
+
+for(i in 1:length(bins$bin)){
+  bits <- contigs$V1[which(contigs$V2 == bins$bin[i])]
+  ME_genes <- mendota_key$Gene[which(mendota_key$Genome %in% bits)]
+  ME_sum[i] <- sum(rowSums(mnorm[which(rownames(mnorm) %in% ME_genes),]))
+  SP_genes <- spark_key$Gene[which(spark_key$Genome %in% bits)]
+  SP_sum[i] <- sum(rowSums(snorm[which(rownames(snorm) %in% ME_genes),]))
+  TB_genes <- trout_key$Gene[which(trout_key$Genome %in% bits)]
+  TB_sum[i] <- sum(rowSums(tnorm[which(rownames(tnorm) %in% ME_genes),]))
+}
+
+bin_counts <- data.frame(bins$bin, ME_sum, SP_sum, TB_sum)
+colnames(bin_counts) <- c("Bin", "Mendota", "Sparkling", "Trout")
+bin_counts$Taxonomy <- bins$phylodist_taxonomy[match(bin_counts$Bin, bins$bin)]
+bin_counts <- bin_counts[which(bin_counts$Mendota > 0 | bin_counts$Sparkling > 0 | bin_counts$Trout > 0),]
+bin_counts$Phylum <- sapply(strsplit(as.character(bin_counts$Taxonomy),";"), `[`, 2)
+bin_counts$Phylum[which(is.na(bin_counts$Phylum) == T)] <- "Unclassified"
+
+bin_counts$Bin <- factor(bin_counts$Bin, levels = bin_counts$Bin[order(bin_counts$Mendota, decreasing = T)])
+ggplot(data = bin_counts, aes(x = Bin, y = Mendota, fill = Phylum)) + geom_bar(stat = "identity") + scale_y_log10() + labs(title = "Mendota") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Mendota, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Mendota", x = "Bin Phylum Assignment", y = "Metatranscriptomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Sparkling, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Sparkling", x = "Bin Phylum Assignment", y = "Metatranscriptomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Trout, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Trout Bog", x = "Bin Phylum Assignment", y = "Metatranscriptomic Read Counts") 
+
+# Repeat with metagenomic read counts
+# run the following code if you skipped the earlier code on metagenomes:
+metaG_reads <- read.table("D:/geodes_data_tables/GEODES_metaG_2018-01-26.readcounts.txt", row.names = 1, sep = "\t")
+colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
+metaG_key <- read.table("D:/geodes_data_tables/GEODES_metaG_genekey.txt", sep = "\t", quote = "")
+colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
+lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
+metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
+
+ME_metaG <- c()
+SP_metaG <- c()
+TB_metaG <- c()
+SP_metaG2 <- c()
+
+for(i in 1:length(bins$bin)){
+  bits <- contigs$V1[which(contigs$V2 == bins$bin[i])]
+  genes <- metaG_key$Gene[which(metaG_key$Genome %in% bits)]
+  reads <- metaG_reads[which(rownames(metaG_reads) %in% genes),]
+  ME_metaG[i] <- sum(rowSums(reads[,which(lakekey == "Mendota")]))
+  SP_metaG[i] <- sum(rowSums(reads[,which(lakekey == "Sparkling")]))
+  TB_metaG[i] <- sum(rowSums(reads[,which(lakekey == "Trout")]))
+  SP_metaG2[i] <- sum(rowSums(reads[,which(lakekey == "Sparkling2009")]))
+}
+
+bin_counts <- data.frame(bins$bin)
+bin_counts$Mendota_metaG <- ME_metaG
+bin_counts$Sparkling_metaG <- SP_metaG
+bin_counts$Trout_metaG <- TB_metaG
+bin_counts$Sparkling09_metaG <- SP_metaG2
+
+bin_counts$Taxonomy <- bins$phylodist_taxonomy[match(bin_counts$bin, bins$bin)]
+bin_counts$Phylum <- sapply(strsplit(as.character(bin_counts$Taxonomy),";"), `[`, 2)
+bin_counts$Phylum[which(is.na(bin_counts$Phylum) == T)] <- "Unclassified"
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Mendota_metaG, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Mendota", x = "Bin Phylum Assignment", y = "Metagenomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Sparkling_metaG, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Sparkling", x = "Bin Phylum Assignment", y = "Metagenomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Trout_metaG, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Trout Bog", x = "Bin Phylum Assignment", y = "Metagenomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Sparkling09_metaG, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Sparkling 2009", x = "Bin Phylum Assignment", y = "Metagenomic Read Counts")
