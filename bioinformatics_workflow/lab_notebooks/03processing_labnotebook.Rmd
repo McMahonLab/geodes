@@ -1585,3 +1585,7 @@ That's pretty fast! I'll need to gzip the data tables first, but otherwise I can
 
 
 It worked!!! moving on.
+
+####2018-03-01
+
+Just a quick note that I reran everything with the new SAGs, and the same samples flunked out due to poor amplification of the standard. Consistency is good, I guess?
