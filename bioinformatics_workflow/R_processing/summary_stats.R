@@ -8,9 +8,9 @@ library(reshape2)
 
 ### Load data (start with only one to save RAM and comment the rest out)
 # Normalized read tables
-snorm <- read.csv("D:/geodes_data_tables/Sparkling_normalized.csv", header = T, row.names = 1)
-tnorm <- read.csv("D:/geodes_data_tables/Trout_normalized.csv", header = T, row.names = 1)
-mnorm <- read.csv("D:/geodes_data_tables/Mendota_normalized.csv", header = T, row.names = 1)
+snorm <- read.csv("D:/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+tnorm <- read.csv("D:/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+mnorm <- read.csv("D:/geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", header = T, row.names = 1)
 
 # Gene keys
 mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
@@ -27,12 +27,15 @@ mendota_key$Phylum <- sapply(strsplit(as.character(mendota_key$Taxonomy),";"), `
 
 mnorm$Genes <- rownames(mnorm)
 mnorm <- melt(mnorm)
+mnorm$variable <- gsub(".nonrRNA", "", mnorm$variable)
 mnorm$Timepoint <- metadata$Timepoint[match(mnorm$variable, metadata$Sample)]
 mnorm$Taxonomy <- mendota_key$Phylum[match(mnorm$Genes, mendota_key$Gene)]
 mnorm$Taxonomy <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("NO CLASSIFICATION MH", "Unclassified", mnorm$Taxonomy)
 mnorm$Taxonomy <- gsub("NO CLASSIFICATION LP", "Unclassified", mnorm$Taxonomy)
@@ -52,13 +55,14 @@ wide_mnorm <- wide_mnorm[, 2:dim(wide_mnorm)[2]]
 wide_mnorm <- wide_mnorm[which(rowSums(wide_mnorm) > 3000),]
 
 mendota_phyla <- data.frame(Taxonomy = rownames(wide_mnorm), Sums = rowSums(wide_mnorm))
-mendota_phyla$Taxonomy <- c("Unclassified", "Acidobacteria", "Actinobacteria", "Armatimonadetes", "Bacteroidetes", "TM7", "Chloroflexi", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Firmicutes", "Gemmatimonadetes", "Haptophyta", "Heterokonta", "Unclassified", "Planctomycetes", "Proteobacteria", "Spirochaetes", "Tenericutes", "Verrucomicrobia", "Viruses", "Unclassified")
+mendota_phyla$Taxonomy <- c("Unclassified", "Acidobacteria", "Actinobacteria", "Armatimonadetes", "Bacteroidetes", "TM7", "Chlorobi", "Chloroflexi", "Chlorophyta", "Ciliophora", "Crenarchaeota", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Elusimicrobia", "Firmicutes", "Gemmatimonadetes", "Haptophyta", "Heterokonta", "Ignavibacteria", "standard", "Unclassified", "Planctomycetes", "Proteobacteria", "Spirochaetes", "Tenericutes", "Unclassified", "Verrucomicrobia", "Viruses")
 unclassified <- mendota_phyla[which(mendota_phyla$Taxonomy == "Unclassified"), ]
 mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy != "Unclassified"), ]
 mendota_phyla <- rbind(mendota_phyla, c("Unclassified", sum(unclassified$Sums)))
 mendota_phyla$Sums <- as.numeric(mendota_phyla$Sums)
 mendota_phyla$Taxonomy <- factor(mendota_phyla$Taxonomy, levels = mendota_phyla$Taxonomy[order(mendota_phyla$Sums, decreasing = T)])
-mendota_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae",  "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses", "Unclassified")
+mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy != "standard"), ]
+mendota_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Protists", "Archaea", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses", "Unclassified")
 
 
 p <- ggplot(mendota_phyla, aes(x = Taxonomy, y = Sums, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Lake Mendota Metatranscriptomes")
