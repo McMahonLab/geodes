@@ -2075,10 +2075,1658 @@ awk 'NR > 1{s=0; for (i=3;i<=NF;i++) s+=$i; if (s!=0)print}' Mendota_ID90_2018-0
 cat colnames.txt temp.txt > Mendota_ID90_2018-03-02.readcounts.txt
 ```
 
+#Mapping Metagenomes
+
+###Goal
+
+We microbial ecologists look at DNA a lot. It's often considered a proxy for abundance. One of the question we ask using metatranscriptomes is how an organism's level of expression compares to its abundance, but first we need to know how the metagenomes map to the same database we used for the metatranscriptomes.
+
+###Approach
+
+Pretty straightforward - a metagenome looks a lot like a metatranscriptome from a computer's point of view, and the point of this analysis is to use the same reference database, so we can use a lot of the same code from the metatranscriptome mapping. The main difference is that the metagenomes are prohibitibely huge (~80GB), so I downsample them. Otherwise, we'll just be modifying 09mapping - 11grepgenes to refer to metagenomes instead of metatranscriptomes.
+
+0. Installs
+
+None! You already installed everything for mapping metatranscriptomes.
+
+1. Sample metagenomes. This is a commonly used technique when working with really huge data. You do lose some accuracy by doing this, but since the purpose of this analysis is to compare to expression data at roughly the phylum level (and because I'd like to get data back within the next month), I'm ok with that. BBMap comes with a nice function for downsampling fastq files, which is what we use here. I'm sampling 10% reads, which puts the metagenomes roughly in the size range of the metatranscriptomes.
+
+Note the absolutely ridiculous disk space requirement in the submit script. The job itself only takes a couple hours, but waiting to match to an execute node with over 100GB of free space for you to use can take awhile.
+
+```{bash, eval = F}
+# put metagenome names in metaG_samples.txt
+condor_submit submits/13sample_metaGs.sub
+
+```
+
+13sample_metaGs.sub
+```{bash, eval = F}
+# 13sample_metaG.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 13sample_metaG_$(Cluster).log
+error = 13sample_metaG_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/13sample_metaG.sh
+arguments = $(sample)
+output = 13sample_metaG_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 16 GB
+request_disk = 108 GB
+#
+# Submit jobs
+queue sample from metaG_samples.txt
+
+```
+
+13sample_metaGs.sh
+```{bash, eval = F}
+#!/bin/bash
+#Downsample metagenomes to 10 percent
+#Transfer metaG from gluster
+cp /mnt/gluster/amlinz/GEODES_metagenomes/$1-metaG.fastq.gz .
+
+#Unzip program
+tar -xvzf BBMap_36.99.tar.gz
+gzip -d $1-metaG.fastq.gz
+
+#BBmap to sample
+bbmap/reformat.sh in=$1-metaG.fastq out=$1-sampled.fastq samplerate=0.1
+
+gzip $1-sampled.fastq
+
+#Copy file back to gluster
+cp $1-sampled.fastq.gz /mnt/gluster/amlinz/downsampled_metagenomes/
+
+#Clean up
+rm -r bbmap
+rm *.fastq
+rm *.gz
+
+```
+
+2. Mapping. Nothing new here - all we're doing is changing the scripts to reference our downsampled metagenomes instead of the metatranscriptomes. As such, I'm renaming the scripts above with a ".2" since they're basically the same thing. It's ok to overwrite intermediate files like path2mappingfastqs.txt, since you don't need them downstream.
+
+```{bash, eval = F}
+# No need to rerun 08build_index, since you're using the same reference database
+mkdir /mnt/gluster/amlinz/GEODES_metaG_mapping_results/
+ls /mnt/gluster/amlinz/downsampled_metagenomes > path2mappingfastqs.txt
+condor_submit submits/09.2mapping.sub
+```
+
+09.2mapping.sub
+```{bash, eval = F}
+# 09.2mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 09.2mapping_$(Cluster).log
+error = 09.2mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/09.2mapping.sh
+arguments = $(samplename)
+output = 09.2mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+request_cpus = 1
+request_memory =36GB
+request_disk = 20GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2mappingfastqs.txt
+
+```
+
+09.2mapping.sh
+```{bash, eval = F}
+#!/bin/bash
+#Map metagenome reads to my pre-indexed database of reference genomes
+#Transfer metaG from gluster
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/downsampled_metagenomes/$1 .
+cp /mnt/gluster/amlinz/ref.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf ref.tar.gz
+gzip -d $1
+name=$(basename $1 | cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.90.mapped.sam minid=0.90 trd=T sam=1.3 threads=1 build=1 mappedonly=T -Xmx32g
+
+# I want to store the output as bam. Use samtools to convert.
+./samtools/bin/samtools view -b -S -o $name.90.mapped.bam $name.90.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.90.mapped.bam /mnt/gluster/amlinz/GEODES_metaG_mapping_results/
+
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+
+```
+
+#Binning
+
+####Goal
+Part of the point of the reference database is to assign taxonomy to metatranscriptomic reads, which means those classifications will only be as good as the reference database. Earlier, we classified contigs in the metagenome assemblies based on phylodist files from JGI that match each gene to something in the IMG database. But contig classifications are never that good, since there's only so much DNA. We can get better classifications by binning the contigs into genomes and classifying the genomes instead. Bin classifications can be reassigned in the genekey files post-mapping.
+
+####Approach
+There are lots of programs for binning. The general idea is to use a combination of genome properties such as kmer frequency and GC content and read coverage from the metagenomes. I don't have many metagenomes, so the read coverage isn't all that helpful, but it's better than nothing. I chose the program MaxBin because it has been shown to work well on high complexity datasets.
+
+0. Installs
+
+I'm using the program MaxBin. I've downloaded version 2.2.4 from https://downloads.jbei.org/data/microbial_communities/MaxBin/MaxBin.html
+
+I'm following the installation instructions here: https://downloads.jbei.org/data/microbial_communities/MaxBin/README.txt
+
+In an interactive session:
+```{bash, eval = F}
+tar xvzf MaxBin-2.2.4.tar.gz
+cd MaxBin-2.2.4
+cd src
+make
+cd ..
+./autobuild_auxiliary
+
+```
+
+At the beginning of the binning script, you'll need to set the PATH for the auxiliary programs MaxBin uses.
+
+1. We've already downsampled and mapped the metagenomes, so no need to do that again. But we can further reduce the computational power needed by removing tiny contigs that aren't likely to bin anyway (or add much information even if they do bin). My cutoff is 1000 bp long, which is about one gene.
+
+I have my metagenome assembly files wrapped up in tarballs called GEODES<metagenome number>.datafiles2.tar.gz. It has extra stuff in it I was using for testing. Because it's on squid, change the submit file for each one and submit separately. Don't worry, each one doesn't take long.
+
+```{bash, eval = F}
+mkdir /mnt/gluster/amlinz/filtered_assemblies
+condor_submit submits/14contig_filter.sub
+```
+
+14contig_filter.sub:
+```{bash, eval = F}
+# 14contig_filter.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 14contig_filter_$(Cluster).log
+error = 14contig_filter_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/14contig_filter.sh
+arguments = $(samplename)
+output = 14contig_filter_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,http://proxy.chtc.wisc.edu/SQUID/amlinz/GEODES005.datafiles2.tar.gz
+
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 16GB
+request_disk = 8GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from contigs.txt
+
+```
+
+14contig_filter.sh:
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+tar -xvzf $1.datafiles2.tar.gz
+gzip -d $1.assembled.fna.gz
+
+./bbmap/reformat.sh in=$1.assembled.fna out=$1-filtered.assembled.fna minlength=1000
+
+gzip $1-filtered.assembled.fna
+
+cp $1-filtered.assembled.fna.gz /mnt/gluster/amlinz/filtered_assemblies/
+
+rm *gz
+rm *fna
+rm *txt
+rm *product_names
+rm -r bbmap
+
+```
+
+2.Bin time! 
+
+```{bash, eval = F}
+condor_submit submits/15binning.sub
+```
+
+15binning.sub
+```{bash, eval = F}
+#15binning.sub
+#
+universe = vanilla
+# Name the log file:
+log = 15binning.log
+
+# Name the files where standard output and error should be saved:
+output = 15binning.out
+error = 15binning.err
+
+executable = executables/15binning.sh
+
+# If you wish to compile code, you'll need the below lines.
+#  Otherwise, LEAVE THEM OUT if you just want to interactively test!
+requirements = ( OpSysMajorVer == 7 ) && ( Target.HasGluster == true )
+arguments = $(metaG)
+
+# Indicate all files that need to go into the interactive job session,
+#  including any tar files that you prepared:
+transfer_input_files = MaxBin.tar.gz
+
+# It's still important to request enough computing resources. The below
+#  values are a good starting point, but consider your file sizes for an
+#  estimate of "disk" and use any other information you might have
+#  for "memory" and/or "cpus".
+
+request_cpus = 1
+request_memory = 24GB
+request_disk = 16GB
+
+queue metaG from metaG_samples.txt
+```
+
+15binning.sh
+```{bash, eval = F}
+#!/bin/bash
+# Test binning on one metagenome assembly
+# Both the assembled data and the reads have already been slimmed down
+tar xvzf MaxBin.tar.gz
+
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/FragGeneScan1.30:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/bowtie2-2.2.3:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/hmmer-3.1b1/src:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/idba-1.1.1/bin:$PATH
+
+cp /mnt/gluster/amlinz/filtered_assemblies/$1-filtered.assembled.fna.gz .
+cp /mnt/gluster/amlinz/downsampled_metagenomes/$1-sampled.fastq.gz .
+
+gzip -d $1-filtered.assembled.fna.gz
+gzip -d $1-sampled.fastq.gz
+
+./MaxBin-2.2.4/run_MaxBin.pl -contig $1-filtered.assembled.fna -out $1-binned -reads $1-sampled.fastq
+
+mkdir $1-binning
+mv $1-binned* $1-binning/
+tar cvzf $1-binning.tar.gz $1-binning/
+mv $1-binning.tar.gz /mnt/gluster/amlinz/
+
+rm *assembled.fna
+rm *fastq
+
+```
+
+3. We need a bit more info about the quality of the bins. Run CheckM to get completeness and contamination estimates. 
+
+Remember when I said installing programs is hard, so I got a labmate to make a docker image for me? This is it. If you don't have Docker installed on your machine, you're on your own.
+
+```{bash, eval = F}
+# Put all the bins from all the metagenomes in a single folder and list.
+# The bins are output as .fasta, but CheckM only accepts .fna, so change the file extensions here
+./move_bins.sh
+
+condor_submit submits/16checkm.sub
+
+#Concatenate results
+./checkm_results.sh
+```
+
+move_bins.sh
+```{bash, eval = F}
+#!/bin/bash
+
+while read line; do tar xvzf /mnt/gluster/amlinz/$line-binning.tar.gz;
+       for file in $line-binning/*fasta; do
+               name=$(basename "$file" .fasta);
+               mv $file metaG_bins/$name.fna;
+               done;
+       rm -r $line-binning;
+       done < metaG_samples.txt
+
+for file in metaG_bins/*; do
+        name=$(basename "$file" .fna);
+        echo $name;
+        done > bins_to_classify.txt
+
+head -3 bins_to_classify.txt > testbins_to_classify.txt
+
+```
+
+16checkm.sub
+```{bash, eval = F}
+# 16checkm.sub
+#
+#
+# Specify the HTCondor Universe
+universe = docker
+docker_image = sstevens/checkm:latest
+
+log = 16checkm_$(Cluster).log
+error = 16checkm_$(Cluster)_$(Process).err
+requirements = (OpSysMajorVer == 7)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/16checkm.sh
+arguments = $(bin)
+output = 16checkm_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = metaG_bins/$(bin).fna
+transfer_output_files = $(bin)-contigs.txt,$(bin)-checkm.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 40GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue bin from bins_to_classify.txt
+
+```
+
+16checkm.sh
+```{bash, eval = F}
+
+#!/bin/bash
+
+mkdir input
+mv $1.fna input/
+
+checkm lineage_wf input output
+
+grep ">" input/$1.fna > contigs.txt
+sed -i 's/>//g' contigs.txt
+while read line; do
+        echo $line $1;
+        done < contigs.txt > $1-contigs.txt
+
+tax=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /marker lineage/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+length=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Genome size/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+complete=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Completeness/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+contamination=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Contamination/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+
+echo $1 $tax $length $complete $contamination > $1-checkm.txt
+
+rm -r input/
+rm -r output/
+
+```
+
+checkm_results.sh
+```{bash, eval = F}
+#!/bin/bash
+
+cat *-contigs.txt > GEODES_binned_contigs.txt
+echo -e "bin\ttaxonomy\tsize\tcompleteness\tcontamination" | cat - *-checkm.txt > GEODES_checkm_results.txt
+
+```
+
+4. One last thing we need to do - classification. You'll notice that CheckM spits out classifications, but we think we can do better using those Phylodist files again. And once again, I'm using one of Sarah's Python scripts to combine classifications. This script is very similar to the one used previously for contigs, but includes contigs assigned to the same bin. It also pulls out marker COGs (from the Phylosift list) instead of using all genes.
+
+Credit to Sarah Stevens for these scripts!
+
+The steps in the process are:
+- assembly.gff + bin.contig.list > bin.gff
+- bin.gff + assembly.phylodist > bin.phylodist
+- bin.gff + assembly.COG > bin.COG
+- bin.COG + bin.phylodist > bin.markerCOG.phylodist
+- bin.markerCOG.phylodist > classification
+
+Once this is done, we'll replace contig level classifications with bin classifications in the genekeys in R.
+
+```{bash, eval = F}
+# Using the same bins list for input as CheckM
+condor_submit submits/17classify_bins.sub
+
+# Concatenate output
+cat *.perc70.minhit3.classonly.txt > bin_classifications.txt
+```
+
+17classify_bins.sub
+```{bash, eval = F}
+# 17classify_bins.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 17classify_bins_$(Cluster).log
+error = 17classify_bins_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/17classify_bins.sh
+arguments = $(bin)
+output = 17classify_bins_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz
+transfer_output_files = $(contigs).contig.classification.perc70.minhit3.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 16GB
+request_disk = 16GB
+#
+# run from list
+queue bin from bins_to_classify.txt
+
+```
+
+17classify_bins.sh
+```{bash, eval = F}
+#!/bin/bash
+
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$(pwd)/bwa:$PATH
+export HOME=$(pwd)/home
+
+# Unzip assembly data files
+tar xvzf for_bin_classification.tar.gz
+
+# Make all scripts executable
+chmod +x *.sh
+chmod +x *.py
+
+# Make list of contigs
+grep '>' $1.fna > $1.contigs
+
+# Make gff file
+./makeBinGFF.sh $1.contigs for_bin_classification/
+
+# Make phylodist file
+python makeBinPhylodist.py $1.gff for_bin_classification
+
+# Make COG file
+python makeBinCOGS.py $1.gff for_bin_classification
+
+# Filter COGs to include only phylogeny marker genes
+python filterPhyloCOGs.py $1.cog.txt
+
+# Get the consensus phylogeny
+python classifyWphylodistWcutoffs.py $1.phylodist.subphylocog.txt
+
+# Simplify output name
+mv *classonly.txt $1.perc70.minhit3.classonly.txt
+
+# Clean up
+rm *.tar.gz
+rm *.py
+rm *.sh
+rm *.tsv
+rm *.gff
+rm *.fna
+rm *.fna.contigs
+rm *cog.txt
+rm *phylodist.txt
+rm *minhit3.txt
+rm -r for_bin_classification/
+rm -rf python/
+rm -r home/
+```
+
+makeBinGFF.sh
+```{bash, eval = F}
+#!/bin/bash
+
+# This program makes a gff file for the individual bin from the assembly gff
+# Usage: makeBinGFF contiglistFile path2assemblies
+
+# Read in filename
+filename=$1
+# Get path to assemblies
+assemPath=$2
+# Put together name for assembly gff file
+gffFilename=`echo "$filename" | cut -f1 -d- `
+#gffFilename=${gffFilename##*/}
+# Make bin GFF file name
+gffOut="${filename%.contigs}".gff
+
+# Grep each line of the filename (minus first character) from the gff file 
+#    into new bin gff file
+while read line
+do
+grep "${line:1:${#line}}" $assemPath/$gffFilename.assembled.gff >> $gffOut
+done < $filename
+```
+
+makeBinPhylodist.py
+```{python, eval=F, python.reticulate = F}
+# coding: utf-8
+
+"""makeBinPhylodist.py : make phyldist file for each bin"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: makeBinPhylodist.py  gffFile path2assemblies")
+
+if len(sys.argv) != 3:
+	usage()
+	sys.exit(2)
+
+gffname=sys.argv[1]
+assemName=gffname.split('-')[0]
+path2assem=sys.argv[2]
+phylodistname=path2assem+'/'+assemName+'.assembled.phylodist'
+
+gff=pd.read_table(gffname, header=None, names=['seqname','source','features','start','end','score','strand','frame','attribute'])
+#pulling out the locus tag to its own column
+gff['locus_tag']=gff['attribute'].str.split('locus_tag=').str.get(1).str.slice(start=0,stop=-1)
+phylodist=pd.read_table(phylodistname, header=None, names=['seq_id','homolog_gene_oid','homolog_taxon_oid','percent_identity','lineage'])
+## Merging and writing out to file, did inner instead of left since some of the genes don't have a hit in the phylodist file
+gff[['locus_tag']].merge(phylodist, how='inner', left_on='locus_tag', right_on='seq_id').to_csv(gffname.split('.gff')[0]+'.phylodist.txt',sep='\t', index=False)
+```
+
+makeBinCOGS.py
+```{python, eval = F, python.reticulate = F}
+# coding: utf-8
+
+"""makeBinPhylodist.py : make cog file for each bin"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: makeBinCOGs.py  gffFile path2assemblies")
+
+if len(sys.argv) != 3:
+	usage()
+	sys.exit(2)
+
+gffname=sys.argv[1]
+assemName=gffname.split('-')[0]
+path2assem=sys.argv[2]
+cogname=path2assem+'/'+assemName+'.assembled.COG'
+
+gff=pd.read_table(gffname, header=None, names=['seqname','source','features','start','end','score','strand','frame','attribute'])
+#pulling out the locus tag to its own column
+gff['locus_tag']=gff['attribute'].str.split('locus_tag=').str.get(1).str.slice(start=0,stop=-1)
+cog=pd.read_table(cogname, header=None, names=['gene_id','cog_id','percent_identity','align_length','query_start','query_end','subj_start','subj_end','evalue','bit_score'])
+## Merging and writing out to file, did inner instead of left since some of the genes don't have a hit in the cog file
+gff[['locus_tag']].merge(cog, how='inner', left_on='locus_tag', right_on='gene_id').to_csv(gffname.split('.gff')[0]+'.cog.txt',sep='\t', index=False)
+```
+
+filterPhyloCOGs.py
+```{python, eval = F, python.reticulate = F}
+"""makeBinPhylodist.py : make cog file for each bin, requires matching names for COG file and phylodist files, preferably made with makeBinXXX.py scripts"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: filterPhyloCOGs.py  COGsFile")
+
+if len(sys.argv) != 2:
+	usage()
+	sys.exit(2)
+
+cogname=sys.argv[1]
+prefix=cogname.split('.cog.txt')[0]
+phyloname=prefix+'.phylodist.txt'
+
+matchup=pd.read_table('Phylosift2COGs.tsv',header=0) # hard coded in path2file, add as argument?
+
+
+cogs=pd.read_table(cogname,header=0)
+phylodist=pd.read_table(phyloname,header=0)
+phylocogs=cogs[cogs.cog_id.isin(matchup.COG_num)]
+phylocogs.to_csv(prefix+'.phylocog.txt',sep='\t', index=False)
+
+phylodist[phylodist.locus_tag.isin(phylocogs.locus_tag)].to_csv(prefix+'.phylodist.subphylocog.txt',sep='\t', index=False)
+
+```
+
+classifyWphylodistWcutoffs.py
+```{python, eval = F, python.reticulate = F}
+import pandas as pd, sys, os
+
+"""classifyWPhylodist.py  for each taxonomic level takes the classificaiton with the most hits,
+	removes any not matching hits for the next leve, also returns the number and avg pid for those hits"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+def usage():
+	print("Usage: classifyWPhylodistWcutoffs.py  phylodistFile")
+
+if len(sys.argv) != 2:
+	usage()
+	sys.exit(2)
+
+# Read in args
+inname=sys.argv[1]
+phylodist = pd.read_table(inname)
+perc_co = .70
+hit_min = 3
+	
+
+# Setting up output
+outname=os.path.splitext(inname)[0]+'.perc70.minhit3.txt'
+outname2=os.path.splitext(inname)[0]+'.perc70.minhit3.classonly.txt' # output file without the numbers in it
+output=open(outname,'w')
+output2=open(outname2,'w')
+output.write(inname+'\t')
+output2.write(inname+'\t')
+if phylodist.empty: # if there are no hits in phylodist file
+	print('Phylodist empty!  This maybe because it was subsetted into phylocogs and there were none.')
+	output.write('NO CLASSIFICATION BASED ON GIVEN PHYLODIST\n')
+	output2.write('NO CLASSIFICATION BASED ON GIVEN PHYLODIST\n')
+	sys.exit(0)
+
+phylodist['contig']=phylodist['locus_tag'].str[:17]
+taxon_ranks=['Kingdom','Phylum','Class','Order','Family','Genus','Species','Taxon_name']
+phylodist[taxon_ranks]=phylodist['lineage'].apply(lambda x: pd.Series(x.split(';')))
+totGenes=len(phylodist)
+genome_classification=list()
+
+
+for rank in taxon_ranks:
+	# Getting taxon, at that level, hit the most and the number of hits
+	counts=phylodist.groupby(rank).size()
+	max_ct_value=counts.max()
+	perc=phylodist.groupby(rank).size()/float(totGenes) # percent of times each classification (added float for python2)
+	max_pc_value=perc.max() # number of percentage the classification with the most hits had
+	max_pc_taxon=perc.idxmax(axis=1) # classificaiton hit the most at this rank
+	averages=phylodist.groupby(rank).mean().reset_index()[[rank,'percent_identity']] #getting average pid for best classifcation
+	max_pc_avg=averages.loc[averages[rank]==max_pc_taxon, 'percent_identity'].iloc[0]
+	result=(max_pc_taxon, round(max_pc_value, 2), round(max_pc_avg, 2), max_ct_value)
+	genome_classification.append(result)
+	rank_co_dict = {'Kingdom':.20,'Phylum':.45,'Class':.49,'Order':.53,'Family':.61,'Genus':.70,'Species':.90,'Taxon_name':.97}
+	rank_co = rank_co_dict[rank]
+	if (result[0]>.70 and result[3]>hit_min and result[1]>rank_co):
+		output.write('{}({},{},{});'.format(result[0],result[1],result[2],result[3]))
+		output2.write(result[0]+';')
+	else:
+		if rank == 'Kingdom':
+			if result[3]<=hit_min:
+				output.write('NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST')
+				output2.write('NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST')
+			else: 
+				output.write('NO CLASSIFICATION DUE TO LOW PERCENT MATCHING')
+				output2.write('NO CLASSIFICATION DUE TO LOW PERCENT MATCHING')
+		output.write('\n')
+		output2.write('\n')
+		output.close()
+		output2.close()
+		sys.exit(0)
+	phylodist=phylodist[phylodist[rank]==max_pc_taxon] # removing any hits which don't match the classification at this level
+
+output.write('\n')
+output.close()
+output2.write('\n')
+output2.close()
+
+```
+
 #R processing
 
-add bin classifications
-transcripts per liter
-summary stats
-fourier and wgcna
-process wgcna
+####Goal
+
+Congratulations, you now have a very manageable dataset! There are 6 main files you should have downloaded to a local computer for processing in R - the tables of readcounts for each lake, and the tables of information about the expressed genes in each lake. You'll also need the bin classifications for each lake. THIS IS THE PART WHERE WE GET RESULTS!!!
+
+####Approach
+
+A couple steps need to happen here. We need to:
+- Add the bin classifications to the gene keys
+- Normalize reads to transcripts per liter using the internal standard
+- Aggregate reads by phylum and compare to the metagenomes
+- Run a fourier transformation and cluster genes using weighted gene correlation network analysis
+- Plot the results and get the gene information for each cluster
+
+Each script runs independently in R. They can be sourced or run directly in the command prompt. The packages needed for each script are found at the top - they can be installed using the install.packages() command. These tables are still fairly hefty for R, so run one lake at a time to save RAM if needed.
+
+add_bin_classifications.R
+```{r eval = F}
+# Update gene key files with classifications from binning
+
+# Gene keys
+mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey.csv", header = T)
+spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey.csv", header = T)
+trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey.csv", header = T)
+# Binning results
+bins <- read.csv("D:/geodes_data_tables/GEODES_bin_data.csv", header = T)
+contigs <- read.table("D:/geodes_data_tables/GEODES_binned_contigs.txt")
+
+# Keep only good bins
+
+bins <- bins[which(bins$completeness > 30 & bins$contamination < 10), ]
+keep <- match(contigs$V2, bins$bin)
+contigs <- contigs[which(is.na(keep) == F), ]
+
+# Replace in lake keys
+mendota_key$Taxonomy <- as.character(mendota_key$Taxonomy)
+search <- match(mendota_key$Genome, as.character(contigs$V1))
+where_in_key <- which(is.na(search) == F)
+where_in_contigs <- search[where_in_key]
+matching_bins <- contigs$V2[where_in_contigs]
+taxonomy_add <- as.character(bins$phylodist_taxonomy[match(matching_bins, bins$bin)])
+mendota_key$Taxonomy[where_in_key] <- taxonomy_add
+
+write.csv(mendota_key, "D:/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", row.names = F)
+
+spark_key$Taxonomy <- as.character(spark_key$Taxonomy)
+search <- match(spark_key$Genome, as.character(contigs$V1))
+where_in_key <- which(is.na(search) == F)
+where_in_contigs <- search[where_in_key]
+matching_bins <- contigs$V2[where_in_contigs]
+taxonomy_add <- as.character(bins$phylodist_taxonomy[match(matching_bins, bins$bin)])
+spark_key$Taxonomy[where_in_key] <- taxonomy_add
+
+write.csv(spark_key, "D:/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", row.names = F)
+
+trout_key$Taxonomy <- as.character(trout_key$Taxonomy)
+search <- match(trout_key$Genome, as.character(contigs$V1))
+where_in_key <- which(is.na(search) == F)
+where_in_contigs <- search[where_in_key]
+matching_bins <- contigs$V2[where_in_contigs]
+taxonomy_add <- as.character(bins$phylodist_taxonomy[match(matching_bins, bins$bin)])
+trout_key$Taxonomy[where_in_key] <- taxonomy_add
+
+write.csv(trout_key, "D:/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", row.names = F)
+```
+
+transcripts_per_liter.R
+```{r, eval = F}
+# Normalize table to transcripts/L
+
+readCounts <- read.table("D:/geodes_data_tables/Trout_ID90_2018-03-02.readcounts.txt", header = T, row.names = 1, sep = " ")
+sample_data <- read.csv("C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv")
+
+# Remove samples with poor std
+std <- readCounts[which(rownames(readCounts) == "pFN18A_DNA_transcript"),]
+readCounts2 <- readCounts[, which(std > 50)]
+# Calculate standard normalization factor
+
+std2 <- readCounts2[which(rownames(readCounts2) == "pFN18A_DNA_transcript"),]
+std_factor <- std2/614000000
+
+# Calculate volume factor
+
+new_sample_data <- sample_data[match(substr(start = 1, stop = 9, colnames(readCounts2)), sample_data$Sample[1:109]), ]
+vol_factor <- new_sample_data$Vol_Filtered
+
+norm_val <- std_factor * vol_factor
+# Normalize to transcripts/L
+
+for(i in 1:length(norm_val)){
+  readCounts2[,i] <- readCounts2[,i]/as.numeric(norm_val[i])
+}
+
+# Save normalized table
+write.csv(readCounts2, "D:/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", quote = F)
+
+
+# Make a table summed by genome
+# all_genomes <- substr(rownames(readCounts2), start = 1, stop = 10)
+# genomes <- unique(all_genomes)
+# genome_table <- readCounts2[1,]
+# 
+# for(i in 1:length(genomes)){
+#   genes <- readCounts2[which(all_genomes == genomes[i]), ]
+#   genome_row <- colSums(genes)
+#   genome_table <- rbind(genome_table, genome_row)
+# }
+# 
+# genome_table <- genome_table[2:267,]
+# rownames(genome_table) <- genomes
+# 
+# # save genome table
+# 
+# write.csv(genome_table, "D:/geodes_data_tables/Trout_ID90_normalized_genomecounts.csv", quote = F)
+# 
+
+```
+
+summary_stats.R
+```{r, eval = F}
+### Summary statistics on GEODES
+
+### Load packages
+library(ggplot2)
+library(cowplot)
+library(reshape2)
+#library(GeneCycle)
+
+### Load data (start with only one to save RAM and comment the rest out)
+# Normalized read tables
+snorm <- read.csv("D:/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+tnorm <- read.csv("D:/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+mnorm <- read.csv("D:/geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+
+# Gene keys
+mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+
+# Sample data
+metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
+
+# How expressed is each phylum?
+mendota_key$Taxonomy <- gsub("Bacteria;", "", mendota_key$Taxonomy)
+mendota_key$Taxonomy <- gsub("Eukaryota;", "", mendota_key$Taxonomy)
+mendota_key$Phylum <- sapply(strsplit(as.character(mendota_key$Taxonomy),";"), `[`, 1)
+
+mnorm$Genes <- rownames(mnorm)
+mnorm <- melt(mnorm)
+mnorm$variable <- gsub(".nonrRNA", "", mnorm$variable)
+mnorm$Timepoint <- metadata$Timepoint[match(mnorm$variable, metadata$Sample)]
+mnorm$Taxonomy <- mendota_key$Phylum[match(mnorm$Genes, mendota_key$Gene)]
+mnorm$Taxonomy <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("NO CLASSIFICATION MH", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("NO CLASSIFICATION LP", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("None", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified unclassified", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified Oligohymenophorea", "Ciliophora", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("unclassified", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("Unclassified ", "Unclassified", mnorm$Taxonomy)
+mnorm$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mnorm$Taxonomy)
+averaged_tax <- aggregate(value ~ Taxonomy + Timepoint, data = mnorm, mean)
+wide_mnorm <- reshape(averaged_tax, idvar = "Taxonomy", timevar = "Timepoint", direction = "wide")
+rownames(wide_mnorm) <- wide_mnorm$Taxonomy
+wide_mnorm <- wide_mnorm[, 2:dim(wide_mnorm)[2]]
+wide_mnorm <- wide_mnorm[which(rowSums(wide_mnorm) > 3000),]
+
+mendota_phyla <- data.frame(Taxonomy = rownames(wide_mnorm), Sums = rowSums(wide_mnorm))
+mendota_phyla$Taxonomy <- c("Unclassified", "Acidobacteria", "Actinobacteria", "Armatimonadetes", "Bacteroidetes", "TM7", "Chlorobi", "Chloroflexi", "Chlorophyta", "Ciliophora", "Crenarchaeota", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Elusimicrobia", "Firmicutes", "Gemmatimonadetes", "Haptophyta", "Heterokonta", "Ignavibacteria", "standard", "Unclassified", "Planctomycetes", "Proteobacteria", "Spirochaetes", "Tenericutes", "Unclassified", "Verrucomicrobia", "Viruses")
+unclassified <- mendota_phyla[which(mendota_phyla$Taxonomy == "Unclassified"), ]
+mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy != "Unclassified"), ]
+mendota_phyla <- rbind(mendota_phyla, c("Unclassified", sum(unclassified$Sums)))
+mendota_phyla$Sums <- as.numeric(mendota_phyla$Sums)
+mendota_phyla$Taxonomy <- factor(mendota_phyla$Taxonomy, levels = mendota_phyla$Taxonomy[order(mendota_phyla$Sums, decreasing = T)])
+mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy != "standard"), ]
+mendota_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Protists", "Archaea", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses", "Unclassified")
+
+
+p <- ggplot(mendota_phyla, aes(x = Taxonomy, y = Sums, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Lake Mendota Metatranscriptomes")
+
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/mendota_expression_by_phyla_reclassified_2018-03-03.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
+
+trout_key$Taxonomy <- gsub("Bacteria;", "", trout_key$Taxonomy)
+trout_key$Taxonomy <- gsub("Eukaryota;", "", trout_key$Taxonomy)
+trout_key$Phylum <- sapply(strsplit(as.character(trout_key$Taxonomy),";"), `[`, 1)
+
+tnorm$Genes <- rownames(tnorm)
+tnorm <- melt(tnorm)
+tnorm$Timepoint <- metadata$Timepoint[match(tnorm$variable, metadata$Sample)]
+tnorm$Taxonomy <- trout_key$Phylum[match(tnorm$Genes, trout_key$Gene)]
+tnorm$Taxonomy <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("NO CLASSIFICATION MH", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("NO CLASSIFICATION LP", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("None", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified unclassified", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified Oligohymenophorea", "Ciliophora", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("unclassified", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("Unclassified ", "Unclassified", tnorm$Taxonomy)
+tnorm$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", tnorm$Taxonomy)
+averaged_tax <- aggregate(value ~ Taxonomy + Timepoint, data = tnorm, mean)
+wide_tnorm <- reshape(averaged_tax, idvar = "Taxonomy", timevar = "Timepoint", direction = "wide")
+rownames(wide_tnorm) <- wide_tnorm$Taxonomy
+wide_tnorm <- wide_tnorm[, 2:dim(wide_tnorm)[2]]
+wide_tnorm <- wide_tnorm[which(rowSums(wide_tnorm) > 3000),]
+
+trout_phyla <- data.frame(Taxonomy = rownames(wide_tnorm), Sums = rowSums(wide_tnorm))
+trout_phyla$Taxonomy <- c("Acidobacteria", "Actinobacteria", "Armatimonadetes", "Arthropoda", "Bacteroidetes", "TM7", "Chlorobi", "Chloroflexi", "Chlorophyta", "Ciliophora", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Firmicutes", "Haptophyta", "Heterokonta", "Ignavibacteriae", "Unclassified", "Planctomycetes", "Proteobacteria", "Streptophyta", "Unclassified", "Verrucomicrobia", "Viruses")
+unclassified <- trout_phyla[which(trout_phyla$Taxonomy == "Unclassified"), ]
+trout_phyla <- trout_phyla[which(trout_phyla$Taxonomy != "Unclassified"), ]
+trout_phyla <- rbind(trout_phyla, c("Unclassified", sum(unclassified$Sums)))
+trout_phyla$Sums <- as.numeric(trout_phyla$Sums)
+trout_phyla$Taxonomy <- factor(trout_phyla$Taxonomy, levels = trout_phyla$Taxonomy[order(trout_phyla$Sums, decreasing = T)])
+trout_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Animals", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Algae", "Bacteria", "Viruses", "Unclassified")
+
+
+p <- ggplot(trout_phyla, aes(x = Taxonomy, y = Sums, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Trout Bog Metatranscriptomes")
+
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/trout_expression_by_phyla_reclassified_2018-03-03.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
+
+spark_key$Taxonomy <- gsub("Bacteria;", "", spark_key$Taxonomy)
+spark_key$Taxonomy <- gsub("Eukaryota;", "", spark_key$Taxonomy)
+spark_key$Phylum <- sapply(strsplit(as.character(spark_key$Taxonomy),";"), `[`, 1)
+
+snorm$Genes <- rownames(snorm)
+snorm <- melt(snorm)
+snorm$Timepoint <- metadata$Timepoint[match(snorm$variable, metadata$Sample)]
+snorm$Taxonomy <- spark_key$Phylum[match(snorm$Genes, spark_key$Gene)]
+snorm$Taxonomy <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("NO CLASSIFICATION MH", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("NO CLASSIFICATION LP", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("None", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified unclassified", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified Oligohymenophorea", "Ciliophora", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("unclassified", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("Unclassified ", "Unclassified", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", snorm$Taxonomy)
+snorm$Taxonomy <- gsub("UnclassifiedUnclassified", "Unclassified", snorm$Taxonomy)
+averaged_tax <- aggregate(value ~ Taxonomy + Timepoint, data = snorm, mean)
+wide_snorm <- reshape(averaged_tax, idvar = "Taxonomy", timevar = "Timepoint", direction = "wide")
+rownames(wide_snorm) <- wide_snorm$Taxonomy
+wide_snorm <- wide_snorm[, 2:dim(wide_snorm)[2]]
+wide_snorm <- wide_snorm[which(rowSums(wide_snorm) > 3000),]
+
+spark_phyla <- data.frame(Taxonomy = rownames(wide_snorm), Sums = rowSums(wide_snorm))
+spark_phyla$Taxonomy <- c("Acidobacteria", "Actinobacteria", "Armatimonadetes", "Arthropoda", "Bacteroidetes", "TM7", "Chlorobi", "Chloroflexi", "Chlorophyta", "Ciliophora", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus", "Firmicutes", "Haptophyta", "Heterokonta", "Ignavibacteria", "Unclassified", "Planctomycetes", "Proteobacteria", "Streptophyta", "Unclassified", "Verrucomicrobia", "Viruses")
+unclassified <- spark_phyla[which(spark_phyla$Taxonomy == "Unclassified"), ]
+spark_phyla <- spark_phyla[which(spark_phyla$Taxonomy != "Unclassified"), ]
+spark_phyla <- rbind(spark_phyla, c("Unclassified", sum(unclassified$Sums)))
+spark_phyla$Sums <- as.numeric(spark_phyla$Sums)
+spark_phyla$Taxonomy <- factor(spark_phyla$Taxonomy, levels = spark_phyla$Taxonomy[order(spark_phyla$Sums, decreasing = T)])
+spark_phyla$Type <- c("Bacteria", "Bacteria", "Bacteria", "Animals", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria",  "Algae", "Algae", "Bacteria", "Bacteria", "Bacteria", "Algae", "Bacteria", "Viruses", "Unclassified")
+
+
+p <- ggplot(spark_phyla, aes(x = Taxonomy, y = Sums, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Sparkling Lake Metatranscriptomes")
+
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_expression_by_phyla_reclassified_2018-03-03.pdf", p, base_height = 5, base_aspect_ratio = 1.5)
+
+# How does expression compare to abundance (ie the metagenomes?)
+# No internal standard in the metagenomes, so normalized by library size (or report in % reads)
+metaG_reads <- read.table("D:/geodes_data_tables/GEODES_metaG_2018-01-26.readcounts.txt", row.names = 1, sep = "\t")
+colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
+metaG_key <- read.table("D:/geodes_data_tables/GEODES_metaG_genekey.txt", sep = "\t", quote = "")
+colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
+lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
+metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
+
+metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
+metaG_key$Taxonomy <- gsub("Eukaryota;", "", metaG_key$Taxonomy)
+metaG_key$Phylum <- sapply(strsplit(as.character(metaG_key$Taxonomy),";"), `[`, 1)
+
+metaG_reads$Genes <- rownames(metaG_reads)
+spark_metaG <- metaG_reads[,c(1,2, 11)]
+trout_metaG <- metaG_reads[,c(3,4, 11)]
+mendota_metaG <- metaG_reads[,c(5,6, 11)]
+spark2_metaG <- metaG_reads[,c(7,8,9,10, 11)]
+
+spark_metaG <- melt(spark_metaG)
+trout_metaG <- melt(trout_metaG)
+mendota_metaG <- melt(mendota_metaG)
+spark2_metaG <- melt(spark2_metaG)
+
+spark_metaG$Phylum <- metaG_key$Phylum[match(spark_metaG$Genes, metaG_key$Gene)]
+spark_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("None", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Unclassified ", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark_metaG$Phylum)
+spark_metaG$Phylum[which(is.na(spark_metaG$Phylum))] <- "Unclassified"
+spark_phyla <- aggregate(value ~ Phylum, data = spark_metaG, mean)
+
+spark_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
+
+spark_phyla$Phylum <- factor(spark_phyla$Phylum, levels = spark_phyla$Phylum[order(spark_phyla$value, decreasing = T)])
+
+p <- ggplot(spark_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Sparkling Lake Metagenomes")
+
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+
+trout_metaG$Phylum <- metaG_key$Phylum[match(trout_metaG$Genes, metaG_key$Gene)]
+trout_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("None", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Unclassified ", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", trout_metaG$Phylum)
+trout_metaG$Phylum[which(is.na(trout_metaG$Phylum) == T)] <- "Unclassified"
+trout_phyla <- aggregate(value ~ Phylum, data = trout_metaG, mean)
+
+trout_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
+
+trout_phyla$Phylum <- factor(trout_phyla$Phylum, levels = trout_phyla$Phylum[order(trout_phyla$value, decreasing = T)])
+
+p <- ggplot(trout_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Trout Bog Metagenomes")
+
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/trout_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+
+mendota_metaG$Phylum <- metaG_key$Phylum[match(mendota_metaG$Genes, metaG_key$Gene)]
+mendota_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("None", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Unclassified ", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum[which(is.na(mendota_metaG$Phylum) == T)] <- "Unclassified"
+mendota_phyla <- aggregate(value ~ Phylum, data = mendota_metaG, mean)
+
+mendota_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
+
+mendota_phyla$Phylum <- factor(mendota_phyla$Phylum, levels = mendota_phyla$Phylum[order(mendota_phyla$value, decreasing = T)])
+
+p <- ggplot(mendota_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Mendota Metagenomes")
+
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/mendota_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+
+spark2_metaG$Phylum <- metaG_key$Phylum[match(spark2_metaG$Genes, metaG_key$Gene)]
+spark2_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("None", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("unclassified", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("Unclassified ", "Unclassified", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark2_metaG$Phylum)
+spark2_metaG$Phylum[which(is.na(spark2_metaG$Phylum) == T)] <- "Unclassified"
+spark2_phyla <- aggregate(value ~ Phylum, data = spark2_metaG, mean)
+
+spark2_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
+
+spark2_phyla$Phylum <- factor(spark2_phyla$Phylum, levels = spark2_phyla$Phylum[order(spark2_phyla$value, decreasing = T)])
+
+p <- ggplot(spark2_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Sparkling Lake 2009 Metagenomes")
+
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark09_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+
+# What are the top expressed genes?
+
+totals <- rowSums(snorm)
+top10 <- rownames(snorm)[order(totals, decreasing = T)]
+top10 <- top10[2:11]
+spark_key[match(top10, spark_key$Gene),]
+
+totals <- rowSums(mnorm)
+top10 <- rownames(mnorm)[order(totals, decreasing = T)]
+top10 <- top10[2:11]
+mendota_key[match(top10, mendota_key$Gene),]
+
+totals <- rowSums(tnorm)
+top10 <- rownames(tnorm)[order(totals, decreasing = T)]
+top10 <- top10[2:11]
+trout_key[match(top10, trout_key$Gene),]
+
+# How abundant are the bins?
+bins <- read.csv("D:/geodes_data_tables/GEODES_bin_data.csv", header = T)
+contigs <- read.table("D:/geodes_data_tables/GEODES_binned_contigs.txt")
+
+# only look at reasonable quality bins:
+bins <- bins[which(bins$completeness > 30),]
+bins <- bins[which(bins$contamination < 10),]
+contigs <- contigs[which(contigs$V2 %in% bins$bin),]
+
+# For each bin:
+# grab the contigs in that bin
+# grab the genes in those contigs
+# count up read counts for those genes
+ME_sum <- c()
+SP_sum <- c()
+TB_sum <- c()
+
+for(i in 1:length(bins$bin)){
+  bits <- contigs$V1[which(contigs$V2 == bins$bin[i])]
+  ME_genes <- mendota_key$Gene[which(mendota_key$Genome %in% bits)]
+  ME_sum[i] <- sum(rowSums(mnorm[which(rownames(mnorm) %in% ME_genes),]))
+  SP_genes <- spark_key$Gene[which(spark_key$Genome %in% bits)]
+  SP_sum[i] <- sum(rowSums(snorm[which(rownames(snorm) %in% ME_genes),]))
+  TB_genes <- trout_key$Gene[which(trout_key$Genome %in% bits)]
+  TB_sum[i] <- sum(rowSums(tnorm[which(rownames(tnorm) %in% ME_genes),]))
+}
+
+bin_counts <- data.frame(bins$bin, ME_sum, SP_sum, TB_sum)
+colnames(bin_counts) <- c("Bin", "Mendota", "Sparkling", "Trout")
+bin_counts$Taxonomy <- bins$phylodist_taxonomy[match(bin_counts$Bin, bins$bin)]
+bin_counts <- bin_counts[which(bin_counts$Mendota > 0 | bin_counts$Sparkling > 0 | bin_counts$Trout > 0),]
+bin_counts$Phylum <- sapply(strsplit(as.character(bin_counts$Taxonomy),";"), `[`, 2)
+bin_counts$Phylum[which(is.na(bin_counts$Phylum) == T)] <- "Unclassified"
+
+bin_counts$Bin <- factor(bin_counts$Bin, levels = bin_counts$Bin[order(bin_counts$Mendota, decreasing = T)])
+ggplot(data = bin_counts, aes(x = Bin, y = Mendota, fill = Phylum)) + geom_bar(stat = "identity") + scale_y_log10() + labs(title = "Mendota") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Mendota, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Mendota", x = "Bin Phylum Assignment", y = "Metatranscriptomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Sparkling, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Sparkling", x = "Bin Phylum Assignment", y = "Metatranscriptomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Trout, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Trout Bog", x = "Bin Phylum Assignment", y = "Metatranscriptomic Read Counts") 
+
+# Repeat with metagenomic read counts
+# run the following code if you skipped the earlier code on metagenomes:
+metaG_reads <- read.table("D:/geodes_data_tables/GEODES_metaG_2018-01-26.readcounts.txt", row.names = 1, sep = "\t")
+colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
+metaG_key <- read.table("D:/geodes_data_tables/GEODES_metaG_genekey.txt", sep = "\t", quote = "")
+colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
+lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
+metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
+
+ME_metaG <- c()
+SP_metaG <- c()
+TB_metaG <- c()
+SP_metaG2 <- c()
+
+for(i in 1:length(bins$bin)){
+  bits <- contigs$V1[which(contigs$V2 == bins$bin[i])]
+  genes <- metaG_key$Gene[which(metaG_key$Genome %in% bits)]
+  reads <- metaG_reads[which(rownames(metaG_reads) %in% genes),]
+  ME_metaG[i] <- sum(rowSums(reads[,which(lakekey == "Mendota")]))
+  SP_metaG[i] <- sum(rowSums(reads[,which(lakekey == "Sparkling")]))
+  TB_metaG[i] <- sum(rowSums(reads[,which(lakekey == "Trout")]))
+  SP_metaG2[i] <- sum(rowSums(reads[,which(lakekey == "Sparkling2009")]))
+}
+
+bin_counts <- data.frame(bins$bin)
+bin_counts$Mendota_metaG <- ME_metaG
+bin_counts$Sparkling_metaG <- SP_metaG
+bin_counts$Trout_metaG <- TB_metaG
+bin_counts$Sparkling09_metaG <- SP_metaG2
+
+bin_counts$Taxonomy <- bins$phylodist_taxonomy[match(bin_counts$bin, bins$bin)]
+bin_counts$Phylum <- sapply(strsplit(as.character(bin_counts$Taxonomy),";"), `[`, 2)
+bin_counts$Phylum[which(is.na(bin_counts$Phylum) == T)] <- "Unclassified"
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Mendota_metaG, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Mendota", x = "Bin Phylum Assignment", y = "Metagenomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Sparkling_metaG, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Sparkling", x = "Bin Phylum Assignment", y = "Metagenomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Trout_metaG, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Trout Bog", x = "Bin Phylum Assignment", y = "Metagenomic Read Counts") 
+
+ggplot(data = bin_counts, aes(x = Phylum, y = Sparkling09_metaG, fill = Phylum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = "none") + labs(title = "Sparkling 2009", x = "Bin Phylum Assignment", y = "Metagenomic Read Counts")
+
+```
+
+fourier_and_wgcna.R
+```{r, eval = F}
+# Fourier + WGCNA
+
+### Load packages
+library(ggplot2)
+library(cowplot)
+library(reshape2)
+library(GeneCycle)
+library(WGCNA)
+allowWGCNAThreads()
+enableWGCNAThreads()
+
+### Load data (start with only one to save RAM and comment the rest out)
+# Normalized read tables
+snorm <- read.csv("D:/geodes_data_tables/Sparkling_normalized.csv", header = T, row.names = 1)
+#tnorm <- read.csv("D:/geodes_data_tables/Trout_normalized.csv", header = T, row.names = 1)
+#mnorm <- read.csv("D:/geodes_data_tables/Mendota_normalized.csv", header = T, row.names = 1)
+
+# Gene keys
+#mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey.csv", header = T)
+spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey.csv", header = T)
+#trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey.csv", header = T)
+
+# Sample data
+metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
+
+### Abundance filtering
+# Before I begin a network analysis, I want to select only genes with cyclic trends
+# First screen is to remove genes with too few reads to analyze a trend
+# I'm arbitrarily defining this as the number of samples * 1000
+
+#abun_mnorm <- mnorm[which(rowSums(mnorm) > (dim(mnorm)[2] * 1000)), ]
+abun_snorm <- snorm[which(rowSums(snorm) > (dim(snorm)[2] * 1000)), ]
+#abun_tnorm <- tnorm[which(rowSums(tnorm) > (dim(tnorm)[2] * 1000)), ]
+
+### Fourier transformations
+# I only want to include genes in my network with significant cyclic trends
+# Keep in mind that there's too many genes for multiple testing correction, so I'm well-aware that there will be many false positives. Hence, I'm using this as a screen for network analysis, not as results.
+
+# 1st, Average read counts by timepoint
+# My approach is to convert to long format, use aggregate(), and convert back to wide format
+# abun_mnorm$Genes <- rownames(abun_mnorm)
+# abun_mnorm <- melt(abun_mnorm)
+# abun_mnorm$Timepoint <- metadata$Timepoint[match(abun_mnorm$variable, metadata$Sample)]
+# agg_abun_mnorm <- aggregate(value ~ Genes + Timepoint, data = abun_mnorm, mean)
+# new_abun_mnorm <- reshape(agg_abun_mnorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
+# rownames(new_abun_mnorm) <- new_abun_mnorm[, 1]
+# new_abun_mnorm <- new_abun_mnorm[, 2:dim(new_abun_mnorm)[2]]
+
+abun_snorm$Genes <- rownames(abun_snorm)
+abun_snorm <- melt(abun_snorm)
+abun_snorm$Timepoint <- metadata$Timepoint[match(abun_snorm$variable, metadata$Sample)]
+agg_abun_snorm <- aggregate(value ~ Genes + Timepoint, data = abun_snorm, mean)
+new_abun_snorm <- reshape(agg_abun_snorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
+rownames(new_abun_snorm) <- new_abun_snorm[, 1]
+new_abun_snorm <- new_abun_snorm[, 2:dim(new_abun_snorm)[2]]
+
+# abun_tnorm$Genes <- rownames(abun_tnorm)
+# abun_tnorm <- melt(abun_tnorm)
+# abun_tnorm$Timepoint <- metadata$Timepoint[match(abun_tnorm$variable, metadata$Sample)]
+# agg_abun_tnorm <- aggregate(value ~ Genes + Timepoint, data = abun_tnorm, mean)
+# new_abun_tnorm <- reshape(agg_abun_tnorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
+# rownames(new_abun_tnorm) <- new_abun_tnorm[, 1]
+# new_abun_tnorm <- new_abun_tnorm[, 2:dim(new_abun_tnorm)[2]]
+# new_abun_tnorm <- new_abun_tnorm[, 1:7]
+
+# Then run the significance test for cyclic trends
+# fdr.mendota <- fdrtool(fisher.g.test(t(new_abun_mnorm)), statistic = "pvalue")
+# sig.mendota <- t(new_abun_mnorm[which(fdr.mendota$pval < 0.05),])
+
+fdr.spark <- fdrtool(fisher.g.test(t(new_abun_snorm)), statistic = "pvalue")
+sig.spark <- t(new_abun_snorm[which(fdr.spark$pval < 0.05),])
+
+# fdr.trout <- fdrtool(fisher.g.test(t(new_abun_tnorm)), statistic = "pvalue")
+# sig.trout <- t(new_abun_tnorm[which(fdr.trout$pval < 0.05),])
+
+### WGCNA
+# 1st, check the soft threshold in case removing samples changed it.
+
+# mpowers <- c()
+# for(i in 1:100){
+#   lottery <- sample(1:dim(sig.mendota)[2], 2000, replace = F)
+#   sft = pickSoftThreshold(sig.mendota[, lottery], verbose = 0, blockSize = 100, RsquaredCut = 0.7)
+#   mpowers[i] <- sft$powerEstimate
+# }
+# hist(mpowers)
+# mean(mpowers)
+# median(mpowers)
+# # Mendota Soft threshold = 8 in this case
+
+
+# spowers <- c()
+# for(i in 1:100){
+#   lottery <- sample(1:dim(sig.spark)[2], 2000, replace = F)
+#   sft = pickSoftThreshold(sig.spark[, lottery], verbose = 0, blockSize = 100, RsquaredCut = 0.7)
+#   spowers[i] <- sft$powerEstimate
+# }
+# hist(spowers)
+# mean(spowers)
+# median(spowers)
+# 
+# # Sparkling soft threshold = 7
+
+# tpowers <- c()
+# for(i in 1:100){
+#   lottery <- sample(1:dim(sig.trout)[2], 2000, replace = F)
+#   sft = pickSoftThreshold(sig.trout[, lottery], verbose = 0, blockSize = 100, RsquaredCut = 0.7)
+#   tpowers[i] <- sft$powerEstimate
+# }
+# hist(tpowers)
+# mean(tpowers)
+# median(tpowers)
+
+# Trout soft threshold = 18
+
+# Make the modules
+# mendota_net <- blockwiseModules(sig.mendota, maxBlockSize = 1000, power = 8, loadTOM = F, saveTOMs = F, networkType = "signed", minModuleSize = 30, numericLabels = T, nThreads = 8, verbose = 3)
+
+spark_net <- blockwiseModules(sig.spark, maxBlockSize = 1000, power = 7, loadTOM = F, saveTOMs = F, networkType = "signed", minModuleSize = 30, numericLabels = T, nThreads = 8, verbose = 3)
+
+# trout_net <- blockwiseModules(sig.trout, maxBlockSize = 1000, power = 18, loadTOM = F, saveTOMs = F, networkType = "signed", minModuleSize = 30, numericLabels = T, nThreads = 8, verbose = 3)
+
+# sig.mendota.key <- mendota_key[match(colnames(sig.mendota), mendota_key$Gene), ]
+# sig.mendota.key$Cluster <- mendota_net$colors
+# sig.mendota.key$Totals <- rowSums(new_abun_mnorm)[match(sig.mendota.key$Gene, rownames(new_abun_mnorm))]
+
+sig.spark.key <- spark_key[match(colnames(sig.spark), spark_key$Gene), ]
+sig.spark.key$Cluster <- spark_net$colors
+sig.spark.key$Totals <- rowSums(new_abun_snorm)[match(sig.spark.key$Gene, rownames(new_abun_snorm))]
+
+# sig.trout.key <- trout_key[match(colnames(sig.trout), trout_key$Gene), ]
+# sig.trout.key$Cluster <- trout_net$colors
+# sig.trout.key$Totals <- rowSums(new_abun_tnorm)[match(sig.trout.key$Gene, rownames(new_abun_tnorm))]
+
+
+# Save output
+# write.csv(sig.mendota.key, "D:/geodes_data_tables/WGCNA_mendota_results.csv", row.names = F)
+# write.csv(mendota_net$MEs, "D:/geodes_data_tables/WGCNA_mendota_eigenvectors.csv", row.names = T)
+
+# write.csv(sig.spark.key, "D:/geodes_data_tables/WGCNA_sparkling_results.csv", row.names = F)
+# write.csv(spark_net$MEs, "D:/geodes_data_tables/WGCNA_sparkling_eigenvectors.csv", row.names = T)
+
+write.csv(sig.trout.key, "D:/geodes_data_tables/WGCNA_trout_results.csv", row.names = F)
+write.csv(trout_net$MEs, "D:/geodes_data_tables/WGCNA_trout_eigenvectors.csv", row.names = T)
+
+```
+
+process_WGCNA_results.R
+```{r, eval = F}
+# Process WGCNA results
+
+# Packages
+library(ggplot2)
+library(cowplot)
+library(reshape2)
+
+##### Mendota
+# Read data
+sig.mendota.key <- read.csv("D:/geodes_data_tables/WGCNA_mendota_results.csv", header = T)
+eigenvectors <- read.csv("D:/geodes_data_tables/WGCNA_mendota_eigenvectors.csv", header = T, row.names = 1)
+
+# Fix taxonomy
+sig.mendota.key$Taxonomy <- gsub("Bacteria;", "", sig.mendota.key$Taxonomy)
+sig.mendota.key$Taxonomy <- gsub("Eukaryota;", "", sig.mendota.key$Taxonomy)
+sig.mendota.key$Phylum <- sapply(strsplit(as.character(sig.mendota.key$Taxonomy),";"), `[`, 1)
+sig.mendota.key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("None", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Unclassified ", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", sig.mendota.key$Phylum)
+
+# Which clusters to plot? Visualize and choose
+eigenvectors$Timepoint <- rownames(eigenvectors)
+long_eigenvectors <- melt(eigenvectors)
+plot.colors <- NA
+plot.colors[which(long_eigenvectors$value > 0)] <- "green"
+plot.colors[which(long_eigenvectors$value < 0)] <- "red"
+long_eigenvectors$Sign <- plot.colors
+long_eigenvectors$Timepoint <- factor(long_eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
+for(i in 0:57){
+  cluster = paste("ME", i, sep = "")
+  p <- ggplot(data = long_eigenvectors[which(long_eigenvectors$variable == cluster), ], aes(x = Timepoint, y = value, fill = Sign)) + geom_bar(stat = "identity") + labs(title = cluster) + scale_fill_manual(values = c("green", "red")) + theme(legend.position = "none")
+  print(p)
+}
+
+clusters <- c(2, 3, 6, 7, 8, 13, 21, 25, 26, 30, 36, 37, 39, 47, 53, 55)
+plot.sig.mendota.key <- sig.mendota.key[which(sig.mendota.key$Cluster %in% clusters),]
+
+# Panel A
+modules <- paste("ME", clusters, sep = "")
+plot.long_eigenvectors <- long_eigenvectors[which(long_eigenvectors$variable %in% modules), ]
+ME1 <- ggplot(data = plot.long_eigenvectors, aes(x = Timepoint, y = variable, fill = value)) + geom_tile() + labs(y = "Cluster", x = "Time") + scale_fill_gradient2(low = "red", mid = "white", high = "green", midpoint = 0) + scale_x_discrete(breaks=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"), labels=c("5AM", "9AM", "1PM", "5PM", "9PM", "1AM", "5AM", "9AM", "1PM", "5PM", "9PM", "1AM")) + theme(legend.position = "none")
+
+# Panel B: Phylum barcharts
+phylum_totals <- table(plot.sig.mendota.key$Phylum)
+plot.sig.mendota.key$Cluster <- paste("ME", plot.sig.mendota.key$Cluster, sep = "")
+keep.phyla <- names(phylum_totals)[which(phylum_totals > 75)]
+plot.sig.mendota.key <- plot.sig.mendota.key[which(plot.sig.mendota.key$Phylum %in% keep.phyla), ]
+plot.sig.mendota.key$Cluster <- factor(plot.sig.mendota.key$Cluster, levels = rev(c("ME53", "ME36", "ME21", "ME3", "ME39", "ME6", "ME37", "ME7", "ME26", "ME8", "ME2", "ME55", "ME30", "ME47", "ME25", "ME13")))
+ME2 <- ggplot(data = plot.sig.mendota.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip() + scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#33a02c", "#fb9a99", "#b2df8a", "#1f78b4", "grey", "#a6cee3"))
+
+plot_grid(ME1, ME2, labels = c("A", "B"))
+
+
+# Get genes from clusters
+
+x <- sig.mendota.key[which(sig.mendota.key$Cluster == 13),]
+x <- x[order(x$Totals),]
+x[(dim(x)[1] - 50): dim(x)[1],]
+
+# Plot phyla, not including unclassified
+phyla_breakdown <- aggregate(Totals ~ Phylum, x, sum)
+ggplot(phyla_breakdown[grep("Unclassified", phyla_breakdown$Phylum, invert = T), ], aes(x = Phylum, y = Totals)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+#### Sparkling
+# Read data
+sig.spark.key <- read.csv("D:/geodes_data_tables/WGCNA_sparkling_results.csv", header = T)
+eigenvectors <- read.csv("D:/geodes_data_tables/WGCNA_sparkling_eigenvectors.csv", header = T, row.names = 1)
+
+# Fix taxonomy
+sig.spark.key$Taxonomy <- gsub("Bacteria;", "", sig.spark.key$Taxonomy)
+sig.spark.key$Taxonomy <- gsub("Eukaryota;", "", sig.spark.key$Taxonomy)
+sig.spark.key$Phylum <- sapply(strsplit(as.character(sig.spark.key$Taxonomy),";"), `[`, 1)
+sig.spark.key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("None", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified unclassified", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("Unclassified ", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", sig.spark.key$Phylum)
+
+# Which clusters to plot? Visualize and choose
+eigenvectors$Timepoint <- rownames(eigenvectors)
+long_eigenvectors <- melt(eigenvectors)
+plot.colors <- NA
+plot.colors[which(long_eigenvectors$value > 0)] <- "green"
+plot.colors[which(long_eigenvectors$value < 0)] <- "red"
+long_eigenvectors$Sign <- plot.colors
+long_eigenvectors$Timepoint <- factor(long_eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
+for(i in 0:46){
+  cluster = paste("ME", i, sep = "")
+  p <- ggplot(data = long_eigenvectors[which(long_eigenvectors$variable == cluster), ], aes(x = Timepoint, y = value, fill = Sign)) + geom_bar(stat = "identity") + labs(title = cluster) + scale_fill_manual(values = c("green", "red")) + theme(legend.position = "none")
+  print(p)
+}
+
+clusters <- c(4, 6, 10, 13, 14, 15, 19, 27, 31)
+plot.sig.spark.key <- sig.spark.key[which(sig.spark.key$Cluster %in% clusters),]
+
+# Panel A
+modules <- paste("ME", clusters, sep = "")
+plot.long_eigenvectors <- long_eigenvectors[which(long_eigenvectors$variable %in% modules), ]
+SP1 <- ggplot(data = plot.long_eigenvectors, aes(x = Timepoint, y = variable, fill = value)) + geom_tile() + labs(y = "Cluster", x = "Time") + scale_fill_gradient2(low = "red", mid = "white", high = "green", midpoint = 0) + scale_x_discrete(breaks=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"), labels=c("5AM", "9AM", "1PM", "5PM", "9PM", "1AM", "5AM", "9AM", "1PM", "5PM", "9PM", "1AM")) + theme(legend.position = "none")
+
+# Panel B: Phylum barcharts
+phylum_totals <- table(plot.sig.spark.key$Phylum)
+plot.sig.spark.key$Cluster <- paste("ME", plot.sig.spark.key$Cluster, sep = "")
+keep.phyla <- names(phylum_totals)[which(phylum_totals > 50)]
+plot.sig.spark.key <- plot.sig.spark.key[which(plot.sig.spark.key$Phylum %in% keep.phyla), ]
+plot.sig.spark.key$Cluster <- factor(plot.sig.spark.key$Cluster, levels = rev(c("ME19", "ME13", "ME10", "ME15", "ME4", "ME31", "ME6", "ME27", "ME14")))
+SP2 <- ggplot(data = plot.sig.spark.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip() + scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#33a02c", "#1f78b4", "grey"))
+
+plot_grid(SP1, SP2, labels = c("A", "B"))
+
+
+# Get genes from clusters
+
+x <- sig.spark.key[which(sig.spark.key$Cluster == 14),]
+x <- x[order(x$Totals),]
+x[(dim(x)[1] - 50): dim(x)[1],]
+
+# Plot phyla, not including unclassified
+phyla_breakdown <- aggregate(Totals ~ Phylum, x, sum)
+ggplot(phyla_breakdown[grep("Unclassified", phyla_breakdown$Phylum, invert = T), ], aes(x = Phylum, y = Totals)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+#### Trout
+# Read data
+sig.trout.key <- read.csv("D:/geodes_data_tables/WGCNA_trout_results.csv", header = T)
+eigenvectors <- read.csv("D:/geodes_data_tables/WGCNA_trout_eigenvectors.csv", header = T, row.names = 1)
+
+# Fix taxonomy
+sig.trout.key$Taxonomy <- gsub("Bacteria;", "", sig.trout.key$Taxonomy)
+sig.trout.key$Taxonomy <- gsub("Eukaryota;", "", sig.trout.key$Taxonomy)
+sig.trout.key$Phylum <- sapply(strsplit(as.character(sig.trout.key$Taxonomy),";"), `[`, 1)
+sig.trout.key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("None", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified unclassified", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("Unclassified ", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", sig.trout.key$Phylum)
+
+# Which clusters to plot? Visualize and choose
+eigenvectors$Timepoint <- rownames(eigenvectors)
+long_eigenvectors <- melt(eigenvectors)
+plot.colors <- NA
+plot.colors[which(long_eigenvectors$value > 0)] <- "green"
+plot.colors[which(long_eigenvectors$value < 0)] <- "red"
+long_eigenvectors$Sign <- plot.colors
+long_eigenvectors$Timepoint <- factor(long_eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
+for(i in 0:24){
+  cluster = paste("ME", i, sep = "")
+  p <- ggplot(data = long_eigenvectors[which(long_eigenvectors$variable == cluster), ], aes(x = Timepoint, y = value, fill = Sign)) + geom_bar(stat = "identity") + labs(title = cluster) + scale_fill_manual(values = c("green", "red")) + theme(legend.position = "none")
+  print(p)
+}
+
+clusters <- c(1, 3, 4, 11, 16, 18)
+plot.sig.trout.key <- sig.trout.key[which(sig.trout.key$Cluster %in% clusters),]
+
+# Panel A
+modules <- paste("ME", clusters, sep = "")
+plot.long_eigenvectors <- long_eigenvectors[which(long_eigenvectors$variable %in% modules), ]
+TB1 <- ggplot(data = plot.long_eigenvectors, aes(x = Timepoint, y = variable, fill = value)) + geom_tile() + labs(y = "Cluster", x = "Time") + scale_fill_gradient2(low = "red", mid = "white", high = "green", midpoint = 0) + scale_x_discrete(breaks=c("1", "2", "3", "4", "5", "6", "7"), labels=c("5AM", "9AM", "1PM", "5PM", "9PM", "1AM", "5AM")) + theme(legend.position = "none")
+
+# Panel B: Phylum barcharts
+phylum_totals <- table(plot.sig.trout.key$Phylum)
+plot.sig.trout.key$Cluster <- paste("ME", plot.sig.trout.key$Cluster, sep = "")
+keep.phyla <- names(phylum_totals)[which(phylum_totals > 50)]
+plot.sig.trout.key <- plot.sig.trout.key[which(plot.sig.trout.key$Phylum %in% keep.phyla), ]
+plot.sig.trout.key$Cluster <- factor(plot.sig.trout.key$Cluster, levels = rev(c("ME1", "ME4", "ME3", "ME11", "ME18", "ME16")))
+TB2 <- ggplot(data = plot.sig.trout.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip() + scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#1f78b4", "grey", "#a6cee3"))
+
+plot_grid(TB1, TB2, labels = c("A", "B"))
+
+
+# Get genes from clusters
+
+x <- sig.trout.key[which(sig.trout.key$Cluster == 16),]
+x <- x[order(x$Totals),]
+x[(dim(x)[1] - 50): dim(x)[1],]
+
+# Plot phyla, not including unclassified
+phyla_breakdown <- aggregate(Totals ~ Phylum, x, sum)
+ggplot(phyla_breakdown[grep("Unclassified", phyla_breakdown$Phylum, invert = T), ], aes(x = Phylum, y = Totals)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+```
