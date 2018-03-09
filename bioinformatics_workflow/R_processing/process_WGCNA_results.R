@@ -76,8 +76,8 @@ ggplot(phyla_breakdown[grep("Unclassified", phyla_breakdown$Phylum, invert = T),
 
 #### Sparkling
 # Read data
-sig.spark.key <- read.csv("D:/geodes_data_tables/WGCNA_sparkling_results.csv", header = T)
-eigenvectors <- read.csv("D:/geodes_data_tables/WGCNA_sparkling_eigenvectors.csv", header = T, row.names = 1)
+sig.spark.key <- read.csv("D:/geodes_data_tables/WGCNA_sparkling_results_2018-03-09.csv", header = T)
+eigenvectors <- read.csv("D:/geodes_data_tables/WGCNA_sparkling_eigenvectors_2018-03-09.csv", header = T, row.names = 1)
 
 # Fix taxonomy
 sig.spark.key$Taxonomy <- gsub("Bacteria;", "", sig.spark.key$Taxonomy)
@@ -108,13 +108,13 @@ plot.colors[which(long_eigenvectors$value > 0)] <- "green"
 plot.colors[which(long_eigenvectors$value < 0)] <- "red"
 long_eigenvectors$Sign <- plot.colors
 long_eigenvectors$Timepoint <- factor(long_eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
-for(i in 0:46){
+for(i in 0:16){
   cluster = paste("ME", i, sep = "")
   p <- ggplot(data = long_eigenvectors[which(long_eigenvectors$variable == cluster), ], aes(x = Timepoint, y = value, fill = Sign)) + geom_bar(stat = "identity") + labs(title = cluster) + scale_fill_manual(values = c("green", "red")) + theme(legend.position = "none")
   print(p)
 }
 
-clusters <- c(4, 6, 10, 13, 14, 15, 19, 27, 31)
+clusters <- c(4, 6, 7, 9, 10, 11, 12, 15, 16)
 plot.sig.spark.key <- sig.spark.key[which(sig.spark.key$Cluster %in% clusters),]
 
 # Panel A
@@ -127,7 +127,7 @@ phylum_totals <- table(plot.sig.spark.key$Phylum)
 plot.sig.spark.key$Cluster <- paste("ME", plot.sig.spark.key$Cluster, sep = "")
 keep.phyla <- names(phylum_totals)[which(phylum_totals > 50)]
 plot.sig.spark.key <- plot.sig.spark.key[which(plot.sig.spark.key$Phylum %in% keep.phyla), ]
-plot.sig.spark.key$Cluster <- factor(plot.sig.spark.key$Cluster, levels = rev(c("ME19", "ME13", "ME10", "ME15", "ME4", "ME31", "ME6", "ME27", "ME14")))
+plot.sig.spark.key$Cluster <- factor(plot.sig.spark.key$Cluster, levels = rev(c("ME16", "ME15", "ME11", "ME9", "ME6", "ME12", "ME10", "ME7", "ME4")))
 SP2 <- ggplot(data = plot.sig.spark.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip() + scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#33a02c", "#1f78b4", "grey"))
 
 plot_grid(SP1, SP2, labels = c("A", "B"))
@@ -135,7 +135,7 @@ plot_grid(SP1, SP2, labels = c("A", "B"))
 
 # Get genes from clusters
 
-x <- sig.spark.key[which(sig.spark.key$Cluster == 14),]
+x <- sig.spark.key[which(sig.spark.key$Cluster == 9),]
 x <- x[order(x$Totals),]
 x[(dim(x)[1] - 50): dim(x)[1],]
 
