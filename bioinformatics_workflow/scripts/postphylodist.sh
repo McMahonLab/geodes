@@ -13,3 +13,11 @@ cat GEODES117-contigs*.contig.classification.perc70.minhit3.txt > phylodist_resu
 
 cat GEODES118-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES118.contig.classification.perc70.minhit3.txt
 
+cat GEODES165-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES165.contig.classification.perc70.minhit3.txt
+
+cat GEODES166-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES166.contig.classification.perc70.minhit3.txt
+
+cat GEODES167-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES167.contig.classification.perc70.minhit3.txt
+
+cat GEODES168-contigs*.contig.classification.perc70.minhit3.txt > phylodist_results/GEODES168.contig.classification.perc70.minhit3.txt
+

@@ -11,7 +11,7 @@ error = process.err
 # If you wish to compile code, you'll need the below lines. 
 #  Otherwise, LEAVE THEM OUT if you just want to interactively test!
 +IsBuildJob = true
-requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
+requirements = ( IsBuildSlot == true ) && (Target.HasGluster == true)
 #arguments = $(samplename)
 
 # Indicate all files that need to go into the interactive job session,
@@ -21,7 +21,7 @@ requirements = (OpSysAndVer =?= "SL6") && ( IsBuildSlot == true )
 #transfer_input_files=zipped/cd-hit.tar.gz,zipped/genometools.tar.gz,metaG_gffs/GEODES0050005
 #transfer_input_files = zipped/sortmerna-2.1-linux-64.tar.gz,/home/amlinz/GEODES_metaT_split/GEODES164-999999.fastq.gz
 #transfer_input_files = splitfastaheaders/fastaheaders1001,executables/07nrdb_gff.sh
-transfer_input_files = genome_size.sh
+transfer_input_files = MaxBin-2.2.4.tar.gz
 #transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,/home/amlinz/ref_MAGs_SAGs/fastas/$(samplename).fna,/home/amlinz/ref_MAGs_SAGs/gffs/$(samplename).gff,/home/amlinz/ref_MAGs_SAGs/Readme.csv,scripts/ref_MAGs_SAGs.py,zipped/python.tar.gz
 #transfer_input_files = zipped/genometools.tar.gz,ref_MAGs_SAGs_processed_gffs/
 #transfer_input_files = zipped/subreads.tar.gz,zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
@@ -29,12 +29,13 @@ transfer_input_files = genome_size.sh
 #transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,scripts/ref_MAGs_SAGs.py
 #transfer_input_files = zipped/genometools.tar.gz,ref_MAGs_SAGs_processed_gffs/
 #transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,refseq_algae/fastas/$(samplename).fna.gz,refseq_algae/gffs/$(samplename).gff.gz,refseq_algae/algae_phylogeny.txt,scripts/ref_algae_parsing.py
+#transfer_input_files = zipped/python.tar.gz,scripts/classifyWphylodist_contigs.py,contig_lists/GEODES168-contigs0606
 
 # It's still important to request enough computing resources. The below 
 #  values are a good starting point, but consider your file sizes for an
 #  estimate of "disk" and use any other information you might have
 #  for "memory" and/or "cpus".
-Requirements = (Target.HasGluster == true)
+
 request_cpus = 1
 request_memory = 6GB
 request_disk = 6GB

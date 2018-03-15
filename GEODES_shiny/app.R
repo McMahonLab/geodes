@@ -13,75 +13,149 @@ library(reshape2)
 library(cowplot)
 
 # Read and process Mendota data
-sig.mendota.key <- read.csv("data/WGCNA_mendota_results.csv", header = T)
-mendota.eigenvectors <- read.csv("data/WGCNA_mendota_eigenvectors.csv", header = T, row.names = 1)
-clusters <- c(2, 3, 6, 7, 8, 13, 21, 25, 26, 30, 36, 37, 39, 47, 53, 55)
+sig.mendota.key <- read.csv("data/WGCNA_mendota_results_2018-03-09.csv", header = T)
+mendota.eigenvectors <- read.csv("data/WGCNA_mendota_eigenvectors_2018-03-09.csv", header = T, row.names = 1)
+
+# Fix taxonomy
+sig.mendota.key$Taxonomy <- gsub("Bacteria;", "", sig.mendota.key$Taxonomy)
+sig.mendota.key$Taxonomy <- gsub("Eukaryota;", "", sig.mendota.key$Taxonomy)
+sig.mendota.key$Phylum <- sapply(strsplit(as.character(sig.mendota.key$Taxonomy),";"), `[`, 1)
+sig.mendota.key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("None", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("unclassified", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("Unclassified ", "Unclassified", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", sig.mendota.key$Phylum)
+
+
+clusters <- c(2, 3, 5, 6, 8, 15, 21, 25, 26)
 plot.sig.mendota.key <- sig.mendota.key[which(sig.mendota.key$Cluster %in% clusters),]
 mendota.eigenvectors$Timepoint <- rownames(mendota.eigenvectors)
 mendota.eigenvectors <- melt(mendota.eigenvectors)
 plot.colors <- NA
-plot.colors[which(mendota.eigenvectors$value > 0)] <- "green"
-plot.colors[which(mendota.eigenvectors$value < 0)] <- "red"
+plot.colors[which(mendota.eigenvectors$value > 0)] <- "dodgerblue"
+plot.colors[which(mendota.eigenvectors$value < 0)] <- "yellow"
 mendota.eigenvectors$Sign <- plot.colors
 mendota.eigenvectors$Timepoint <- factor(mendota.eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
 modules <- paste("ME", clusters, sep = "")
 plot.mendota.eigenvectors <- mendota.eigenvectors[which(mendota.eigenvectors$variable %in% modules), ]
+plot.mendota.eigenvectors$variable <- gsub("ME", "Cluster", plot.mendota.eigenvectors$variable)
 ME1 <- ggplot(data = plot.mendota.eigenvectors, aes(x = Timepoint, y = variable, fill = value)) + geom_tile() + labs(y = "Cluster", x = "Time") + scale_fill_gradient2(low = "dodgerblue", mid = "white", high = "yellow", midpoint = 0) + scale_x_discrete(breaks=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"), labels=c("5AM", "9AM", "1PM", "5PM", "9PM", "1AM", "5AM", "9AM", "1PM", "5PM", "9PM", "1AM"))
 phylum_totals <- table(plot.sig.mendota.key$Phylum)
-plot.sig.mendota.key$Cluster <- paste("ME", plot.sig.mendota.key$Cluster, sep = "")
-keep.phyla <- names(phylum_totals)[which(phylum_totals > 75)]
+plot.sig.mendota.key$Cluster <- paste("Cluster", plot.sig.mendota.key$Cluster, sep = "")
+keep.phyla <- names(phylum_totals)
 plot.sig.mendota.key <- plot.sig.mendota.key[which(plot.sig.mendota.key$Phylum %in% keep.phyla), ]
-plot.sig.mendota.key$Cluster <- factor(plot.sig.mendota.key$Cluster, levels = rev(c("ME53", "ME36", "ME21", "ME3", "ME39", "ME6", "ME37", "ME7", "ME26", "ME8", "ME2", "ME55", "ME30", "ME47", "ME25", "ME13")))
-ME2 <- ggplot(data = plot.sig.mendota.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip() + scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#33a02c", "#fb9a99", "#b2df8a", "#1f78b4", "grey", "#a6cee3"))
+plot.sig.mendota.key$Cluster <- factor(plot.sig.mendota.key$Cluster, levels = rev(c("Cluster8", "Cluster6", "Cluster5", "Cluster3", "Cluster26", "Cluster25", "Cluster21", "Cluster2", "Cluster15")))
+ME2 <- ggplot(data = plot.sig.mendota.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip()
+  
+#scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#33a02c", "#fb9a99", "#b2df8a", "#1f78b4", "grey", "#a6cee3"))
 
 plot.mendota <- plot_grid(ME1, ME2, labels = c("A", "B"))
 
 
 # Read and process Sparkling data
-sig.spark.key <- read.csv("data/WGCNA_sparkling_results.csv", header = T)
-spark.eigenvectors <- read.csv("data/WGCNA_sparkling_eigenvectors.csv", header = T, row.names = 1)
-clusters <- c(4, 6, 10, 13, 14, 15, 19, 27, 31)
+sig.spark.key <- read.csv("data/WGCNA_sparkling_results_2018-03-09.csv", header = T)
+spark.eigenvectors <- read.csv("data/WGCNA_sparkling_eigenvectors_2018-03-09.csv", header = T, row.names = 1)
+
+sig.spark.key$Taxonomy <- gsub("Bacteria;", "", sig.spark.key$Taxonomy)
+sig.spark.key$Taxonomy <- gsub("Eukaryota;", "", sig.spark.key$Taxonomy)
+sig.spark.key$Phylum <- sapply(strsplit(as.character(sig.spark.key$Taxonomy),";"), `[`, 1)
+sig.spark.key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("None", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified unclassified", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("unclassified", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("Unclassified ", "Unclassified", sig.spark.key$Phylum)
+sig.spark.key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", sig.spark.key$Phylum)
+
+
+clusters <- c(4, 6, 7, 9, 10, 11, 12, 16)
 plot.sig.spark.key <- sig.spark.key[which(sig.spark.key$Cluster %in% clusters),]
 spark.eigenvectors$Timepoint <- rownames(spark.eigenvectors)
 spark.eigenvectors <- melt(spark.eigenvectors)
 plot.colors <- NA
-plot.colors[which(spark.eigenvectors$value > 0)] <- "green"
-plot.colors[which(spark.eigenvectors$value < 0)] <- "red"
+plot.colors[which(spark.eigenvectors$value > 0)] <- "dodgerblue"
+plot.colors[which(spark.eigenvectors$value < 0)] <- "yellow"
 spark.eigenvectors$Sign <- plot.colors
 spark.eigenvectors$Timepoint <- factor(spark.eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
 modules <- paste("ME", clusters, sep = "")
 plot.spark.eigenvectors <- spark.eigenvectors[which(spark.eigenvectors$variable %in% modules), ]
+plot.spark.eigenvectors$variable <- gsub("ME", "Cluster", plot.spark.eigenvectors$variable)
 SP1 <- ggplot(data = plot.spark.eigenvectors, aes(x = Timepoint, y = variable, fill = value)) + geom_tile() + labs(y = "Cluster", x = "Time") + scale_fill_gradient2(low = "dodgerblue", mid = "white", high = "yellow", midpoint = 0) + scale_x_discrete(breaks=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"), labels=c("5AM", "9AM", "1PM", "5PM", "9PM", "1AM", "5AM", "9AM", "1PM", "5PM", "9PM", "1AM"))
 phylum_totals <- table(plot.sig.spark.key$Phylum)
-plot.sig.spark.key$Cluster <- paste("ME", plot.sig.spark.key$Cluster, sep = "")
-keep.phyla <- names(phylum_totals)[which(phylum_totals > 50)]
+keep.phyla <- names(phylum_totals)
+plot.sig.spark.key$Cluster <- paste("Cluster", plot.sig.spark.key$Cluster, sep = "")
 plot.sig.spark.key <- plot.sig.spark.key[which(plot.sig.spark.key$Phylum %in% keep.phyla), ]
-plot.sig.spark.key$Cluster <- factor(plot.sig.spark.key$Cluster, levels = rev(c("ME19", "ME13", "ME10", "ME15", "ME4", "ME31", "ME6", "ME27", "ME14")))
-SP2 <- ggplot(data = plot.sig.spark.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip() + scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#33a02c", "#1f78b4", "grey"))
+plot.sig.spark.key$Cluster <- factor(plot.sig.spark.key$Cluster, levels = rev(c("Cluster9", "Cluster7", "Cluster6", "Cluster4", "Cluster16", "Cluster12", "Cluster11", "Cluster10")))
+SP2 <- ggplot(data = plot.sig.spark.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip()
+
+#scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#33a02c", "#1f78b4", "grey"))
 
 plot.spark <- plot_grid(SP1, SP2, labels = c("A", "B"))
 
-# Read and process Mendota data
-sig.trout.key <- read.csv("data/WGCNA_trout_results.csv", header = T)
-trout.eigenvectors <- read.csv("data/WGCNA_trout_eigenvectors.csv", header = T, row.names = 1)
-clusters <- c(1, 3, 4, 11, 16, 18)
+# Read and process Trout Bog data
+sig.trout.key <- read.csv("data/WGCNA_trout_results_2018-03-09.csv", header = T)
+trout.eigenvectors <- read.csv("data/WGCNA_trout_eigenvectors_2018-03-09.csv", header = T, row.names = 1)
+
+sig.trout.key$Taxonomy <- gsub("Bacteria;", "", sig.trout.key$Taxonomy)
+sig.trout.key$Taxonomy <- gsub("Eukaryota;", "", sig.trout.key$Taxonomy)
+sig.trout.key$Phylum <- sapply(strsplit(as.character(sig.trout.key$Taxonomy),";"), `[`, 1)
+sig.trout.key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("None", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified unclassified", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("unclassified", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("Unclassified ", "Unclassified", sig.trout.key$Phylum)
+sig.trout.key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", sig.trout.key$Phylum)
+
+clusters <- c(0, 2, 3, 10, 15)
 plot.sig.trout.key <- sig.trout.key[which(sig.trout.key$Cluster %in% clusters),]
 trout.eigenvectors$Timepoint <- rownames(trout.eigenvectors)
 trout.eigenvectors <- melt(trout.eigenvectors)
 plot.colors <- NA
-plot.colors[which(trout.eigenvectors$value > 0)] <- "green"
-plot.colors[which(trout.eigenvectors$value < 0)] <- "red"
+plot.colors[which(trout.eigenvectors$value > 0)] <- "dodgerblue"
+plot.colors[which(trout.eigenvectors$value < 0)] <- "yellow"
 trout.eigenvectors$Sign <- plot.colors
 trout.eigenvectors$Timepoint <- factor(trout.eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
 modules <- paste("ME", clusters, sep = "")
 plot.trout.eigenvectors <- trout.eigenvectors[which(trout.eigenvectors$variable %in% modules), ]
+plot.trout.eigenvectors$variable <- gsub("ME", "Cluster", plot.trout.eigenvectors$variable)
 TB1 <- ggplot(data = plot.trout.eigenvectors, aes(x = Timepoint, y = variable, fill = value)) + geom_tile() + labs(y = "Cluster", x = "Time") + scale_fill_gradient2(low = "dodgerblue", mid = "white", high = "yellow", midpoint = 0) + scale_x_discrete(breaks=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"), labels=c("5AM", "9AM", "1PM", "5PM", "9PM", "1AM", "5AM", "9AM", "1PM", "5PM", "9PM", "1AM"))
 phylum_totals <- table(plot.sig.trout.key$Phylum)
-plot.sig.trout.key$Cluster <- paste("ME", plot.sig.trout.key$Cluster, sep = "")
-keep.phyla <- names(phylum_totals)[which(phylum_totals > 50)]
+plot.sig.trout.key$Cluster <- paste("Cluster", plot.sig.trout.key$Cluster, sep = "")
+keep.phyla <- names(phylum_totals)
 plot.sig.trout.key <- plot.sig.trout.key[which(plot.sig.trout.key$Phylum %in% keep.phyla), ]
-plot.sig.trout.key$Cluster <- factor(plot.sig.trout.key$Cluster, levels = rev(c("ME1", "ME4", "ME3", "ME11", "ME18", "ME16")))
-TB2 <- ggplot(data = plot.sig.trout.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip() + scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#1f78b4", "grey", "#a6cee3"))
+plot.sig.trout.key$Cluster <- factor(plot.sig.trout.key$Cluster, levels = rev(c("Cluster3", "Cluster2", "Cluster15", "Cluster10", "Cluster0")))
+TB2 <- ggplot(data = plot.sig.trout.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip() 
+#scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#1f78b4", "grey", "#a6cee3"))
 
 plot.trout <- plot_grid(TB1, TB2, labels = c("A", "B"))
 

@@ -37,7 +37,7 @@ outputTable = genome + '.table.txt'
 # Store the classification file as a dictionary
 
 taxonFile = "Readme.csv"
-readme = pandas.read_csv(taxonFile)
+readme = pandas.read_csv(taxonFile, header = None, names = ['IMG OID', 'SAGNAME', 'Phylum', 'Class', 'Order', 'Lineage', 'Clade', 'Tribe', 'ProcessingNotes', 'unused1', 'unused2', 'unused3', 'unused4', 'unused5'])
 readme = readme.fillna(value='')
 readme["TaxString"] = readme['Phylum'] + ';' + readme['Class'] + ';' + readme['Order'] + ';' + readme['Lineage'] + ';' + readme['Clade'] + ';' + readme['Tribe']
 readme['IMG OID'] = readme['IMG OID'].apply(str)

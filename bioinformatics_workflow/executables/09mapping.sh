@@ -22,6 +22,7 @@ bbmap/bbmap.sh in=$name.fastq out=$name.90.mapped.sam minid=0.90 trd=T sam=1.3 t
 #Copy bam file back to gluster
 cp $name.90.mapped.bam /mnt/gluster/amlinz/GEODES_mapping_results/
 
+
 #Clean up
 rm -r bbmap
 rm -r ref

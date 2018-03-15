@@ -5,7 +5,7 @@
 universe = vanilla
 log = 09mapping_$(Cluster).log
 error = 09mapping_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX")
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
@@ -22,9 +22,8 @@ transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.
-Requirements = (Target.HasGluster == true)
 request_cpus = 1
-request_memory =35GB
+request_memory =36GB
 request_disk = 20GB
 #
 # Tell HTCondor to run every fastq file in the provided list:

@@ -1,6 +1,7 @@
 #!/bin/bash
 #Classify contigs based on their gene's USEARCH hits provided by JGI
 metaG=$(echo $1 | head -c 9)
+cp /mnt/gluster/amlinz/metagenome_assemblies/phylogeny/$metaG.assembled.phylodist .
 cat $1 | while read line
   do grep $line $metaG.assembled.phylodist;
   done > $1.phylodist

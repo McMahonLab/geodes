@@ -5,7 +5,7 @@
 universe = vanilla
 log = 02phylodist_$(Cluster).log
 error = 02phylodist_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 7) && (Target.HasGluster == true)
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
@@ -17,12 +17,12 @@ output = 02phylodist_$(Cluster).out
 #  computer where each job runs.
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = zipped/python.tar.gz,scripts/classifyWphylodist_contigs.py,contig_lists/$(contigs),GEODES168.assembled.phylodist
+transfer_input_files = zipped/python.tar.gz,scripts/classifyWphylodist_contigs.py,contig_lists/$(contigs)
 transfer_output_files = $(contigs).contig.classification.perc70.minhit3.txt
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.
-Requirements = (Target.HasGluster == true)
+
 request_cpus = 1
 request_memory = 4GB
 request_disk = 1GB

@@ -28,4 +28,4 @@ request_memory = 8GB
 request_disk = 2GB
 #
 # run from list
-queue thing from testsplitfastaheaders.txt
+queue thing from splitfastaheaders.txt

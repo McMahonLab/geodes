@@ -5,7 +5,7 @@
 universe = vanilla
 log = 07.2nrdb_gff_$(Cluster).log
 error = 07.2nrdb_gff_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
@@ -18,14 +18,14 @@ output = 07.2nrdb_gff_$(Cluster).out
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,http://proxy.chtc.wisc.edu/SQUID/amlinz/unprocessed-nrdb.gff.gz
-#transfer_output_files = CDS_$(samplename).fna
+#transfer_output_files =
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.
-Requirements = (Target.HasGluster == true)
+
 request_cpus = 1
-request_memory = 10GB
-request_disk = 6GB
+request_memory = 20GB
+request_disk = 12GB
 #
 # Tell HTCondor to run every fastq file in the provided list:
 queue
