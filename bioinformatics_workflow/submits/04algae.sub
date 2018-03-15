@@ -5,7 +5,7 @@
 universe = vanilla
 log = 04algae_$(Cluster).log
 error = 04algae_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6)
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 7)
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.

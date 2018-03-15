@@ -1,0 +1,31 @@
+# 17classify_bins.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 17classify_bins_$(Cluster).log
+error = 17classify_bins_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/17classify_bins.sh
+arguments = $(bin)
+output = 17classify_bins_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,http://proxy.chtc.wisc.edu/SQUID/amlinz/for_bin_classification.tar.gz,metaG_bins/$(bin).fna,scripts/makeBinGFF.sh,scripts/makeBinPhylodist.py,scripts/makeBinCOGS.py,scripts/filterPhyloCOGs.py,scripts/classifyWphylodistWcutoffs.py,Phylosift2COGs.tsv
+transfer_output_files = $(bin).perc70.minhit3.classonly.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 16GB
+request_disk = 16GB
+#
+# run from list
+queue bin from bins_to_classify.txt

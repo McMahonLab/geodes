@@ -1947,6 +1947,64 @@ awk '{print $1,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$
 head -1 Mendota_ID90_2018-03-02.txt &gt; colnames.txt
 awk 'NR &gt; 1{s=0; for (i=3;i&lt;=NF;i++) s+=$i; if (s!=0)print}' Mendota_ID90_2018-03-02.txt &gt; temp.txt
 cat colnames.txt temp.txt &gt; Mendota_ID90_2018-03-02.readcounts.txt</code></pre>
+<p>12genekey.sub</p>
+<pre class="bash"><code>
+# 12genekey.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 12genekey_$(Cluster).log
+error = 12genekey_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/12genekey.sh
+output = 12genekey_$(Cluster).out
+#arguments = $(filepart)
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = Mendota_ID90_2018-03-02.readcounts.txt.gz,Trout_ID90_2018-03-02.readcounts.txt.gz,Sparkling_ID90_2018-03-02.readcounts.txt.gz,scripts/genekey.py,zipped/python.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 8GB
+request_disk = 4GB
+#
+queue
+</code></pre>
+<p>12genekey.sh</p>
+<pre class="bash"><code>
+#!/bin/bash
+
+gzip -d *readcounts.txt.gz
+cp /mnt/gluster/amlinz/GEODES_ID90_genekey.txt .
+
+tar xzf python.tar.gz
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$PATH
+export HOME=$(pwd)/home
+chmod +x genekey.py
+
+python genekey.py Mendota_ID90_2018-03-02.readcounts.txt Mendota_ID90_genekey.csv
+python genekey.py Trout_ID90_2018-03-02.readcounts.txt Trout_ID90_genekey.csv
+python genekey.py Sparkling_ID90_2018-03-02.readcounts.txt Sparkling_ID90_genekey.csv
+
+cp *csv /mnt/gluster/amlinz
+
+rm *txt
+rm *csv
+rm *py
+rm python.tar.gz
+rm -rf python/
+rm -rf home/
+</code></pre>
 </div>
 </div>
 </div>
@@ -2097,6 +2155,104 @@ rm *.sam
 rm *.fastq
 rm *.gz
 </code></pre>
+<ol start="3" style="list-style-type: decimal">
+<li>Count reads. Same idea as above - the 10.2 script is just script #10 referencing mapped metagenomes instead of metatranscriptomes.</li>
+</ol>
+<pre class="bash"><code>for file in /mnt/gluster/amlinz/GEODES_metaG_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done &gt; bamfiles.txt
+</code></pre>
+<p>10.2featurecounts.sub</p>
+<pre class="bash"><code>
+# 10.2featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 10.2featurecounts_$(Cluster).log
+error = 10.2featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == &quot;LINUX&quot;) &amp;&amp; (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/10.2featurecounts.sh
+arguments = $(samplename)
+output = 10.2featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz,http://proxy.chtc.wisc.edu/SQUID/amlinz/nonredundant_database.gff.gz
+transfer_output_files = $(samplename).90.CDS.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 16GB
+request_disk = 8GB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+</code></pre>
+<p>10.2featurecounts.sh</p>
+<pre class="bash"><code>#!/bin/bash
+#Count mapped reads
+cp /mnt/gluster/amlinz/GEODES_metaG_mapping_results/$1.90.mapped.bam .
+gzip -d nonredundant_database.gff.gz
+
+#Unzip programs
+tar -xvzf subreads.tar.gz
+#Pair reads
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g ID --fracOverlap 0.75 -M --fraction --donotsort -a nonredundant_database.gff -o $1.90.CDS.txt $1.90.mapped.bam
+
+#Clean up - don't delete the text file, that is being sent back to the submit node
+rm *.tar.gz
+rm -r subread-1.5.2-source
+rm *bam
+rm *gff
+rm *.txt.summary
+</code></pre>
+<ol start="4" style="list-style-type: decimal">
+<li>Put the results in table form.</li>
+</ol>
+<pre class="bash"><code>./scripts/maketable.sh #Modify names for metagenomes
+gzip *readcounts.txt</code></pre>
+<p>maketable.sh</p>
+<pre class="bash"><code>#!/bin/bash
+awk '{print $1}' GEODES005-sampled.90.CDS.txt | tail -n +2 &gt; rownames.txt
+for file in *.CDS.txt;do awk '{print $7}' $file | tail -n +3 &gt; temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt &gt; temp2.txt &amp;&amp; mv temp2.txt $file;done
+
+files=$(echo *CDS.txt)
+paste rownames.txt $files &gt; GEODES_metaG_ID90_2018-03-10.txt
+
+mkdir split_genes
+
+#Remove rows that sum to zero
+awk 'NR &gt; 1{s=0; for (i=3;i&lt;=NF;i++) s+=$i; if (s!=0)print}' GEODES_metaG_ID90_2018-03-10.txt &gt; GEODES_metaG_ID90_2018-03-10.readcounts.txt
+awk '{print $1}' GEODES_metaG_ID90_2018-03-10.readcounts.txt &gt; genes.txt
+split -l 1000 -a 4 -d genes.txt split_genes/genes
+
+#Add column name
+head -1 GEODES_metaG_ID90_2018-03-10.txt &gt; colnames.txt
+cat colnames.txt GEODES_metaG_ID90_2018-03-10.readcounts.txt &gt; temp.txt
+mv temp.txt GEODES_metaG_ID90_2018-03-10.readcounts.txt
+
+#1500 should aim for just under 10000 jobs
+# Make a list of files to run - only doing a couple to test
+ls split_genes &gt; split_genes.txt
+</code></pre>
+<ol start="5" style="list-style-type: decimal">
+<li>Get gene info. Since gene split names are the same, no need to modify 11grepgenes.</li>
+</ol>
+<pre class="bash"><code>condor_submit submits/11grep_genes.sub
+./scripts/cat_geneinfo.sh</code></pre>
+<p>cat_geneinfo.sh</p>
+<pre class="bash"><code>#!/bin/bash
+
+cat *gene.info.txt &gt; /mnt/gluster/amlinz/GEODES_metaG_genekey.txt
+</code></pre>
+<p>Since you’re not splitting by lake for the metagenomes (there are only a couple), you’re done! Download the genekey and readcounts table, make sure to reclassify the gene taxonomy based on bin taxonomy (see below), and compare to counts of metatranscriptomes in the summary_stats script.</p>
 </div>
 </div>
 <div id="binning" class="section level1">

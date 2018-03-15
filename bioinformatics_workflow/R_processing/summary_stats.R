@@ -169,9 +169,9 @@ save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_expression_by_phyla_reclassi
 
 # How does expression compare to abundance (ie the metagenomes?)
 # No internal standard in the metagenomes, so normalized by library size (or report in % reads)
-metaG_reads <- read.table("D:/geodes_data_tables/GEODES_metaG_2018-01-26.readcounts.txt", row.names = 1, sep = "\t")
+metaG_reads <- read.table("D:/geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", row.names = 1, sep = "\t")
 colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
-metaG_key <- read.table("D:/geodes_data_tables/GEODES_metaG_genekey.txt", sep = "\t", quote = "")
+metaG_key <- read.table("D:/geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = "\t", quote = "")
 colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
 lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
 metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
@@ -211,16 +211,18 @@ spark_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", spark_met
 spark_metaG$Phylum <- gsub("unclassified", "Unclassified", spark_metaG$Phylum)
 spark_metaG$Phylum <- gsub("Unclassified ", "Unclassified", spark_metaG$Phylum)
 spark_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", spark_metaG$Phylum)
 spark_metaG$Phylum[which(is.na(spark_metaG$Phylum))] <- "Unclassified"
 spark_phyla <- aggregate(value ~ Phylum, data = spark_metaG, mean)
 
-spark_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
+spark_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Archaea", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
 
 spark_phyla$Phylum <- factor(spark_phyla$Phylum, levels = spark_phyla$Phylum[order(spark_phyla$value, decreasing = T)])
 
 p <- ggplot(spark_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Sparkling Lake Metagenomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark_metagenome_by_phyla_reclassified_2018-03-12.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
 
 trout_metaG$Phylum <- metaG_key$Phylum[match(trout_metaG$Genes, metaG_key$Gene)]
 trout_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", trout_metaG$Phylum)
@@ -242,16 +244,18 @@ trout_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", trout_met
 trout_metaG$Phylum <- gsub("unclassified", "Unclassified", trout_metaG$Phylum)
 trout_metaG$Phylum <- gsub("Unclassified ", "Unclassified", trout_metaG$Phylum)
 trout_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", trout_metaG$Phylum)
 trout_metaG$Phylum[which(is.na(trout_metaG$Phylum) == T)] <- "Unclassified"
 trout_phyla <- aggregate(value ~ Phylum, data = trout_metaG, mean)
 
-trout_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
+trout_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Archaea", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
 
 trout_phyla$Phylum <- factor(trout_phyla$Phylum, levels = trout_phyla$Phylum[order(trout_phyla$value, decreasing = T)])
 
 p <- ggplot(trout_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Trout Bog Metagenomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/trout_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/trout_metagenome_by_phyla_reclassified_2018-03-12.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
 
 mendota_metaG$Phylum <- metaG_key$Phylum[match(mendota_metaG$Genes, metaG_key$Gene)]
 mendota_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", mendota_metaG$Phylum)
@@ -273,16 +277,18 @@ mendota_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", mendota
 mendota_metaG$Phylum <- gsub("unclassified", "Unclassified", mendota_metaG$Phylum)
 mendota_metaG$Phylum <- gsub("Unclassified ", "Unclassified", mendota_metaG$Phylum)
 mendota_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", mendota_metaG$Phylum)
 mendota_metaG$Phylum[which(is.na(mendota_metaG$Phylum) == T)] <- "Unclassified"
 mendota_phyla <- aggregate(value ~ Phylum, data = mendota_metaG, mean)
 
-mendota_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
+mendota_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Archaea", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
 
 mendota_phyla$Phylum <- factor(mendota_phyla$Phylum, levels = mendota_phyla$Phylum[order(mendota_phyla$value, decreasing = T)])
 
 p <- ggplot(mendota_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Mendota Metagenomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/mendota_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/mendota_metagenome_by_phyla_reclassified_2018-03-12.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
 
 spark2_metaG$Phylum <- metaG_key$Phylum[match(spark2_metaG$Genes, metaG_key$Gene)]
 spark2_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", spark2_metaG$Phylum)
@@ -304,16 +310,18 @@ spark2_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", spark2_m
 spark2_metaG$Phylum <- gsub("unclassified", "Unclassified", spark2_metaG$Phylum)
 spark2_metaG$Phylum <- gsub("Unclassified ", "Unclassified", spark2_metaG$Phylum)
 spark2_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", spark2_metaG$Phylum)
+spark2_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", spark2_metaG$Phylum)
 spark2_metaG$Phylum[which(is.na(spark2_metaG$Phylum) == T)] <- "Unclassified"
 spark2_phyla <- aggregate(value ~ Phylum, data = spark2_metaG, mean)
 
-spark2_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
+spark2_phyla$Type <- c("Unclassified", "Bacteria", "Bacteria", "Bacteria", "Animals", "Fungi", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Fungi", "Protists", "Archaea", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria",  "Bacteria", "Algae", "Protists", "Algae", "Bacteria", "Animals", "Bacteria", "Bacteria", "Algae", "Bacteria", "Unclassified", "Bacteria", "Viruses")
 
 spark2_phyla$Phylum <- factor(spark2_phyla$Phylum, levels = spark2_phyla$Phylum[order(spark2_phyla$value, decreasing = T)])
 
 p <- ggplot(spark2_phyla, aes(x = Phylum, y = value, fill = Type)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1)) + scale_fill_brewer(palette = "Set2") + labs(x = "", y = "Read Counts", title = "Sparkling Lake 2009 Metagenomes")
 
-save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark09_metagenome_by_phyla_reclassified.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
+save_plot("C:/Users/Alex/Desktop/geodes/Plots/spark09_metagenome_by_phyla_reclassified_2018-03-12.pdf", p, base_height = 5, base_aspect_ratio = 1.6)
 
 # What are the top expressed genes?
 

@@ -5,7 +5,7 @@ gzip -d nonredundant_database.fna.clstr.gz
 #Link cluster 
 #maxsize=$(sort -nrk1,1 /mnt/gluster/amlinz/nonredundant_database.fna.clstr  | head -1 | cut -f1)
 #maxsize=$(($maxsize + 1))
-maxsize=800
+maxsize=1000
 touch endpoint.txt
 cat $1 | while read line; do grep -B $maxsize $line nonredundant_database.fna.clstr > splitfile.clstr; cluster=`grep "Cluster" splitfile.clstr | tail -1`; echo $cluster; length=`tail -1 splitfile.clstr | awk '{print $2}' | sed 's/[^0-9]*//g'`; echo $length >> endpoint.txt;done > clusters.txt
 

@@ -1,0 +1,29 @@
+# 13split_metagenomes.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 13split_metagenomes_$(Cluster).log
+error = 13split_metagenomes_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/13split_metagenomes.sh
+arguments = $(sample)
+output = 13split_metagenomes_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 12 GB
+request_disk = 40 GB
+#
+# Submit jobs
+queue sample from metaG_samples.txt

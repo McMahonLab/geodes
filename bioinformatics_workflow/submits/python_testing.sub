@@ -10,20 +10,20 @@ error = process.err
 #arguments=$(metagenome)
 # If you wish to compile code, you'll need the below lines. 
 #  Otherwise, LEAVE THEM OUT if you just want to interactively test!
-+IsBuildJob = true
-requirements = ( IsBuildSlot == true )
+#+IsBuildJob = true
+#requirements = ( IsBuildSlot == true )
 
 # Indicate all files that need to go into the interactive job session,
 #  including any tar files that you prepared:
-transfer_input_files = zipped/python.tar.gz
+transfer_input_files = zipped/python.tar.gz,output/storage/bin_stats_ext.tsv
 
 # It's still important to request enough computing resources. The below 
 #  values are a good starting point, but consider your file sizes for an
 #  estimate of "disk" and use any other information you might have
 #  for "memory" and/or "cpus".
-Requirements = (Target.HasGluster == true)
+#Requirements = (Target.HasGluster == true)
 request_cpus = 1
-request_memory = 8GB
-request_disk = 8GB
+request_memory = 4GB
+request_disk = 2GB
 
 queue 

@@ -1,11 +1,11 @@
-# build_metaG_index.sub
+#08 build_index.sub
 #
 #
 # Specify the HTCondor Universe
 universe = vanilla
 log = 08build_index_$(Cluster).log
 error = 08build_index_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX")
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
 #
 # Specify your executable, arguments, and a file for HTCondor to store standard
 #  output.
@@ -17,13 +17,13 @@ output = 08build_index_$(Cluster).out
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 transfer_input_files = zipped/BBMap_36.99.tar.gz
-#transfer_output_files = 
+
 #
 # Tell HTCondor what amount of compute resources
 #  each job will need on the computer where it runs.
-Requirements = (Target.HasGluster == true)
+
 request_cpus = 1
-request_memory = 48GB
+request_memory = 52GB
 request_disk = 24GB
 #
 #

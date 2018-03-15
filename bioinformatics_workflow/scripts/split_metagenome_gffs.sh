@@ -6,3 +6,4 @@ done
 #2500 should aim for about 1000 jobs per metagenome assembly, so 6000 total
 # Make a list of files to run - only doing a couple to test
 ls metaG_gffs > metaG_gffs.txt
+#head -1 metaG_gffs.txt > temp.txt && mv temp.txt metaG_gffs.txt
