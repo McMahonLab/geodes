@@ -13,8 +13,8 @@ library(reshape2)
 library(cowplot)
 
 # Read and process Mendota data
-sig.mendota.key <- read.csv("data/WGCNA_mendota_results_2018-03-09.csv", header = T)
-mendota.eigenvectors <- read.csv("data/WGCNA_mendota_eigenvectors_2018-03-09.csv", header = T, row.names = 1)
+sig.mendota.key <- read.csv("data/WGCNA_mendota_results_nophoto_2018-03-30.csv", header = T)
+mendota.eigenvectors <- read.csv("data/WGCNA_mendota_eigenvectors_nophoto_2018-03-30.csv", header = T, row.names = 1)
 
 # Fix taxonomy
 sig.mendota.key$Taxonomy <- gsub("Bacteria;", "", sig.mendota.key$Taxonomy)
@@ -36,9 +36,10 @@ sig.mendota.key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", sig.m
 sig.mendota.key$Phylum <- gsub("unclassified", "Unclassified", sig.mendota.key$Phylum)
 sig.mendota.key$Phylum <- gsub("Unclassified ", "Unclassified", sig.mendota.key$Phylum)
 sig.mendota.key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", sig.mendota.key$Phylum)
+sig.mendota.key$Phylum <- gsub("NO CLASSIFICATION BASED ON GIVEN PHYLODIST", "Unclassified", sig.mendota.key$Phylum)
 
 
-clusters <- c(2, 3, 5, 6, 8, 15, 21, 25, 26)
+clusters <- c(2, 4, 5, 6, 9, 11, 14, 15, 16, 18, 27, 28, 29, 31, 33)
 plot.sig.mendota.key <- sig.mendota.key[which(sig.mendota.key$Cluster %in% clusters),]
 mendota.eigenvectors$Timepoint <- rownames(mendota.eigenvectors)
 mendota.eigenvectors <- melt(mendota.eigenvectors)
@@ -50,12 +51,13 @@ mendota.eigenvectors$Timepoint <- factor(mendota.eigenvectors$Timepoint, levels 
 modules <- paste("ME", clusters, sep = "")
 plot.mendota.eigenvectors <- mendota.eigenvectors[which(mendota.eigenvectors$variable %in% modules), ]
 plot.mendota.eigenvectors$variable <- gsub("ME", "Cluster", plot.mendota.eigenvectors$variable)
+plot.mendota.eigenvectors$variable <- factor(plot.mendota.eigenvectors$variable, levels = c("Cluster15", "Cluster28", "Cluster9", "Cluster11", "Cluster4", "Cluster14", "Cluster18", "Cluster5", "Cluster6", "Cluster16", "Cluster2", "Cluster31", "Cluster27", "Cluster29", "Cluster33"))
 ME1 <- ggplot(data = plot.mendota.eigenvectors, aes(x = Timepoint, y = variable, fill = value)) + geom_tile() + labs(y = "Cluster", x = "Time") + scale_fill_gradient2(low = "dodgerblue", mid = "white", high = "yellow", midpoint = 0) + scale_x_discrete(breaks=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"), labels=c("5AM", "9AM", "1PM", "5PM", "9PM", "1AM", "5AM", "9AM", "1PM", "5PM", "9PM", "1AM"))
 phylum_totals <- table(plot.sig.mendota.key$Phylum)
 plot.sig.mendota.key$Cluster <- paste("Cluster", plot.sig.mendota.key$Cluster, sep = "")
 keep.phyla <- names(phylum_totals)
 plot.sig.mendota.key <- plot.sig.mendota.key[which(plot.sig.mendota.key$Phylum %in% keep.phyla), ]
-plot.sig.mendota.key$Cluster <- factor(plot.sig.mendota.key$Cluster, levels = rev(c("Cluster8", "Cluster6", "Cluster5", "Cluster3", "Cluster26", "Cluster25", "Cluster21", "Cluster2", "Cluster15")))
+plot.sig.mendota.key$Cluster <- factor(plot.sig.mendota.key$Cluster, levels = c("Cluster15", "Cluster28", "Cluster9", "Cluster11", "Cluster4", "Cluster14", "Cluster18", "Cluster5", "Cluster6", "Cluster16", "Cluster2", "Cluster31", "Cluster27", "Cluster29", "Cluster33"))
 ME2 <- ggplot(data = plot.sig.mendota.key, aes(y = log(Totals), x = Cluster, fill = Phylum)) + geom_bar(stat = "identity") + labs(x = NULL, y = "Log of Total Reads") + coord_flip()
   
 #scale_fill_manual(values = c("#fdbf6f", "#e31a1c", "#33a02c", "#fb9a99", "#b2df8a", "#1f78b4", "grey", "#a6cee3"))
@@ -64,8 +66,8 @@ plot.mendota <- plot_grid(ME1, ME2, labels = c("A", "B"))
 
 
 # Read and process Sparkling data
-sig.spark.key <- read.csv("data/WGCNA_sparkling_results_2018-03-09.csv", header = T)
-spark.eigenvectors <- read.csv("data/WGCNA_sparkling_eigenvectors_2018-03-09.csv", header = T, row.names = 1)
+sig.spark.key <- read.csv("data/WGCNA_sparkling_results_nophoto_2018-03-30.csv", header = T)
+spark.eigenvectors <- read.csv("data/WGCNA_sparkling_eigenvectors_nophoto_2018-03-30.csv", header = T, row.names = 1)
 
 sig.spark.key$Taxonomy <- gsub("Bacteria;", "", sig.spark.key$Taxonomy)
 sig.spark.key$Taxonomy <- gsub("Eukaryota;", "", sig.spark.key$Taxonomy)
@@ -113,8 +115,8 @@ SP2 <- ggplot(data = plot.sig.spark.key, aes(y = log(Totals), x = Cluster, fill 
 plot.spark <- plot_grid(SP1, SP2, labels = c("A", "B"))
 
 # Read and process Trout Bog data
-sig.trout.key <- read.csv("data/WGCNA_trout_results_2018-03-09.csv", header = T)
-trout.eigenvectors <- read.csv("data/WGCNA_trout_eigenvectors_2018-03-09.csv", header = T, row.names = 1)
+sig.trout.key <- read.csv("data/WGCNA_trout_results_nophoto_2018-03-30.csv", header = T)
+trout.eigenvectors <- read.csv("data/WGCNA_trout_eigenvectors_nophoto_2018-03-30.csv", header = T, row.names = 1)
 
 sig.trout.key$Taxonomy <- gsub("Bacteria;", "", sig.trout.key$Taxonomy)
 sig.trout.key$Taxonomy <- gsub("Eukaryota;", "", sig.trout.key$Taxonomy)
