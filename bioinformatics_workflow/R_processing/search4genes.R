@@ -347,6 +347,6 @@ genesearch <- function(lake, gene){
   
   
   taxon_search <- aggregate(value ~ Taxonomy, data = averaged_search, sum)
-  head(taxon_search[order(taxon_search$value, decreasing = T),],5)
+  head(taxon_search[order(taxon_search$value, decreasing = T),],10)
   
 }
