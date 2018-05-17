@@ -3,12 +3,13 @@ library(ggplot2)
 library(cowplot)
 library(reshape2)
 library(ggrepel)
-metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
+theme_set(theme_cowplot(font_size=18))
+metadata <- read.csv(file = "C:/Users/Goose and Gander/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
 
 # Metagenomic data
-metaG_reads <- read.table("D:/geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", row.names = 1, sep = "\t")
+metaG_reads <- read.table("E:/geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", row.names = 1, sep = "\t")
 colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
-metaG_key <- read.table("D:/geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = "\t", quote = "")
+metaG_key <- read.table("E:/geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = "\t", quote = "")
 colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
 lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
 metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
@@ -21,18 +22,98 @@ metaG_reads$Genes <- rownames(metaG_reads)
 spark_metaG <- metaG_reads[,c(1,2, 11)]
 trout_metaG <- metaG_reads[,c(3,4, 11)]
 mendota_metaG <- metaG_reads[,c(5,6, 11)]
-spark2_metaG <- metaG_reads[,c(7,8,9,10, 11)]
+
 
 spark_metaG <- melt(spark_metaG)
 trout_metaG <- melt(trout_metaG)
 mendota_metaG <- melt(mendota_metaG)
-spark2_metaG <- melt(spark2_metaG)
+
+mendota_metaG$Phylum <- metaG_key$Phylum[match(mendota_metaG$Genes, metaG_key$Gene)]
+mendota_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("None", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("unclassified", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Unclassified ", "Unclassified", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", mendota_metaG$Phylum)
+mendota_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", mendota_metaG$Phylum)
+mendota_metaG$Phylum[which(is.na(mendota_metaG$Phylum) == T)] <- "Unclassified"
+
+mendota_metaG_phyla <- aggregate(value ~ Phylum, data = mendota_metaG, mean)
+
+spark_metaG$Phylum <- metaG_key$Phylum[match(spark_metaG$Genes, metaG_key$Gene)]
+spark_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("None", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("unclassified", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Unclassified ", "Unclassified", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", spark_metaG$Phylum)
+spark_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", spark_metaG$Phylum)
+spark_metaG$Phylum[which(is.na(spark_metaG$Phylum))] <- "Unclassified"
+spark_metaG_phyla <- aggregate(value ~ Phylum, data = spark_metaG, mean)
+
+trout_metaG$Phylum <- metaG_key$Phylum[match(trout_metaG$Genes, metaG_key$Gene)]
+trout_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("None", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("unclassified", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Unclassified ", "Unclassified", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", trout_metaG$Phylum)
+trout_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", trout_metaG$Phylum)
+trout_metaG$Phylum[which(is.na(trout_metaG$Phylum))] <- "Unclassified"
+trout_metaG_phyla <- aggregate(value ~ Phylum, data = trout_metaG, mean)
+
 
 # Remove unused metaG datasets to sve RAM
 rm(metaG_reads)
+rm(mendota_metaG)
+rm(trout_metaG)
+rm(spark_metaG)
+rm(metaG_key)
 #Mendota
-mnorm <- read.csv("D:/geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", header = T, row.names = 1)
-mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+mnorm <- read.csv("E:/geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+mendota_key <- read.csv("E:/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 
 # How expressed is each phylum?
 mendota_key$Taxonomy <- gsub("Bacteria;", "", mendota_key$Taxonomy)
@@ -73,31 +154,8 @@ wide_mnorm <- wide_mnorm[which(rowSums(wide_mnorm) > 3000),]
 
 mendota_phyla <- data.frame(Taxonomy = rownames(wide_mnorm), Sums = rowSums(wide_mnorm))
 
-mendota_metaG$Phylum <- metaG_key$Phylum[match(mendota_metaG$Genes, metaG_key$Gene)]
-mendota_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("None", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("unclassified", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("Unclassified ", "Unclassified", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", mendota_metaG$Phylum)
-mendota_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", mendota_metaG$Phylum)
-mendota_metaG$Phylum[which(is.na(mendota_metaG$Phylum) == T)] <- "Unclassified"
-
-mendota_metaG_phyla <- aggregate(value ~ Phylum, data = mendota_metaG, mean)
+rm(mendota_key)
+rm(mnorm)
 
 # Choose the intersection of the top 10 expressed and abundant
 keep <- c("Chloroflexi", "Actinobacteria", "Ignavibacteria", "Planctomycetes", "Crenarchaeaota", "Cyanobacteria", "Gemmatimonadetes", "Bacteroidetes", "Proteobacteria", "Fibrobacteres", "Cryptophyta", "Heterokonta", "Viruses")
@@ -108,20 +166,20 @@ mendota_intersect <- mendota_intersect[order(mendota_intersect$metaG, decreasing
 
 mendota_intersect$Type <- c("Virus", "Algae", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Archaea", "Bacteria", "Bacteria", "Bacteria", "Bacteria")
 
-ggplot(mendota_intersect, aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 5, size = 7.5) + scale_color_manual(values = c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Lake Mendota") + theme(legend.position = "none")
+p <- ggplot(mendota_intersect[which(mendota_intersect$Taxonomy != "Chloroflexi"), ], aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 5, size = 7.5) + scale_color_manual(values = c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Lake Mendota") + theme(legend.position = "none")
 
+save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/mendota_dna_vs_rna_no_chloroflexi.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
 
 #Clear mendota data from workspace and start with sparkling
 
-rm(mendota_key)
-rm(mnorm)
+rm(averaged_tax)
+rm(mendota_intersect)
 rm(wide_mnorm)
-rm(mendota_metaG)
 rm(mendota_metaG_phyla)
 rm(mendota_phyla)
 
-snorm <- read.csv("D:/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
-spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+snorm <- read.csv("E:/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+spark_key <- read.csv("E:/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 
 spark_key$Taxonomy <- gsub("Bacteria;", "", spark_key$Taxonomy)
 spark_key$Taxonomy <- gsub("Eukaryota;", "", spark_key$Taxonomy)
@@ -163,30 +221,8 @@ wide_snorm <- wide_snorm[which(rowSums(wide_snorm) > 3000),]
 
 spark_phyla <- data.frame(Taxonomy = rownames(wide_snorm), Sums = rowSums(wide_snorm))
 
-spark_metaG$Phylum <- metaG_key$Phylum[match(spark_metaG$Genes, metaG_key$Gene)]
-spark_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("None", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("unclassified", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("Unclassified ", "Unclassified", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", spark_metaG$Phylum)
-spark_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", spark_metaG$Phylum)
-spark_metaG$Phylum[which(is.na(spark_metaG$Phylum))] <- "Unclassified"
-spark_metaG_phyla <- aggregate(value ~ Phylum, data = spark_metaG, mean)
+rm(spark_key)
+rm(snorm)
 
 # Choose the intersection of the top 10 expressed and abundant
 keep <- c("Firmicutes", "Heterokonta", "Armatimonadetes", "Haptophtya", "Chlamydiae", "Verrucomicrobia", "Actinobacteria", "Viruses", "Planctomycetes", "Phaeophyceae", "Cyanobacteria", "TM7", "Bacteroidetes", "Proteobacteria", "Cryptophyta")
@@ -198,21 +234,22 @@ sparkling_intersect <- sparkling_intersect[order(sparkling_intersect$metaG, decr
 sparkling_intersect$Type <- c("Bacteria", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Viruses", "Bacteria", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria")
 sparkling_intersect$metaG[which(is.na(sparkling_intersect$metaG) == T)] <- 0
 
-ggplot(sparkling_intersect, aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 5, size = 7.5) + scale_color_manual(values = c("limegreen", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Sparkling Lake") + theme(legend.position = "none")
+p <- ggplot(sparkling_intersect, aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 5, size = 7.5) + scale_color_manual(values = c("limegreen", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Sparkling Lake") + theme(legend.position = "none")
 #export as 6x8in pdf
 
-rm(spark_key)
-rm(snorm)
+save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/spark_dna_vs_rna.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
+
+rm(averaged_tax)
+rm(sparkling_intersect)
 rm(wide_snorm)
-rm(spark_metaG)
 rm(spark_metaG_phyla)
 rm(spark_phyla)
 
 
 #Finally Trout bog
 
-tnorm <- read.csv("D:/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
-trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+tnorm <- read.csv("E:/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+trout_key <- read.csv("E:/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 
 trout_key$Taxonomy <- gsub("Bacteria;", "", trout_key$Taxonomy)
 trout_key$Taxonomy <- gsub("Eukaryota;", "", trout_key$Taxonomy)
@@ -254,30 +291,8 @@ wide_tnorm <- wide_tnorm[which(rowSums(wide_tnorm) > 3000),]
 
 trout_phyla <- data.frame(Taxonomy = rownames(wide_tnorm), Sums = rowSums(wide_tnorm))
 
-trout_metaG$Phylum <- metaG_key$Phylum[match(trout_metaG$Genes, metaG_key$Gene)]
-trout_metaG$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("None", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("unclassified unclassified", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("unclassified", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("Unclassified ", "Unclassified", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("TM7", "Candidatus Saccharibacteria", trout_metaG$Phylum)
-trout_metaG$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", trout_metaG$Phylum)
-trout_metaG$Phylum[which(is.na(trout_metaG$Phylum))] <- "Unclassified"
-trout_metaG_phyla <- aggregate(value ~ Phylum, data = trout_metaG, mean)
+rm(tnorm)
+rm(trout_key)
 
 # Choose the intersection of the top 10 expressed and abundant
 keep <- c("Verrucomicrobia", "Armatimonadetes", "Viruses", "Chlorophyta", "Acidobacteria", "Heterokonta", "Streptophyta", "Actinobacteria", "Bacteroidetes", "Cryptophyta", "Cyanobacteria", "Deinococcus-Thermus")
@@ -288,12 +303,8 @@ trout_intersect <- trout_intersect[order(trout_intersect$metaG, decreasing = F),
 
 trout_intersect$Type <- c("Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Algae", "Algae", "Bacteria", "Algae", "Viruses", "Bacteria", "Bacteria")
 
-ggplot(trout_intersect, aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 15, size = 7.5) + scale_color_manual(values = c("limegreen", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Trout Bog") + theme(legend.position = "none")
+p <- ggplot(trout_intersect, aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 15, size = 7.5) + scale_color_manual(values = c("limegreen", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Trout Bog") + theme(legend.position = "none")
 #export as 6x8in pdf
 
-rm(trout_key)
-rm(tnorm)
-rm(wide_tnorm)
-rm(trout_metaG)
-rm(trout_metaG_phyla)
-rm(trout_phyla)
+save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/trout_dna_vs_rna.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
+

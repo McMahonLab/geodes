@@ -7,21 +7,21 @@ library(ggplot2)
 library(cowplot)
 library(reshape2)
 library(WGCNA)
-allowWGCNAThreads(nThreads = 8)
+allowWGCNAThreads(nThreads = 4)
 
 ### Load data (start with only one to save RAM and comment the rest out)
 # Normalized read tables
-#snorm <- read.csv("D:/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
-#tnorm <- read.csv("D:/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
-mnorm <- read.csv("D:/geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+#snorm <- read.csv("E:/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+#tnorm <- read.csv("E:/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+mnorm <- read.csv("E:/geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", header = T, row.names = 1)
 
 # Gene keys
-mendota_key <- read.csv("D:/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
-#spark_key <- read.csv("D:/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", header = T)
-#trout_key <- read.csv("D:/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+mendota_key <- read.csv("E:/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+#spark_key <- read.csv("E:/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+#trout_key <- read.csv("E:/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 
 # Sample data
-metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
+metadata <- read.csv(file = "C:/Users/Goose and Gander/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
 
 
 ### Abundance filtering
@@ -31,7 +31,8 @@ metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflo
 #Note: change this to the minimum needed to differentiate between replicates
 #Currently:minimum threshold that doesn't crash R during the aggregation step
 
-abun_mnorm <- mnorm[which(rowSums(mnorm) > (dim(mnorm)[2] * 7000)), ]
+
+abun_mnorm <- mnorm[which(rowSums(mnorm) > (dim(mnorm)[2] * 1000)), ]
 #abun_snorm <- snorm[which(rowSums(snorm) > (dim(snorm)[2] * 5000)), ]
 #abun_tnorm <- tnorm[which(rowSums(tnorm) > (dim(tnorm)[2] * 1000)), ]
 
@@ -43,6 +44,20 @@ abun_mnorm$Genes <- rownames(abun_mnorm)
 abun_mnorm <- melt(abun_mnorm)
 abun_mnorm$variable <- gsub(".nonrRNA", "", abun_mnorm$variable)
 abun_mnorm$Timepoint <- metadata$Timepoint[match(abun_mnorm$variable, metadata$Sample)]
+
+#Blockwsie aggregation
+part <- abun_mnorm[1:249999, ]
+agg_abun_mnorm <- aggregate(value ~ Genes + Timepoint, data = part, mean)
+where <- seq(250000, dim(abun_mnorm)[1], 250000)
+for(i in 1:length(where)){
+  part <- abun_mnorm[where[i]:(where[i]+249999), ]
+  aggpart <- aggregate(value ~ Genes + Timepoint, data = part, mean)
+  agg_abun_mnorm <- rbind(agg_abun_mnorm, aggpart)
+}
+part <- abun_mnorm[max(where):dim(abun_mnorm)[1], ]
+agg_abun_mnorm <- aggregate(value ~ Genes, data = part, mean)
+
+
 agg_abun_mnorm <- aggregate(value ~ Genes + Timepoint, data = abun_mnorm, mean)
 new_abun_mnorm <- reshape(agg_abun_mnorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
 rownames(new_abun_mnorm) <- new_abun_mnorm[, 1]
@@ -55,6 +70,23 @@ rm(agg_abun_mnorm)
 ####Calculate the mean of standard error for each timepoint for each gene
 
 std_err <- function(x) (sd(x)/sqrt(length(x)))/mean(x) * 100
+
+#Blockwise standard error
+part <- abun_mnorm[which(abun_mnorm$Timepoint == 0), ]
+err_mnorm <- aggregate(value ~ Genes, data = part, std_err)
+threshold = 100
+keep_genes <- err_mnorm$Genes[which(err_mnorm$value < threshold)]
+timepoints <- c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44)
+for(i in 1:length(timepoints)){
+  part <- abun_mnorm[which(abun_mnorm$Timepoint == timepoints[i]), ]
+  err_mnorm <- aggregate(value ~ Genes, data = part, std_err)
+  keep <- err_mnorm$Genes[which(err_mnorm$value < threshold)]
+  keep_genes <- keep_genes[which((keep_genes %in% keep) == T)]
+}
+
+#How much did that remove? 
+length(keep_genes)/dim(abun_mnorm)[1] * 100
+
 # 
 # # err_snorm <- aggregate(value ~ Genes + Timepoint, data = abun_snorm, std_err)
 # # err_snorm <- err_snorm[which(is.na(err_snorm$value) == F),]
@@ -64,6 +96,7 @@ std_err <- function(x) (sd(x)/sqrt(length(x)))/mean(x) * 100
 # err_tnorm <- err_tnorm[which(is.na(err_tnorm$value) == F),]
 # err_tnorm <- aggregate(value ~ Genes, data = err_tnorm, mean)
 # 
+
 err_mnorm <- aggregate(value ~ Genes + Timepoint, data = abun_mnorm, std_err)
 err_mnorm <- err_mnorm[which(is.na(err_mnorm$value) == F),]
 err_mnorm <- aggregate(value ~ Genes, data = err_mnorm, mean)
@@ -83,6 +116,8 @@ new_abun_mnorm <- new_abun_mnorm[, which(colnames(new_abun_mnorm) %in% keep)]
 
 ### WGCNA
 # 1st, check the soft threshold in case removing samples changed it.
+
+
 
 mpowers <- c()
 for(i in 1:100){

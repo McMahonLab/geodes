@@ -14,8 +14,16 @@
    viewBox="0 0 127 101.6"
    version="1.1"
    id="svg2922"
+<<<<<<< HEAD
    inkscape:version="0.92.2 (5c3e80d, 2017-08-06)"
    sodipodi:docname="lter_diagram.svg">
+=======
+   inkscape:version="0.92.3 (2405546, 2018-03-11)"
+   sodipodi:docname="lter_diagram.svg"
+   inkscape:export-filename="C:\Users\Goose and Gander\Desktop\geodes\Plots\lter_diagram.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96">
+>>>>>>> refs/remotes/origin/master
   <defs
      id="defs2916">
     <marker
@@ -210,7 +218,11 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="1.4142136"
+<<<<<<< HEAD
      inkscape:cx="205.26379"
+=======
+     inkscape:cx="90.358941"
+>>>>>>> refs/remotes/origin/master
      inkscape:cy="228.28427"
      inkscape:document-units="mm"
      inkscape:current-layer="layer1"
@@ -229,7 +241,11 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+<<<<<<< HEAD
         <dc:title></dc:title>
+=======
+        <dc:title />
+>>>>>>> refs/remotes/origin/master
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -239,12 +255,31 @@
      id="layer1"
      transform="translate(0,-195.39998)">
     <rect
+<<<<<<< HEAD
        style="opacity:0.80100002;fill:#afe9dd;fill-opacity:1;stroke:none;stroke-width:0.75;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+=======
+       id="rect147"
+       width="127.52917"
+       height="27.516666"
+       x="-0.34152725"
+       y="194.7487"
+       style="fill:#ffffff;stroke-width:0.26458332"
+       inkscape:export-xdpi="96"
+       inkscape:export-ydpi="96" />
+    <rect
+       style="opacity:1;fill:#afe9dd;fill-opacity:1;stroke:none;stroke-width:0.75;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+>>>>>>> refs/remotes/origin/master
        id="rect3467"
        width="127.22029"
        height="81.009392"
        x="0.18708867"
+<<<<<<< HEAD
        y="216.36476" />
+=======
+       y="216.36476"
+       inkscape:export-xdpi="96"
+       inkscape:export-ydpi="96" />
+>>>>>>> refs/remotes/origin/master
     <ellipse
        style="opacity:0.80100002;fill:#ffd11e;fill-opacity:0.98823529;stroke:none;stroke-width:0.75;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
        id="path3469"
