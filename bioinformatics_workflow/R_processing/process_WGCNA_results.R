@@ -7,8 +7,8 @@ library(reshape2)
 
 ##### mendota
 # Read data
-sig.mendota.key <- read.csv("D:/geodes_data_tables/WGCNA_mendota_results_2018-03-09.csv", header = T)
-eigenvectors <- read.csv("D:/geodes_data_tables/WGCNA_mendota_eigenvectors_2018-03-09.csv", header = T, row.names = 1)
+sig.mendota.key <- read.csv("C:/Users/Goose and Gander/Documents/WGCNA_mendota_results_nondiel_2018-05-20.csv", header = T)
+eigenvectors <- read.csv("C:/Users/Goose and Gander/Documents/WGCNA_mendota_eigenvectors_nondiel_2018-05-20.csv", header = T, row.names = 1)
 
 # Fix taxonomy
 sig.mendota.key$Taxonomy <- gsub("Bacteria;", "", sig.mendota.key$Taxonomy)
@@ -40,13 +40,13 @@ plot.colors[which(long_eigenvectors$value > 0)] <- "green"
 plot.colors[which(long_eigenvectors$value < 0)] <- "red"
 long_eigenvectors$Sign <- plot.colors
 long_eigenvectors$Timepoint <- factor(long_eigenvectors$Timepoint, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
-# for(i in 0:57){
-#   me = paste("me", i, sep = "")
-#   p <- ggplot(data = long_eigenvectors[which(long_eigenvectors$variable == me), ], aes(x = Timepoint, y = value, fill = Sign)) + geom_bar(stat = "identity") + labs(title = me) + scale_fill_manual(values = c("green", "red")) + theme(legend.position = "none")
-#   print(p)
-# }
+for(i in 0:147){
+  me = paste("ME", i, sep = "")
+  p <- ggplot(data = long_eigenvectors[which(long_eigenvectors$variable == me), ], aes(x = Timepoint, y = value, fill = Sign)) + geom_bar(stat = "identity") + labs(title = me) + scale_fill_manual(values = c("green", "red")) + theme(legend.position = "none")
+  print(p)
+}
 
-clusters <- c(2, 3, 5, 6, 8, 15, 21, 25, 26)
+clusters <- c()
 plot.sig.mendota.key <- sig.mendota.key[which(sig.mendota.key$Cluster %in% clusters),]
 
 # Panel A
@@ -69,14 +69,29 @@ plot_grid(ME1, ME2, labels = c("A", "B"))
 
 
 # Get genes from mes
-
-x <- sig.mendota.key[which(sig.mendota.key$me == 13),]
+cluster = 114
+x <- sig.mendota.key[which(sig.mendota.key$Cluster == cluster),]
 x <- x[order(x$Totals),]
 x[(dim(x)[1] - 50): dim(x)[1],]
 
 # Plot phyla, not including unclassified
 phyla_breakdown <- aggregate(Totals ~ Phylum, x, sum)
 ggplot(phyla_breakdown[grep("Unclassified", phyla_breakdown$Phylum, invert = T), ], aes(x = Phylum, y = Totals)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+me = paste("ME", cluster, sep = "")
+ggplot(data = long_eigenvectors[which(long_eigenvectors$variable == me), ], aes(x = Timepoint, y = value, fill = Sign)) + geom_bar(stat = "identity") + labs(title = me) + scale_fill_manual(values = c("green", "red")) + theme(legend.position = "none")
+
+eigenvectors <- eigenvectors[,1:147]
+cor.matrix <- matrix(nrow = dim(eigenvectors)[2], ncol = dim(eigenvectors)[2], 0)
+colnames(cor.matrix) <- row.names(cor.matrix) <- colnames(eigenvectors)
+for(i in 1:dim(eigenvectors)[2]){
+  thing1 <- eigenvectors[,i]
+  for(j in 1:dim(eigenvectors)[2]){
+    thing2 <- eigenvectors[,j]
+    cor.matrix[i,j] <- cor(thing1, thing2)
+  }
+}
+
 
 #### Sparkling
 # Read data
