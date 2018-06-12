@@ -42,6 +42,9 @@ mendota_key$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", mendota
 mendota_key$Taxonomy <- gsub("unclassified", "Unclassified", mendota_key$Taxonomy)
 mendota_key$Taxonomy <- gsub("Unclassified ", "Unclassified", mendota_key$Taxonomy)
 mendota_key$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mendota_key$Taxonomy)
+mendota_key$Taxonomy <- gsub("Not classified", "Unclassified", mendota_key$Taxonomy)
+mendota_key$Taxonomy <- gsub(";;;", ";", mendota_key$Taxonomy)
+mendota_key$Taxonomy <- gsub(";;", ";", mendota_key$Taxonomy)
 mendota_key$Taxonomy[grep("Blank", mendota_key$Taxonomy)] <- "Unclassified"
 mendota_key <- mendota_key[which(mendota_key$Taxonomy != "Unclassified" & mendota_key$Taxonomy != "internal standard" & mendota_key$Taxonomy != ""),]
 
@@ -62,6 +65,36 @@ agg_mnorm$Time <- factor(agg_mnorm$Time, levels = c("0", "4", "8", "12", "16", "
 wide_agg_mnorm <- reshape(agg_mnorm, direction = "wide", timevar = "Time", idvar = "Taxonomy")
 rownames(wide_agg_mnorm) <- wide_agg_mnorm$Taxonomy
 wide_agg_mnorm <- wide_agg_mnorm[,2:dim(wide_agg_mnorm)[2]]
+
+# Set some rules to reduce the number of taxa with few genes or poor classifications
+taxa <- rownames(wide_agg_mnorm)
+keep <- c()
+for(i in 1:length(taxa)){
+  semicolons <- lengths(regmatches(taxa[i], gregexpr(";", taxa[i])))
+  unclassifieds <- lengths(regmatches(taxa[i], gregexpr("nclassified", taxa[i])))
+  order <- sapply(strsplit(as.character(taxa[i]),";"), `[`, 3)
+  if(semicolons < 3 | unclassifieds != 0 | order == ""){
+    keep[i] <- FALSE
+  }else{
+    keep[i] <- TRUE
+  }
+}
+
+wide_agg_mnorm <- wide_agg_mnorm[which(keep == T), ]
+
+taxa <- rownames(wide_agg_mnorm)
+keep <- c()
+for(i in 1:length(taxa)){
+  numgenes <- length(grep(taxa[i], mendota_key$Taxonomy))
+  if(numgenes < 100){
+    keep[i] <- FALSE
+  }else{
+    keep[i] <- TRUE
+  }
+}
+
+wide_agg_mnorm <- wide_agg_mnorm[which(keep == T), ]
+
 
 # Networks
 cor.data <- expand.grid(rownames(wide_agg_mnorm), rownames(wide_agg_mnorm))
@@ -138,6 +171,9 @@ spark_key$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", spark_key
 spark_key$Taxonomy <- gsub("unclassified", "Unclassified", spark_key$Taxonomy)
 spark_key$Taxonomy <- gsub("Unclassified ", "Unclassified", spark_key$Taxonomy)
 spark_key$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark_key$Taxonomy)
+spark_key$Taxonomy <- gsub("Not classified", "Unclassified", spark_key$Taxonomy)
+spark_key$Taxonomy <- gsub(";;;", ";", spark_key$Taxonomy)
+spark_key$Taxonomy <- gsub(";;", ";", spark_key$Taxonomy)
 spark_key$Taxonomy[grep("Blank", spark_key$Taxonomy)] <- "Unclassified"
 spark_key <- spark_key[which(spark_key$Taxonomy != "Unclassified" & spark_key$Taxonomy != "internal standard" & spark_key$Taxonomy != ""),]
 
@@ -158,6 +194,35 @@ agg_snorm$Time <- factor(agg_snorm$Time, levels = c("0", "4", "8", "12", "16", "
 wide_agg_snorm <- reshape(agg_snorm, direction = "wide", timevar = "Time", idvar = "Taxonomy")
 rownames(wide_agg_snorm) <- wide_agg_snorm$Taxonomy
 wide_agg_snorm <- wide_agg_snorm[,2:dim(wide_agg_snorm)[2]]
+
+
+taxa <- rownames(wide_agg_snorm)
+keep <- c()
+for(i in 1:length(taxa)){
+  semicolons <- lengths(regmatches(taxa[i], gregexpr(";", taxa[i])))
+  unclassifieds <- lengths(regmatches(taxa[i], gregexpr("nclassified", taxa[i])))
+  order <- sapply(strsplit(as.character(taxa[i]),";"), `[`, 3)
+  if(semicolons < 3 | unclassifieds != 0 | order == ""){
+    keep[i] <- FALSE
+  }else{
+    keep[i] <- TRUE
+  }
+}
+
+wide_agg_snorm <- wide_agg_snorm[which(keep == T), ]
+
+taxa <- rownames(wide_agg_snorm)
+keep <- c()
+for(i in 1:length(taxa)){
+  numgenes <- length(grep(taxa[i], spark_key$Taxonomy))
+  if(numgenes < 100){
+    keep[i] <- FALSE
+  }else{
+    keep[i] <- TRUE
+  }
+}
+
+wide_agg_snorm <- wide_agg_snorm[which(keep == T), ]
 
 # Networks
 cor.data <- expand.grid(rownames(wide_agg_snorm), rownames(wide_agg_snorm))
@@ -229,6 +294,9 @@ trout_key$Taxonomy <- gsub("unclassified Pelagophyceae", "Ochrophyta", trout_key
 trout_key$Taxonomy <- gsub("unclassified", "Unclassified", trout_key$Taxonomy)
 trout_key$Taxonomy <- gsub("Unclassified ", "Unclassified", trout_key$Taxonomy)
 trout_key$Taxonomy <- gsub("UnclassifiedIsochrysidales", "Haptophyta", trout_key$Taxonomy)
+trout_key$Taxonomy <- gsub("Not classified", "Unclassified", trout_key$Taxonomy)
+trout_key$Taxonomy <- gsub(";;;", ";", trout_key$Taxonomy)
+trout_key$Taxonomy <- gsub(";;", ";", trout_key$Taxonomy)
 trout_key$Taxonomy[grep("Blank", trout_key$Taxonomy)] <- "Unclassified"
 trout_key <- trout_key[which(trout_key$Taxonomy != "Unclassified" & trout_key$Taxonomy != "internal standard" & trout_key$Taxonomy != ""),]
 
@@ -249,6 +317,35 @@ agg_tnorm$Time <- factor(agg_tnorm$Time, levels = c("0", "4", "8", "12", "16", "
 wide_agg_tnorm <- reshape(agg_tnorm, direction = "wide", timevar = "Time", idvar = "Taxonomy")
 rownames(wide_agg_tnorm) <- wide_agg_tnorm$Taxonomy
 wide_agg_tnorm <- wide_agg_tnorm[,2:dim(wide_agg_tnorm)[2]]
+
+
+taxa <- rownames(wide_agg_tnorm)
+keep <- c()
+for(i in 1:length(taxa)){
+  semicolons <- lengths(regmatches(taxa[i], gregexpr(";", taxa[i])))
+  unclassifieds <- lengths(regmatches(taxa[i], gregexpr("nclassified", taxa[i])))
+  order <- sapply(strsplit(as.character(taxa[i]),";"), `[`, 3)
+  if(semicolons < 3 | unclassifieds != 0 | order == ""){
+    keep[i] <- FALSE
+  }else{
+    keep[i] <- TRUE
+  }
+}
+
+wide_agg_tnorm <- wide_agg_tnorm[which(keep == T), ]
+
+taxa <- rownames(wide_agg_tnorm)
+keep <- c()
+for(i in 1:length(taxa)){
+  numgenes <- length(grep(taxa[i], trout_key$Taxonomy))
+  if(numgenes < 100){
+    keep[i] <- FALSE
+  }else{
+    keep[i] <- TRUE
+  }
+}
+
+wide_agg_tnorm <- wide_agg_tnorm[which(keep == T), ]
 
 # Networks
 cor.data <- expand.grid(rownames(wide_agg_tnorm), rownames(wide_agg_tnorm))
@@ -280,7 +377,7 @@ net <- graph_from_data_frame(cor.data, directed = F, vertices = vert.data)
 V(net)$color <- phylum_colors[factor(V(net)$Phylum, levels = unique(V(net)$Phylum))]
 V(net)$size <- log(vert.data$gene_expression)
 l <- layout_with_lgl(net)
-plot(net, vertex.color=V(net)$color, vertex.size = V(net)$size, , vertex.label = membership(ceb))
+plot(net, vertex.color=V(net)$color, vertex.size = V(net)$size, vertex.label = NA)
 legend(x=-1.75, y=0.5, unique(V(net)$Phylum), pch=21, col="#777777", pt.bg=phylum_colors, pt.cex=2, cex=.8, bty="n", ncol=1)
 #
 
