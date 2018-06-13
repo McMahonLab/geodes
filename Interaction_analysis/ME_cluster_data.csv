@@ -1,0 +1,43 @@
+,taxa,gene_expression,Phylum,Cluster
+1,Actinobacteria;Actinobacteria;Actinomycetales;acI;acI-A;acI-A7,1097760.23710412,Actinobacteria,1
+27,Actinobacteria;Actinobacteria;Actinomycetales;acI;acI-A;acI-A1,2614686.25717362,Actinobacteria,1
+28,Actinobacteria;Actinobacteria;Actinomycetales;acI;acI-A;acI-A5,3595257.57354818,Actinobacteria,1
+29,Actinobacteria;Actinobacteria;Actinomycetales;acI;acI-A;acI-A6,32634076.7010066,Actinobacteria,1
+2,Actinobacteria;Actinobacteria;Corynebacteriales;Mycobacteriaceae;Mycobacterium;,2699439.40331409,Actinobacteria,2
+30,Actinobacteria;Actinobacteria;Corynebacteriales;Mycobacteriaceae;,4857690.79709341,Actinobacteria,2
+3,Actinobacteria;Actinobacteria;Micrococcales;Microbacteriaceae;,6214465.91091967,Actinobacteria,3
+5,Bacteroidetes;Chitinophagia;Chitinophagales;,2754762.54594494,Bacteroidetes,3
+6,Bacteroidetes;Chitinophagia;Chitinophagales;Chitinophagaceae;,2773778.39443506,Bacteroidetes,3
+7,Proteobacteria;Betaproteobacteria;Burkholderiales;betIII;betIII-A;betIII-A1,2184758.36531338,Proteobacteria,3
+8,Proteobacteria;Betaproteobacteria;Burkholderiales;Burkholderiaceae;,1864899.20144435,Proteobacteria,3
+10,Bacteroidetes;Chitinophagia;Chitinophagales;Saprospiraceae;Haliscomenobacter;,1686506.87758143,Bacteroidetes,3
+11,Bacteroidetes;Sphingobacteriia;Sphingobacteriales;,4036887.44725884,Bacteroidetes,3
+12,Bacteroidetes;Sphingobacteria;Sphingobacteriales;bacI;bacI-A;,4101494.23786207,Bacteroidetes,3
+4,Bacteroidetes;Sphingobacteriia;Sphingobacteriales;Sphingobacteriaceae;,5563269.23250491,Bacteroidetes,4
+31,Actinobacteria;Actinobacteria;Micrococcales;,2345441.07246309,Actinobacteria,4
+33,Bacteroidetes;Cytophagia;Cytophagales;,2896151.61154654,Bacteroidetes,4
+9,Verrucomicrobia;Spartobacteria;Spartobacteriales;verI;verI-B;Xip-B1,4196000.62833238,Verrucomicrobia,5
+32,Armatimonadetes;Fimbriimonadia;Fimbriimonadales;Fimbriimonadaceae;Fimbriimonas;,1075118.37906926,Armatimonadetes,5
+13,Bacteroidetes;Flavobacteriia;Flavobacteriales;,6325649.11983891,Bacteroidetes,6
+14,Bacteroidetes;Flavobacteriia;Flavobacteriales;Flavobacteriaceae;Flavobacterium;,3941733.89309932,Bacteroidetes,6
+34,Bacteroidetes;Cytophagia;Cytophagales;Cyclobacteriaceae;Algoriphagus;,4877996.80460859,Bacteroidetes,6
+15,Proteobacteria;Betaproteobacteria;Neisseriales;Chromobacteriaceae;,190156.894374276,Proteobacteria,7
+16,Proteobacteria;Gammaproteobacteria;Pseudomonadales;Moraxellaceae;,223218.682994987,Proteobacteria,7
+35,Bacteroidetes;Sphingobacteriia;Sphingobacteriales;Sphingobacteriaceae;Mucilaginibacter;,167740.968376437,Bacteroidetes,7
+38,Proteobacteria;Alphaproteobacteria;Rhodospirillales;,160271.486121987,Proteobacteria,7
+17,Gemmatimonadetes;Gemmatimonadetes;Gemmatimonadales;Gemmatimonadaceae;Gemmatimonas;,6501911.57390601,Gemmatimonadetes,8
+36,Gemmatimonadetes;Gemmatimonadetes;Gemmatimonadales;Gemmatimonadaceae;,2501320.7282624,Gemmatimonadetes,8
+18,Planctomycetes;Planctomycetia;Planctomycetales;Planctomycetaceae;Pirellula;,3045868.46842678,Planctomycetes,9
+19,Planctomycetes;Planctomycetia;Planctomycetales;Planctomycetaceae;Pirellula;Pirellula sp. SH-Sr6A;Pirellula sp. SH-Sr6A;,2384755.58088093,Planctomycetes,9
+20,Planctomycetes;Planctomycetia;Planctomycetales;Planctomycetaceae;Pirellula;Pirellula sp. SH-Sr6A;,4009584.01935175,Planctomycetes,9
+37,Planctomycetes;Planctomycetia;Planctomycetales;,2928439.7842872,Planctomycetes,9
+21,Proteobacteria;Alphaproteobacteria;Sphingomonadales;Sphingomonadaceae;Sandarakinorhabdus;,3242985.69220917,Proteobacteria,10
+22,Proteobacteria;Betaproteobacteria;Burkholderiales;Comamonadaceae;,3013488.80363811,Proteobacteria,10
+39,Proteobacteria;Alphaproteobacteria;Rhodospirillales;Acetobacteraceae;,2200001.92603588,Proteobacteria,10
+23,Proteobacteria;Betaproteobacteria;Burkholderiales;Burkholderiaceae;Cupriavidus;Cupriavidus pauculus;Cupriavidus pauculus KF709;,1363501.73816764,Proteobacteria,11
+40,Proteobacteria;Betaproteobacteria;Burkholderiales;Burkholderiaceae;Cupriavidus;,476383.502062259,Proteobacteria,11
+24,Proteobacteria;Deltaproteobacteria;Myxococcales;Labilitrichaceae;Labilithrix;,11075787.8980788,Proteobacteria,12
+41,Proteobacteria;Deltaproteobacteria;Myxococcales;Labilitrichaceae;,10073463.8269771,Proteobacteria,12
+25,Verrucomicrobia;Opitutae;Opitutales;Opitutaceae;,2948850.94651971,Verrucomicrobia,13
+26,Verrucomicrobia;Verrucomicrobiae;Verrucomicrobiales;Verrucomicrobiaceae;Prosthecobacter;Prosthecobacter debontii;Prosthecobacter debontii ATCC 700200;,1084589.1544426,Verrucomicrobia,13
+42,Verrucomicrobia;Opitutae;Opitutales;,3199429.38870498,Verrucomicrobia,13
