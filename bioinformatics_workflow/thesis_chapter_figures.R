@@ -102,11 +102,11 @@ table(as.character(sig.mendota.key[,4]))
 #### Ok, that's well and good. so is anything diel?
 # Re-run code below for each gene and lake
 #searchterm <- c("rhodopsin|Rhodopsin")
-#searchterm <- c("phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene")
+searchterm <- c("phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene")
 #searchterm <- c("photosynth|Photosynth")
 #searchterm <- c("Rubisco|RuBisCO|rubisco|bisphosphate carboxylase")
 #searchterm <- c("sugar transport|ose transport")
-searchterm <- c("peroxidase|peroxide|catalase")
+#searchterm <- c("peroxidase|peroxide|catalase")
 
 
 marker_genes <- mendota_key[grep(searchterm, mendota_key$Product), ]
@@ -124,16 +124,80 @@ new_marker_genes_mnorm <- reshape(agg_marker_genes_mnorm, idvar = "Genes", timev
 rownames(new_marker_genes_mnorm) <- new_marker_genes_mnorm[, 1]
 new_marker_genes_mnorm <- new_marker_genes_mnorm[, 2:dim(new_marker_genes_mnorm)[2]]
 
-MErhodopsin <- zscore(colSums(new_marker_genes_mnorm)) #NO
-MErhodo_biosynth <- zscore(colSums(new_marker_genes_mnorm)) #YES
-MEphoto <- zscore(colSums(new_marker_genes_mnorm)) #SORT OF
-MErubisco <- zscore(colSums(new_marker_genes_mnorm)) #NO
-MEsugar <- zscore(colSums(new_marker_genes_mnorm)) #NO
-MEperoxidase <- zscore(colSums(new_marker_genes_mnorm)) #MOSTLY
+###
+# barplot(zscore(colSums(new_marker_genes_mnorm)))
+# MErhodopsin <- zscore(colSums(new_marker_genes_mnorm)) #NO
+# MErhodo_biosynth <- zscore(colSums(new_marker_genes_mnorm)) #YES
+# MEphoto <- zscore(colSums(new_marker_genes_mnorm)) #SORT OF
+# MErubisco <- zscore(colSums(new_marker_genes_mnorm)) #NO
+# MEsugar <- zscore(colSums(new_marker_genes_mnorm)) #NO
+# MEperoxidase <- zscore(colSums(new_marker_genes_mnorm)) #MOSTLY
+# 
+df <- data.frame(time = names(MErhodo_biosynth), counts = MErhodo_biosynth)
+df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+ME1 <- ggplot(df, aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#5ab4ac", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM", "value.32" = "1PM", "value.36" = "5PM", "value.40" = "9PM", "value.44" = "1AM"))
+# 
+# df <- data.frame(time = names(MEphoto), counts = MEphoto)
+# df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+# ME2 <- ggplot(df, aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#5ab4ac", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM", "value.32" = "1PM", "value.36" = "5PM", "value.40" = "9PM", "value.44" = "1AM"))
+# 
+# df <- data.frame(time = names(MEperoxidase), counts = MEperoxidase)
+# df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+# ME3 <- ggplot(df, aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#5ab4ac", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM", "value.32" = "1PM", "value.36" = "5PM", "value.40" = "9PM", "value.44" = "1AM"))
 
-#Plot as heatmaps
-diel_mendota_genes <- rep(c("rhodopsin_biosynthesis", "photosynthesis", "reactive_oxygen_defense"), each = 12)
-diel_mendota_counts <- c(MErhodo_biosynth, MEphoto, MEperoxidase)
-diel_mendota_time <- c(names(MErhodo_biosynth), names(MEphoto), names(MEperoxidase))
-diel_mendota <- data.frame(Genes = diel_mendota_genes, Counts = diel_mendota_counts, Time = diel_mendota_time)
-ggplot(diel_mendota, aes(x = Time, y = Genes, fill = Counts)) + geom_tile() + scale_fill_gradient2(low = "dodgerblue", mid = "white", high = "yellow")
+###
+# barplot(zscore(colSums(new_marker_genes_snorm)))
+# SPrhodopsin <- zscore(colSums(new_marker_genes_snorm)) #NO
+# SPrhodo_biosynth <- zscore(colSums(new_marker_genes_snorm)) #NO
+# SPphoto <- zscore(colSums(new_marker_genes_snorm)) #YES BUT FLIPPED
+# SPrubisco <- zscore(colSums(new_marker_genes_snorm)) #NO
+# SPsugar <- zscore(colSums(new_marker_genes_snorm)) #NO
+# SPperoxidase <- zscore(colSums(new_marker_genes_snorm)) #NO
+# 
+# df <- data.frame(time = names(SPrhodo_biosynth), counts = SPrhodo_biosynth)
+# df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+# SP1 <- ggplot(df, aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#67a9cf", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM", "value.32" = "1PM", "value.36" = "5PM", "value.40" = "9PM", "value.44" = "1AM"))
+# 
+# df <- data.frame(time = names(SPphoto), counts = SPphoto)
+# df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+# SP2 <- ggplot(df, aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#67a9cf", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM", "value.32" = "1PM", "value.36" = "5PM", "value.40" = "9PM", "value.44" = "1AM"))
+# 
+# df <- data.frame(time = names(SPperoxidase), counts = SPperoxidase)
+# df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+# SP3 <- ggplot(df, aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#67a9cf", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM", "value.32" = "1PM", "value.36" = "5PM", "value.40" = "9PM", "value.44" = "1AM"))
+
+###
+barplot(zscore(colSums(new_marker_genes_tnorm)))
+TBrhodopsin <- zscore(colSums(new_marker_genes_tnorm)) #NO
+TBrhodo_biosynth <- zscore(colSums(new_marker_genes_tnorm)) #NO
+TBphoto <- zscore(colSums(new_marker_genes_tnorm)) #YES BUT FLIPPED
+TBrubisco <- zscore(colSums(new_marker_genes_tnorm)) #NO
+TBsugar <- zscore(colSums(new_marker_genes_tnorm)) #NO
+TBperoxidase <- zscore(colSums(new_marker_genes_tnorm)) #NO
+
+df <- data.frame(time = names(TBrhodo_biosynth), counts = TBrhodo_biosynth)
+df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+TB1 <- ggplot(df[which(df$time != "value.44"),], aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#8c510a", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM"))
+
+df <- data.frame(time = names(TBphoto), counts = TBphoto)
+df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+TB2 <- ggplot(df[which(df$time != "value.44"),], aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#8c510a", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM"))
+
+df <- data.frame(time = names(TBperoxidase), counts = TBperoxidase)
+df$time <- factor(df$time, levels = c("value.0", "value.4", "value.8", "value.12", "value.16", "value.20", "value.24", "value.28", "value.32", "value.36", "value.40", "value.44"))
+TB3 <- ggplot(df[which(df$time != "value.44"),], aes(x = time, y = counts)) + geom_bar(stat = "identity", fill = "#8c510a", color = "black") + labs(x = NULL, y = "Z-score Normalized Transcripts/L") + scale_x_discrete(labels=c("value.0" = "5AM", "value.4" = "9AM", "value.8" = "1PM", "value.12" = "5PM", "value.16" = "9PM", "value.20" = "1AM", "value.24" = "5AM", "value.28" = "9AM"))
+
+# Put all the plots together
+
+diel_trends <- plot_grid(ME1, SP1, TB1, ME2, SP2, TB2, ME3, SP3, TB3, ncol = 3)
+
+
+#######
+# What are the most expressed genes and taxa in each lake?
+
+totals <- rowSums(snorm)
+totals <- totals[order(totals, decreasing = T)]
+topgenes <- names(totals[1:1000])
+geneinfo <- spark_key[match(topgenes, spark_key$Gene),]
+geneinfo <- geneinfo[grep("photo|ribulose-bisphosphate|chloro|hypothetical", geneinfo$Product, invert = T),]
+geneinfo <- geneinfo[grep("Cyanobacteria", geneinfo$Taxonomy, invert = T),]
