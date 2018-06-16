@@ -5,7 +5,10 @@ library(cowplot)
 library(reshape2)
 library(GeneCycle)
 
-# Prove most things aren't diel
+zscore <- function(counts){
+  z <- (counts - mean(counts)) / sd(counts)
+  return(z)
+}
 
 #snorm <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
 #tnorm <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
@@ -15,12 +18,14 @@ mnorm <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Mendot
 #tnorm <- tnorm[, which(colnames(tnorm) != "GEODES065.nonrRNA")]
 mnorm <- mnorm[, which(colnames(mnorm) != "GEODES158.nonrRNA")]
 
-#mendota_key <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+mendota_key <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 #spark_key <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 #trout_key <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 
 # Sample data
 metadata <- read.csv(file = "C:/Users/Goose and Gander/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
+
+#### Prove most things aren't diel
 
 ### Abundance filtering
 # Before I begin a network analysis, I want to select only genes with cyclic trends
@@ -92,3 +97,43 @@ quantile(fdr.mendota$qval)
 sig.mendota <- t(new_abun_mnorm[which(fdr.mendota$qval < 0.05),])
 sig.mendota.key <- mendota_key[match(colnames(sig.mendota), mendota_key$Gene), ]
 table(as.character(sig.mendota.key[,4]))
+
+
+#### Ok, that's well and good. so is anything diel?
+# Re-run code below for each gene and lake
+#searchterm <- c("rhodopsin|Rhodopsin")
+#searchterm <- c("phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene")
+#searchterm <- c("photosynth|Photosynth")
+#searchterm <- c("Rubisco|RuBisCO|rubisco|bisphosphate carboxylase")
+#searchterm <- c("sugar transport|ose transport")
+searchterm <- c("peroxidase|peroxide|catalase")
+
+
+marker_genes <- mendota_key[grep(searchterm, mendota_key$Product), ]
+
+marker_genes_mnorm <- mnorm[match(marker_genes$Gene, rownames(mnorm)), ]
+marker_genes_mnorm <- marker_genes_mnorm[which(rowSums(marker_genes_mnorm) > (dim(marker_genes_mnorm)[2] * 1000)), ]
+
+#Aggregate by timepoint
+marker_genes_mnorm$Genes <- rownames(marker_genes_mnorm)
+marker_genes_mnorm <- melt(marker_genes_mnorm)
+marker_genes_mnorm$variable <- gsub(".nonrRNA", "", marker_genes_mnorm$variable)
+marker_genes_mnorm$Timepoint <- metadata$Timepoint[match(marker_genes_mnorm$variable, metadata$Sample)]
+agg_marker_genes_mnorm <- aggregate(value ~ Genes + Timepoint, data = marker_genes_mnorm, mean)
+new_marker_genes_mnorm <- reshape(agg_marker_genes_mnorm, idvar = "Genes", timevar = "Timepoint", direction = "wide")
+rownames(new_marker_genes_mnorm) <- new_marker_genes_mnorm[, 1]
+new_marker_genes_mnorm <- new_marker_genes_mnorm[, 2:dim(new_marker_genes_mnorm)[2]]
+
+MErhodopsin <- zscore(colSums(new_marker_genes_mnorm)) #NO
+MErhodo_biosynth <- zscore(colSums(new_marker_genes_mnorm)) #YES
+MEphoto <- zscore(colSums(new_marker_genes_mnorm)) #SORT OF
+MErubisco <- zscore(colSums(new_marker_genes_mnorm)) #NO
+MEsugar <- zscore(colSums(new_marker_genes_mnorm)) #NO
+MEperoxidase <- zscore(colSums(new_marker_genes_mnorm)) #MOSTLY
+
+#Plot as heatmaps
+diel_mendota_genes <- rep(c("rhodopsin_biosynthesis", "photosynthesis", "reactive_oxygen_defense"), each = 12)
+diel_mendota_counts <- c(MErhodo_biosynth, MEphoto, MEperoxidase)
+diel_mendota_time <- c(names(MErhodo_biosynth), names(MEphoto), names(MEperoxidase))
+diel_mendota <- data.frame(Genes = diel_mendota_genes, Counts = diel_mendota_counts, Time = diel_mendota_time)
+ggplot(diel_mendota, aes(x = Time, y = Genes, fill = Counts)) + geom_tile() + scale_fill_gradient2(low = "dodgerblue", mid = "white", high = "yellow")
