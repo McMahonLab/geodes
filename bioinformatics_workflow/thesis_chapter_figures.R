@@ -564,7 +564,7 @@ sig.res.day.key$Category <- "None"
 sig.res.day.key$Category[grep("photo|Photo", sig.res.day.key$Product)] <- "Photosynthesis"
 sig.res.day.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.day.key$Product)] <- "Rhodopsin"
 sig.res.day.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.day.key$Product)] <- "Sugar degradation"
-sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RubisCO"
+sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RuBisCO"
 sig.res.day.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.day.key$Product)] <- "Polyamines"
 sig.res.day.key$Category[grep("citrate lyase|Citrate lyase", sig.res.day.key$Product)] <- "rTCA"
 sig.res.day.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.day.key$Product)] <- "Nitrogenase"
@@ -582,7 +582,7 @@ sig.res.night.key$Category <- "None"
 sig.res.night.key$Category[grep("photo|Photo", sig.res.night.key$Product)] <- "Photosynthesis"
 sig.res.night.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.night.key$Product)] <- "Rhodopsin"
 sig.res.night.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.night.key$Product)] <- "Sugar degradation"
-sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RubisCO"
+sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RuBisCO"
 sig.res.night.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.night.key$Product)] <- "Polyamines"
 sig.res.night.key$Category[grep("citrate lyase|Citrate lyase", sig.res.night.key$Product)] <- "rTCA"
 sig.res.night.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.night.key$Product)] <- "Nitrogenase"
@@ -605,10 +605,15 @@ sig.abun_mnorm_night <- abun_mnorm[match(sig.res.night.key$Gene, rownames(abun_m
 sig.res.night.key$totals <- rowSums(sig.abun_mnorm_night)
 
 sig.res.key <- rbind(sig.res.day.key, sig.res.night.key)
+# Add in zero counts so bars are the same widths
+
+dummy <- data.frame("Gene" = rep("nogene", 4), "Genome" = rep("nogenome", 4), "Taxonomy" = rep("notax", 4), "Product" = rep("noproduct", 4), "ShortTax" = rep("noshorttax", 4), "Category" = c("Alkaline_phosphatase", "Chitinase", "Nitrite_reduction", "Polyamines"), "Condition" = c("night", "day", "night", "day"), "totals" = c(0, 0, 0, 0))
+
+sig.res.key <- rbind(sig.res.key, dummy)
 
 #ggplot(data = sig.res.key[which(sig.res.key$Category != "None"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Mendota")
 
-ggplot(data = sig.res.key[which(sig.res.key$Category != "None" & sig.res.key$Category != "Photosynthesis"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Mendota", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggplot(data = sig.res.key[which(sig.res.key$Category != "None" & sig.res.key$Category != "Photosynthesis"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Mendota", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0))
 
 ### Repeat with sparkling
 
@@ -662,7 +667,7 @@ sig.res.day.key$Category <- "None"
 sig.res.day.key$Category[grep("photo|Photo", sig.res.day.key$Product)] <- "Photosynthesis"
 sig.res.day.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.day.key$Product)] <- "Rhodopsin"
 sig.res.day.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.day.key$Product)] <- "Sugar degradation"
-sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RubisCO"
+sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RuBisCO"
 sig.res.day.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.day.key$Product)] <- "Polyamines"
 sig.res.day.key$Category[grep("citrate lyase|Citrate lyase", sig.res.day.key$Product)] <- "rTCA"
 sig.res.day.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.day.key$Product)] <- "Nitrogenase"
@@ -680,7 +685,7 @@ sig.res.night.key$Category <- "None"
 sig.res.night.key$Category[grep("photo|Photo", sig.res.night.key$Product)] <- "Photosynthesis"
 sig.res.night.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.night.key$Product)] <- "Rhodopsin"
 sig.res.night.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.night.key$Product)] <- "Sugar degradation"
-sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RubisCO"
+sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RuBisCO"
 sig.res.night.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.night.key$Product)] <- "Polyamines"
 sig.res.night.key$Category[grep("citrate lyase|Citrate lyase", sig.res.night.key$Product)] <- "rTCA"
 sig.res.night.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.night.key$Product)] <- "Nitrogenase"
@@ -704,9 +709,14 @@ sig.res.night.key$totals <- rowSums(sig.abun_snorm_night)
 
 sig.res.key <- rbind(sig.res.day.key, sig.res.night.key)
 
+dummy <- data.frame("Gene" = rep("nogene", 5), "Genome" = rep("nogenome", 5), "Taxonomy" = rep("notax", 5), "Product" = rep("noproduct", 5), "ShortTax" = rep("noshorttax", 5), "Category" = c("Nitrite_reduction", "Nitrogenase", "Protease", "rTCA", "RuBisCO"), "Condition" = c("night", "night", "night", "night", "day"), "totals" = c(0, 0, 0, 0, 0))
+
+sig.res.key <- rbind(sig.res.key, dummy)
+
+
 #ggplot(data = sig.res.key[which(sig.res.key$Category != "None"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "sparkling")
 
-ggplot(data = sig.res.key[which(sig.res.key$Category != "None" & sig.res.key$Category != "Photosynthesis"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "sparkling", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggplot(data = sig.res.key[which(sig.res.key$Category != "None" & sig.res.key$Category != "Photosynthesis"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Sparkling Lake", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0))
 
 
 ### Repeat with troutling
@@ -761,7 +771,7 @@ sig.res.day.key$Category <- "None"
 sig.res.day.key$Category[grep("photo|Photo", sig.res.day.key$Product)] <- "Photosynthesis"
 sig.res.day.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.day.key$Product)] <- "Rhodopsin"
 sig.res.day.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.day.key$Product)] <- "Sugar degradation"
-sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RubisCO"
+sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RuBisCO"
 sig.res.day.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.day.key$Product)] <- "Polyamines"
 sig.res.day.key$Category[grep("citrate lyase|Citrate lyase", sig.res.day.key$Product)] <- "rTCA"
 sig.res.day.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.day.key$Product)] <- "Nitrogenase"
@@ -779,7 +789,7 @@ sig.res.night.key$Category <- "None"
 sig.res.night.key$Category[grep("photo|Photo", sig.res.night.key$Product)] <- "Photosynthesis"
 sig.res.night.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.night.key$Product)] <- "Rhodopsin"
 sig.res.night.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.night.key$Product)] <- "Sugar degradation"
-sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RubisCO"
+sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RuBisCO"
 sig.res.night.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.night.key$Product)] <- "Polyamines"
 sig.res.night.key$Category[grep("citrate lyase|Citrate lyase", sig.res.night.key$Product)] <- "rTCA"
 sig.res.night.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.night.key$Product)] <- "Nitrogenase"
@@ -803,6 +813,11 @@ sig.res.night.key$totals <- rowSums(sig.abun_tnorm_night)
 
 sig.res.key <- rbind(sig.res.day.key, sig.res.night.key)
 
+dummy <- data.frame("Gene" = rep("nogene", 3), "Genome" = rep("nogenome", 3), "Taxonomy" = rep("notax", 3), "Product" = rep("noproduct", 3), "ShortTax" = rep("noshorttax", 3), "Category" = c("Chitinase", "Rhodopsin", "Urease"), "Condition" = c("day", "night", "day"), "totals" = c(0, 0, 0))
+
+sig.res.key <- rbind(sig.res.key, dummy)
+
+
 #ggplot(data = sig.res.key[which(sig.res.key$Category != "None"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "troutling")
 
-ggplot(data = sig.res.key[which(sig.res.key$Category != "None" & sig.res.key$Category != "Photosynthesis" & sig.res.key$Category != "RubisCO"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "troutling", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggplot(data = sig.res.key[which(sig.res.key$Category != "None" & sig.res.key$Category != "Photosynthesis" & sig.res.key$Category != "RuBisCO"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Trout Bog", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0))

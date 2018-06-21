@@ -2,6 +2,7 @@ library(ggplot2)
 library(cowplot)
 library(reshape2)
 library(DESeq)
+library(GeneCycle)
 
 #path <- "D:/"
 path <- "C:/Users/Goose and Gander/Documents/"
@@ -19,11 +20,16 @@ spark_key <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_genekey_rec
 trout_key <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
 
 # Sample data
-metadata <- read.csv(file = "C:/Users/Alex/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
+metadata <- read.csv(file = "C:/Users/Goose and Gander/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
 
 # Take the top 20000 of each data table
 
 abun_mnorm <- mnorm[order(rowSums(mnorm), decreasing = T), ]
+#Nophoto
+mendota_key <- mendota_key[match(rownames(abun_mnorm), mendota_key$Gene), ]
+abun_mnorm <- abun_mnorm[grep("Cyano", mendota_key$Taxonomy, invert = T), ]
+mendota_key <- mendota_key[match(rownames(abun_mnorm), mendota_key$Gene), ]
+abun_mnorm <- abun_mnorm[grep("photo|Photo|chlorophyll|rhodopsin", mendota_key$Product, invert = T), ]
 abun_mnorm <- abun_mnorm[1:20000,]
 
 
@@ -118,7 +124,7 @@ sig.taxa <- sig.taxa[grep("NO CLASSIFICATION", sig.taxa$ShortTax, invert = T), ]
 sig.taxa <- sig.taxa[which(sig.taxa$Value > 30000000), ]
 
 # Must have at least 10 diel genes
-sig.taxa <- sig.taxa[which(sig.taxa$ShortTax == "unclassified Cyanobacteria" | sig.taxa$ShortTax == "Synechococcaceae" | sig.taxa$ShortTax == "Flavobacteriales" | sig.taxa$ShortTax == "Cyanobium" | sig.taxa$ShortTax == "Comamonadaceae" | sig.taxa$ShortTax == "Bdellovibrionales"),]
+sig.taxa <- sig.taxa[which(sig.taxa$ShortTax == "Actinobacteria" | sig.taxa$ShortTax == "Bacteroidetes" | sig.taxa$ShortTax == "Bdellovibrionales" | sig.taxa$ShortTax == "Comamonadaceae" | sig.taxa$ShortTax == "Flavobacteriales" | sig.taxa$ShortTax == "Gemmatimonas"),]
 
 ggplot(sig.taxa, aes(x = Time, y = ShortTax, color = ShortTax, size = log(Value))) + geom_point()
 
