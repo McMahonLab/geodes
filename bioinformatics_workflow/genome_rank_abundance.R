@@ -43,22 +43,22 @@ mendota_index <- which(mendota_key$Genome %in% binned_contigs$V1)
 mendota_to_replace <- mendota_key$Genome[mendota_index]
 mendota_bins <- binned_contigs$V2[match(mendota_to_replace, binned_contigs$V1)]
 mendota_key$Genome[mendota_index] <- mendota_bins
-remove <- substr(mendota_key$Genome, start = 1, stop = 2)
-mendota_key <- mendota_key[which(remove != "Ga"), ]
+# remove <- substr(mendota_key$Genome, start = 1, stop = 2)
+# mendota_key <- mendota_key[which(remove != "Ga"), ]
 
 trout_index <- which(trout_key$Genome %in% binned_contigs$V1)
 trout_to_replace <- trout_key$Genome[trout_index]
 trout_bins <- binned_contigs$V2[match(trout_to_replace, binned_contigs$V1)]
 trout_key$Genome[trout_index] <- trout_bins
-remove <- substr(trout_key$Genome, start = 1, stop = 2)
-trout_key <- trout_key[which(remove != "Ga"), ]
+# remove <- substr(trout_key$Genome, start = 1, stop = 2)
+# trout_key <- trout_key[which(remove != "Ga"), ]
 
 spark_index <- which(spark_key$Genome %in% binned_contigs$V1)
 spark_to_replace <- spark_key$Genome[spark_index]
 spark_bins <- binned_contigs$V2[match(spark_to_replace, binned_contigs$V1)]
 spark_key$Genome[spark_index] <- spark_bins
-remove <- substr(spark_key$Genome, start = 1, stop = 2)
-spark_key <- spark_key[which(remove != "Ga"), ]
+# remove <- substr(spark_key$Genome, start = 1, stop = 2)
+# spark_key <- spark_key[which(remove != "Ga"), ]
 
 # Step 2. Sum expression by genome
 mnorm <- mnorm[match(mendota_key$Gene, rownames(mnorm)), ]
@@ -165,3 +165,80 @@ trout_genome_sums$Taxonomy[which(trout_genome_sums$Type != "Algae" & trout_genom
 write.csv(mendota_genome_sums[1:100,], file = "C:/Users/Goose and Gander/Documents/geodes_data_tables/Mendota_genomes.csv", row.names = F)
 write.csv(spark_genome_sums[1:100,], file = "C:/Users/Goose and Gander/Documents/geodes_data_tables/Sparkling_genomes.csv", row.names = F)
 write.csv(trout_genome_sums[1:100,], file = "C:/Users/Goose and Gander/Documents/geodes_data_tables/Trout_genomes.csv", row.names = F)
+
+
+# Repeat with unbinned contigs
+mendota_genome_sums$Genome <- factor(mendota_genome_sums$Genome, levels = mendota_genome_sums$Genome[order(mendota_genome_sums$Totals, decreasing = T)])
+spark_genome_sums$Genome <- factor(spark_genome_sums$Genome, levels = spark_genome_sums$Genome[order(spark_genome_sums$Totals, decreasing = T)])
+trout_genome_sums$Genome <- factor(trout_genome_sums$Genome, levels = trout_genome_sums$Genome[order(trout_genome_sums$Totals, decreasing = T)])
+
+mendota_genome_sums <- mendota_genome_sums[order(mendota_genome_sums$Totals, decreasing = T), ]
+spark_genome_sums <- spark_genome_sums[order(spark_genome_sums$Totals, decreasing = T), ]
+trout_genome_sums <- trout_genome_sums[order(trout_genome_sums$Totals, decreasing = T), ]
+
+mendota_genome_sums[1:100, ]
+#Contigs in top 100 not in bins:
+# Ga0164294_10000172 cyanobacteria
+# Ga0164292_12430844 unclassified
+# Ga0164294_13130383 unclassified
+# Ga0164295_13777810 unclassified
+head(mendota_key$Taxonomy[grep("Ga0164295_13777810", mendota_key$Genome)])
+
+
+trout_genome_sums[1:100, ]
+head(trout_key$Taxonomy[grep("Ga0164296_12821481", trout_key$Genome)])
+#Contigs in top 100 not in bins:
+# Ga0164296_10000711 Bacteria
+# Ga0164296_10000716 Bacteria
+# Ga0164296_10000713 unclassified
+# Ga0164296_10023712 Cyanobacteria
+# Ga0164296_10047903 unclassified
+# Ga0164296_10003981 Bacteria
+# Ga0164296_10227194 None
+# Ga0164296_10003982 Bacteria
+# Ga0164296_10022544 unclassified
+# Ga0164296_12821481 unclassified
+# Ga0164296_10015381
+# Ga0164297_10114012
+# Ga0164296_10014351
+# Ga0164296_10027931
+# Ga0164296_10001167
+# Ga0164297_10315905
+# Ga0164296_10000719
+# Ga0164296_10554341
+# Ga0164296_10002207
+# Ga0164296_14324171
+# Ga0164296_10257441
+# Ga0164296_10002206
+# Ga0164296_10076061
+# Ga0164296_10001161
+# Ga0164296_10014484
+# Ga0164296_10000715
+# Ga0164296_10002421
+# Ga0164296_10013521
+# Ga0164296_10025793
+# Ga0164296_10001431
+# Ga0164296_10014352
+# Ga0164296_10230523
+# Ga0164296_10038914
+# Ga0164296_10000717
+# Ga0164296_10002204
+# Ga0164296_10003983
+# Ga0164296_10001545
+# Ga0164296_12794251
+# Ga0164296_10197834
+# Ga0164296_10115697
+# Ga0164296_10000775
+# Ga0164296_10132523
+
+
+spark_genome_sums[1:100, ]
+head(spark_key$Taxonomy[grep("Ga0164295_13443099", spark_key$Genome)])
+# Ga0164294_10000172 Cyano
+# Ga0164295_13296966 unclassified
+# Ga0187843_11222081 unclassified
+# Ga0164295_11120007 unclassified
+# Ga0164294_10000120 unclassified
+# Ga0187843_11256767 unclassified
+# Ga0164295_13443099 unclassified
+# more but my hand is cramping
