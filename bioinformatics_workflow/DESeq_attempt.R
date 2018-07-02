@@ -211,7 +211,7 @@ spark_key <- spark_key[match(rownames(abun_snorm), spark_key$Gene), ]
 # Aggregate by marker gene
 
 
-reduced_searchterm <- "ammonia monooxygenase|nitrogenase|Nitrogenase|Nif|Chitobiase|chitobiase|chitinase|Chitinase|glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase|carbon monoxide dehydrogenase|Carbon monoxide dehydrogenase|carbon-monoxide dehydrogenase|Carbon-monoxide dehydrogenase|sulfite reductase|Sulfite reductase|glucosaminidase|hexosaminidase|glyoxal oxidase|Glyoxal oxidase|galactose oxidase|Galactose oxidase|laccase|Glutathione S-transferase|glutathione S-transferase|ligninase|lignin peroxidase|Lignin peroxidase|manganese peroxidase|Mn peroxidase|Manganese peroxidase|coenzyme M reductase|methane monooxygenase|Methane monooxygenase|nitrate reductase|Nitrate reductase|nitrite reductase|Nitrite reductase|nitric oxide reductase|Nitric oxide reductase|nitrous oxide reductase|Nitrous oxide reductase|nitrous-oxide reductase|Nitrous-oxide reductase|Bacillolysin|bacillolysin|Thermolysin|thermolysin|Fungalysin|fungalysin|nitrate oxidoreductase|Nitrate oxidoreductase|nitrite oxidoreductase|Nitrite oxidoreductase|lactaldehyde dehydrogenase|aldehyde dehydrogenase|phenoloxidase|Phenoloxidase|sox|Sox|sulfate thiol esterase|sulfur oxidation|Sulfur oxidation|sulfur-oxidizing|Sulfur-oxidizing|serine protease|urease|xylose isomerase|Xylose isomerase|citrate lyase|Citrate lyase|sulfate reductase|Sulfate reductase|sulfate kinase|adenylyltransferase|formaldehyde|Formaldehyde|sulfide dehydrogenase|Sulfide dehydrogenase|formate dehydrogenase|Formate dehydrogenase|formyltransferase|hydrazine|Hydrazine|methylamine|Methylamine|methanol|Methanol|DMSO reductase|Rubisco|RuBisCO|rubisco|bisphosphate carboxylase|sulfur dioxygenase|Sulfur dioxygenase|sulfide quinione reductase|Sulfide quinone reductase|opsin|rhamnulose-1-phosphate|Rhamnulose-1-phosphate|fuculose-phosphate|Fuculose phosphate|ribulokinase|mannose-6-phosphate|putrescine|spermidine|polymamine|Putrescine|Spermidine|Polyamine|transport|urea carboxylase|Urea carboxylase|sulfide-quinone reductase|Sulfide-quinione reductase|photo|chlorophyll|Photo|Chlorophyll|alkaline phosphatase|Alkaline phosphatase"
+reduced_searchterm <- "ammonia monooxygenase|nitrogenase|Nitrogenase|Nif|Chitobiase|chitobiase|chitinase|Chitinase|glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase|carbon monoxide dehydrogenase|Carbon monoxide dehydrogenase|carbon-monoxide dehydrogenase|Carbon-monoxide dehydrogenase|sulfite reductase|Sulfite reductase|glucosaminidase|hexosaminidase|glyoxal oxidase|Glyoxal oxidase|galactose oxidase|Galactose oxidase|laccase|Glutathione S-transferase|glutathione S-transferase|ligninase|lignin peroxidase|Lignin peroxidase|manganese peroxidase|Mn peroxidase|Manganese peroxidase|coenzyme M reductase|methane monooxygenase|Methane monooxygenase|nitrate reductase|Nitrate reductase|nitrite reductase|Nitrite reductase|nitric oxide reductase|Nitric oxide reductase|nitrous oxide reductase|Nitrous oxide reductase|nitrous-oxide reductase|Nitrous-oxide reductase|Bacillolysin|bacillolysin|Thermolysin|thermolysin|Fungalysin|fungalysin|nitrate oxidoreductase|Nitrate oxidoreductase|nitrite oxidoreductase|Nitrite oxidoreductase|lactaldehyde dehydrogenase|aldehyde dehydrogenase|phenoloxidase|Phenoloxidase|sox|Sox|sulfate thiol esterase|sulfur oxidation|Sulfur oxidation|sulfur-oxidizing|Sulfur-oxidizing|serine protease|urease|xylose isomerase|Xylose isomerase|citrate lyase|Citrate lyase|sulfate reductase|Sulfate reductase|sulfate kinase|adenylyltransferase|formaldehyde|Formaldehyde|sulfide dehydrogenase|Sulfide dehydrogenase|formate dehydrogenase|Formate dehydrogenase|formyltransferase|hydrazine|Hydrazine|methylamine|Methylamine|methanol|Methanol|DMSO reductase|Rubisco|RuBisCO|rubisco|bisphosphate carboxylase|sulfur dioxygenase|Sulfur dioxygenase|sulfide quinione reductase|Sulfide quinone reductase|opsin|rhamnulose-1-phosphate|Rhamnulose-1-phosphate|fuculose-phosphate|Fuculose phosphate|ribulokinase|mannose-6-phosphate|putrescine|spermidine|polymamine|Putrescine|Spermidine|Polyamine|transport|urea carboxylase|Urea carboxylase|sulfide-quinone reductase|Sulfide-quinione reductase|photo|chlorophyll|Photo|Chlorophyll|alkaline phosphatase|Alkaline phosphatase|cytochrome c|ATP synthase|Cytochrome c|Starch-binding|starch phosphorylase|glycogen/starch/alpha-glucan phosphorylases|Starch synthase|starch synthase"
 
 keep <- grep(reduced_searchterm, mendota_key$Product)
 abun_mnorm <- abun_mnorm[keep,]
@@ -317,6 +317,11 @@ all_lakes$Category[grep("chlorophyll synthase", all_lakes$Product)] <- "Chloroph
 all_lakes$Category[grep("light-harvesting complex I ", all_lakes$Product)] <- "Light-harvesting complex I"
 all_lakes$Category[grep("light-harvesting complex II", all_lakes$Product)] <- "Light-harvesting complex II"
 all_lakes$Category[grep("alkaline phosphatase|Alkaline phosphatase", all_lakes$Product)] <- "Alkaline phosphatase"
+all_lakes$Category[grep("cytochrome c|ATP synthase|Cytochrome c", all_lakes$Product)] <- "Oxidative phosphorylation"
+all_lakes$Category[grep("Starch-binding", all_lakes$Product)] <- "OM Starch-binding"
+all_lakes$Category[grep("Starch synthase|starch synthase", all_lakes$Product)] <- "Starch synthase"
+all_lakes$Category[grep("starch phosphorylase|glycogen/starch/alpha-glucan phosphorylases", all_lakes$Product)] <- "Starch phosphorylase"
+
 
 all_lakes <- all_lakes[which(all_lakes$Category != "unknown"), ]
 all_lakes$Condition <- "NA"
@@ -326,7 +331,7 @@ all_lakes$Condition[which(all_lakes$Timepoint == 5 | all_lakes$Timepoint == 21 |
 
 # Start testing! First by lake. Rerun for each pair of lakes
 
-lake_comparison <- aggregate(value ~ variable + Category, all_lakes[which(all_lakes$Lake != "Trout Bog"),], sum)
+lake_comparison <- aggregate(value ~ variable + Category, all_lakes[which(all_lakes$Lake != "Sparkling Lake"),], sum)
 lake_comparison <- reshape(lake_comparison, idvar = "Category", timevar = "variable", direction = "wide")
 lake_comparison <- lake_comparison[which(is.na(lake_comparison[,2]) == F), ]
 rownames(lake_comparison) <- lake_comparison[,1]
@@ -372,7 +377,7 @@ metadata$Condition <- "NA"
 metadata$Condition[which(metadata$Time == 9 | metadata$Time == 13 | metadata$Time == 17)] <- "day"
 metadata$Condition[which(metadata$Time == 5 | metadata$Time == 21 | metadata$Time == 1)] <- "night"
 
-time_comparison <- aggregate(value ~ variable + Category, all_lakes[which(all_lakes$Lake == "Trout Bog"),], sum)
+time_comparison <- aggregate(value ~ variable + Category, all_lakes[which(all_lakes$Lake == "Lake Mendota"),], sum)
 time_comparison <- reshape(time_comparison, idvar = "Category", timevar = "variable", direction = "wide")
 time_comparison <- time_comparison[which(is.na(time_comparison[,2]) == F), ]
 rownames(time_comparison) <- time_comparison[,1]
@@ -401,10 +406,10 @@ res <- results(dds)
 sig.res <- res[which(res$padj < 0.05), ]
 
 plot.time <- all_lakes[which(all_lakes$Category %in% rownames(sig.res)),]
-plot.time <- plot.time[which(plot.time$Lake == "Trout Bog"),]
+plot.time <- plot.time[which(plot.time$Lake == "Lake Mendota"),]
 plot.time <- aggregate(value ~ Category + Condition, plot.time, mean)
 
-ggplot(data = plot.time[which(plot.time$Category != "Photosystem I" & plot.time$Category != "Photosystem II" & plot.time$Category != "RuBisCO" & plot.time$Category != "Sulfate adenylyltransferase"),], aes(x = Category, y = value, fill = Condition)) + geom_bar(stat = "identity", position = "dodge")  + geom_bar(stat = "identity", position = "dodge") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + labs(x = NULL, y = "Mean Transcripts/L", title = "Trout Bog") + coord_flip()
+ggplot(data = plot.time[which(plot.time$Category != "Photosystem I" & plot.time$Category != "Photosystem II" & plot.time$Category != "Sulfate adenylyltransferase"),], aes(x = Category, y = value, fill = Condition)) + geom_bar(stat = "identity", position = "dodge")  + geom_bar(stat = "identity", position = "dodge") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + labs(x = NULL, y = "Mean Transcripts/L", title = "Lake Mendota") + coord_flip()
 
 
 x <- aggregate(value ~ Taxonomy + Condition, all_lakes[which(all_lakes$Category == "Rhodopsin" & all_lakes$Lake == "Sparkling Lake"), ], mean)

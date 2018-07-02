@@ -10,9 +10,16 @@ read_counts$GEODES014 <- NULL
 read_counts$GEODES033 <- NULL
 read_counts$GEODES065 <- NULL
 read_counts$GEODES158 <- NULL
+#2236347069 D10
+#2236876030 J10
+#2236661000
 
-genome <- "2545555807"
-lake <- "Sparkling"
+#mendota acI-B1
+#2236661004
+#2236661002
+
+genome <- "2236661002"
+lake <- "Mendota"
 lakekey <- metadata$Lake[match(colnames(read_counts), metadata$Sample)]
 
 #What genes are expressed?
@@ -23,7 +30,7 @@ genomekey <- genomekey[order(genomekey$Totals, decreasing = T), ]
 genomekey[1:100, ]
 genomekey[grep("transport", genomekey$X3), ]
 barplot(zscore(colSums(read_counts[match(rownames(genomekey), rownames(read_counts)), which(lakekey == lake)])), las = 2)
-
+genomekey[grep("mannitol", genomekey$X3), ]
 #Mendota
 #acI-A6, 2602042079 - monosaccharide, sugar, dipeptide, carbohydrate, amino acid, iron, heavy metal cations, potassium, ammonium, nucleoside, branched amino, daunorubicin resistance, cobalt, multidrug, maltose, lipid, sperm/put, tricarboxylate, xylose, nicotinamide mononucleotide. Also, rhodopsin
 #LD28, 2524023178 - phosphate, amino acid, multidrug, magnesium/cobalt, peptide/nickel, potassium. Also, rhodopsin, PQQ-dehydrogenase, Sox
@@ -45,8 +52,10 @@ barplot(zscore(colSums(read_counts[match(rownames(genomekey), rownames(read_coun
 #acI-A6, 2602042079 - sugar, monosaccharide, amino acid, carbohydrate, dipeptide, sperm/put, branched amino, amino acid, nucleoside, iron, xylose, nicotinamide mononucleotide, cobalt, lipid, peptide/nickel, daunorubicin, potassium, carbohydrate, tricarboxylate, multidrug, ammonium, maltose, heavy metals. Also, fucose isomerase, rhodopsin.
 #Lhab-A1, 2524023174 - branched amino, C4-dicarboxylate, amino acid, type I secretion, chromate, nitrate/sulfonate/bicarbonate, carbohydrate, cation, phosphate, peptide, biopolymer, peptide/nickel, nitrate/nitrite, iron, melibiose, sperm/put, magnesium/cobalt, ammonium. Also, cyanophycin synthase.
 #acI-A5, 2606217190 - g3p, sulfur, carbohydrate, sugar, nitrate/sulfonate/bicarbonate, ammonium, branched amino, sperm/put, daunorubicin resistance, multidrug, cellobiose, phosphate, siderophore, nucleoside, cobalt, glutathione, peptide/nickel, molybdenum, molybdenate, nitrate/nitrite. Also, beta-galactosidase/glucosidase.
-#LD12, 2236661000 - mannitol, amino acid, branched amino, potassium, C4-dicarboxylate, phosphate, multidrug, magnesium, cation, long-chain fatty acid. Also, rhodopsin, rhodanese
+
+#LD12, 2236661000 D10 - mannitol, amino acid, branched amino, potassium, C4-dicarboxylate, phosphate, multidrug, magnesium, cation L09, long-chain fatty acid. Also, rhodopsin, rhodanese
 #LD12, 2236347069 - phosphate, amino acid, branched amino, antibiotic, magnesium, multidrug, antimicrobial peptide, cation, long-chain fatty acid, C4-dicarboxylate, ammonium. Also, rhodopsin
+
 #bacI-A1, 2545555807 - ion, magnesium/cobalt, multidrug, malonate, amino acid/polyamine, iron, anitmicrobial peptide, phosphate. Also, rhodopsin.
 
 # Are the Sparkling acI-A7s really different genomes? Yes, based on ANI.
@@ -56,18 +65,57 @@ barplot(zscore(colSums(read_counts[match(rownames(genomekey), rownames(read_coun
 
 # Are they correlated? report above
 
-lake <- "Sparkling"
-genome <- "2236347069"
+lake <- "Trout"
+genome <- "2593339188"
 genomekey <- genekey[which(as.character(genekey$X1) == genome), ]
 group1 <- colSums(read_counts[match(rownames(genomekey), rownames(read_counts)), which(lakekey == lake)])
 group2 <- colSums(read_counts[match(rownames(genomekey), rownames(read_counts)), which(lakekey == lake)])
 group3 <- colSums(read_counts[match(rownames(genomekey), rownames(read_counts)), which(lakekey == lake)])
+group4 <- colSums(read_counts[match(rownames(genomekey), rownames(read_counts)), which(lakekey == lake)])
 
 cor(group1, group2) 
 cor(group1, group3)
+cor(group1, group4)
 cor(group2, group3)
+cor(group2, group4)
+cor(group3, group4)
 
 #completeness?
 # 2264265190 48%
 # 2236661001 34%
 # 2236661005 80% (Damariscotta)
+
+
+# Repeat with Trout Bog acI-B1
+#completeness
+#2236661009 J17 65%
+#2236661006 I18 63% 
+#2236661002 D18 44$
+#ANI
+#009 vs 006 79%
+#009 vs 002 78%
+#002 vs 006 78%
+#corr over time
+#009 vs 006 1.00
+#009 vs 002 1.00
+#002 vs 006 1.00
+
+
+# Mendota acI-A6
+# new SAGS - not in IMG
+#2602042079 
+#2545555832
+#2616645017
+
+# Mendota LD12
+#2236347069 D10
+#2236876030 J10
+#2236661000 L09
+
+#TB Burkholderiales
+#2582580711
+#2582580642
+#2588253500
+#2582580700 # this one is less similar than the others
+#2593339188
+
