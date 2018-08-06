@@ -1,0 +1,797 @@
+---
+title: "Genome Centric Mapping"
+author: "Alex Linz"
+date: "August 1, 2018"
+output: html_document
+---
+
+##1. Installations
+
+1a. install python in interactive session
+
+```{bash, eval = F}
+mkdir python
+tar -xvf Python-2.7.13.tgz
+cd Python-2.7.13
+./configure --prefix=$(pwd)/../python
+make
+make install
+cd ..
+ls python
+ls python/bin
+
+export PATH=$(pwd)/python/bin:$PATH
+wget https://bootstrap.pypa.io/get-pip.py
+python get-pip.py
+pip install numpy
+pip install matplotlib
+pip install pysam
+pip install pandas
+pip install bcbio-gff
+easy_install -f http://biopython.org/DIST/ biopython
+
+tar -czvf python.tar.gz python/
+cp python.tar.gz /mnt/gluster/amlinz
+
+```
+
+1b. install genometools in interactive session
+
+```{bash, eval = F}
+tar -xvzf genometools-1.5.9.tar.gz
+cd genometools-1.5.9
+make cairo=no
+make prefix=$(pwd)/../genometools/ cairo=no install
+cd ..
+
+tar cvzf genometools.tar.gz genometools/
+cp genometools.tar.gz /mnt/gluster/amlinz
+```
+
+1c. install featureCounts in interactive session
+
+```{bash, eval = F}
+tar zxvf subread-1.5.2-source.tar.gz
+cd subread-1.5.2-source/src
+make -f Makefile.Linux
+cd ../..
+tar czvf subread.tar.gz subread-1.5.2-source
+
+# Move tarball back to gluster
+cp subread.tar.gz /mnt/gluster/amlinz
+
+```
+
+
+1d. move programs to zipped/ in my home directory
+```{bash, eval = F}
+mv /mnt/gluster/amlinz/python.tar.gz zipped/
+mv /mnt/gluster/amlinz/genometools.tar.gz zipped/
+mv /mnt/gluster/amlinz/subreads.tar.gz zipped/
+```
+
+
+##2. Process genomes for use as mapping database
+
+2a. make list of genomes to run
+```{bash, eval = F}
+# Don't include the standard
+for file in ref_MAGs_SAGs/fasta/2*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > refMAGs_SAGs_list.txt
+
+```
+
+2b. Submit job that runs my python script on each genome to extract gene info and rename genes
+
+03refMAGs_SAGs.sub:
+```{bash, eval = F}
+# 03refMAGs_SAGs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03refMAGs_SAGs_$(Cluster).log
+error = 03refMAGs_SAGs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Arch == "X86_64")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/03refMAGs_SAGs.sh
+arguments = $(samplename)
+output = 03refMAGs_SAGs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = /home/amlinz/zipped/genometools.tar.gz,/home/amlinz/ref_MAGs_SAGs/gffs/$(samplename).gff,/home/amlinz/ref_MAGs_SAGs/Readme.csv,scripts/ref_MAGs_SAGs.py,zipped/python.tar.gz
+transfer_output_files = sorted.$(samplename).gff,$(samplename).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 100MB
+request_disk = 100MB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from /home/amlinz/refMAGs_SAGs_list.txt
+
+```
+
+03refMAGs_SAGs.sh:
+```{bash, eval = F}
+#!/bin/bash
+#Install genome tools and python
+tar xvzf genometools.tar.gz
+tar xvzf python.tar.gz
+
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+export PATH=$(pwd)/genometools/bin:$PATH
+
+#Remove CRISPRs
+grep -v "CRISPR" $1.gff > temp.gff && mv temp.gff $1.gff
+#Setup and run python script
+chmod +x ref_MAGs_SAGs.py
+python ref_MAGs_SAGs.py $1
+
+#Remove all the duplicate gff-version lines
+grep -v "##gff-version 3" $1.parsed.gff > int1.gff
+# Move sequence region lines to top of file
+grep "##sequence-region" int1.gff > sequence_regions.gff
+grep -v "##sequence-region" int1.gff > not_sequence_regions.gff
+
+# Put it all back together and clean up
+echo '##gff-version 3' | cat - sequence_regions.gff not_sequence_regions.gff > $1.fixed.gff
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.fixed.gff #clean up the gff sorter
+
+rm *tar.gz
+rm *csv
+rm *py
+rm -r genometools
+rm -r home
+rm -rf python
+rm $1.fna
+rm $1.fna.*
+rm $1.*.gff
+rm int1.gff
+rm sequence_regions.gff
+rm not_sequence_regions.gff
+
+```
+
+scripts/ref_MAGs_SAGs.py:
+```{python, eval = F}
+###############################################################################
+# CodeTitle.py
+# Copyright (c) 2017, Joshua J Hamilton and Alex Linz
+# Affiliation: Department of Bacteriology
+#              University of Wisconsin-Madison, Madison, Wisconsin, USA
+# URL: http://http://mcmahonlab.wisc.edu/
+# All rights reserved.
+################################################################################
+# Make table of info from gff files
+################################################################################
+
+#%%#############################################################################
+### Import packages
+################################################################################
+
+from BCBio import GFF # Python package for working with GFF files
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+genome = sys.argv[1]
+#genome = '2582580615'
+taxonFile = 'Readme.csv'
+inputGff = genome + '.gff'
+outputGff = genome + 'parsed.gff'
+outputTable = genome + 'table.txt'
+
+#%%#############################################################################
+### Update the inputGff file. Replace ID with 'locus tag' field
+### Make a separate table with taxonomy and product name info
+################################################################################
+
+# Store the classification file as a dictionary
+
+taxonFile = "Readme.csv"
+readme = pandas.read_csv(taxonFile)
+readme = readme.fillna(value='')
+readme["TaxString"] = readme['Phylum'] + ';' + readme['Class'] + ';' + readme['Order'] + ';' + readme['Lineage'] + ';' + readme['Clade'] + ';' + readme['Tribe']
+readme['IMG OID'] = readme['IMG OID'].apply(str)
+taxonDict = readme.set_index('IMG OID').to_dict()['TaxString']
+
+# Read in the GFF file
+# Each record contains all sequences belonging to the same contig
+# For each sequence within the record, replace the ID with the locus_tag
+
+inFile = open(inputGff, 'r')
+outFile1 = open(outputGff, 'w')
+outFile2 = open(outputTable, 'w')
+
+limit_info = dict(gff_source = ["CDS"],)
+for record in GFF.parse(inFile, limit_info=limit_info):
+    for seq in record.features:
+        seq.id = seq.qualifiers['locus_tag'][0] # this is a list for some reason
+        seq.qualifiers['ID'][0] = genome + "_" + seq.id
+        if 'product' in seq.qualifiers.keys():
+            product = seq.qualifiers['product'][0]
+        else:
+            product = 'None given'
+        del seq.qualifiers['locus_tag']
+
+        taxonomy = taxonDict[genome]
+        outFile2.write(seq.qualifiers['ID'][0]+'\t'+genome+'\t'+str(taxonomy)+'\t'+product+'\n')
+    GFF.write([record], outFile1)
+
+inFile.close()
+outFile1.close()
+outFile2.close()
+
+```
+2b. Run a similar script on the GEODES bins - I want to generate a gff file for each genome, extract coding regions, and prep for merging with the ref MAGs SAGs files.
+
+03.2process_bins.sub:
+```{bash, eval = F}
+# 03.2process_bins.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 03.2process_bins_$(Cluster).log
+error = 03.2process_bins_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Arch == "X86_64") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/03.2process_bins.sh
+arguments = $(bin)
+output = 03.2process_bins_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = GEODES_binned_contigs.txt,zipped/genometools.tar.gz,scripts/metaG_parsing2.py,zipped/python.tar.gz,GEODES_bin_data.csv
+
+transfer_output_files = sorted.$(bin).gff,$(bin).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 500MB
+request_disk = 500MB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue bin from medium_GEODES_bins.txt
+
+```
+
+03.2process_bins.sh:
+```{bash, eval = F}
+#!/bin/bash
+
+#bin="GEODES005-binned.053"
+
+# Install programs
+tar xvzf genometools.tar.gz
+export PATH=$(pwd)/genometools/bin:$PATH
+tar xvzf python.tar.gz
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+
+# Get the fasta and gff file for the appropriate metagenome
+metaG=$(echo $1 | cut -d'-' -f1)
+cp /mnt/gluster/amlinz/metagenome_assemblies/fastas/$metaG.assembled.fna .
+cp /mnt/gluster/amlinz/metagenome_assemblies/gff/$metaG.assembled.gff .
+cp /mnt/gluster/amlinz/metagenome_assemblies/product_names/$metaG.assembled.product_names .
+
+# Get only contigs belonging to this bin from the gff file
+grep $1 GEODES_binned_contigs.txt | cut -d' ' -f1 > contig_list.txt
+while read line; do
+        grep $line $metaG.assembled.gff;
+        done < contig_list.txt > $1.gff
+
+# Fix GFF formatting
+awk -F'\t' -vOFS='\t' '{gsub("-1", "-", $7); gsub("1", "+", $7); print}' $1.gff > f1.$1.gff
+echo '##gff-version 3' | cat - f1.$1.gff > $1.gff
+
+chmod +x metaG_parsing2.py
+python metaG_parsing2.py $1 $metaG
+
+# Sort gff file
+gt gff3 -sort yes -tidy -retainids -o sorted.$1.gff $1.parsed.gff
+
+# Extract the coding regions from the fasta file
+#gt extractfeat -type CDS -seqid no -retainids yes -seqfile $metaG.assembled.fna -matchdescstart sorted.$1.gff >  CDS.$1.fna
+
+# clean up - everything except the CDS.$1.fna and the last gff file gets removed
+rm $metaG.assembled*
+rm *tar.gz
+rm -r genometools/
+rm f1.$1.gff
+rm contig_list.txt
+rm GEODES_binned_contigs.txt
+rm GEODES_bin_data.csv
+rm -r home/
+rm -rf python/
+rm metaG_parsing2.py
+
+```
+
+metaG_parsing2.py:
+```{python, eval = F}
+###############################################################################
+# CodeTitle.py
+# Copyright (c) 2017, Joshua J Hamilton and Alex Linz
+# Affiliation: Department of Bacteriology
+#              University of Wisconsin-Madison, Madison, Wisconsin, USA
+# URL: http://http://mcmahonlab.wisc.edu/
+# All rights reserved.
+################################################################################
+# Make table of info from gff files
+################################################################################
+
+#%%#############################################################################
+### Import packages
+################################################################################
+
+from BCBio import GFF # Python package for working with GFF files
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+genome = sys.argv[1]
+metaG = sys.argv[2]
+#genome = 'GEODES006'
+taxonFile = 'GEODES_bin_data.csv'
+productFile = metaG + '.assembled.product_names'
+inputGff = genome + '.gff'
+outputGff = genome + '.parsed.gff'
+outputTable = genome + '.table.txt'
+
+#%%#############################################################################
+### Update the inputGff file. Replace ID with 'locus tag' field
+### Make a separate table with taxonomy and product name info
+################################################################################
+
+# Store the classification file as a dictionary
+
+readme = pandas.read_csv(taxonFile, sep=',', header = 0)
+#readme.columns = ['Contig', 'TaxString']
+taxonDict = readme.set_index('bin').to_dict()['phylodist_taxonomy']
+
+# Store the product info as a dictionary
+
+product_table = pandas.read_csv(productFile, sep = '\t')
+product_table.columns = ['Gene', 'Product', 'KO']
+productDict = product_table.set_index('Gene').to_dict()['Product']
+
+# Read in the GFF file
+# Each record contains all sequences belonging to the same contig
+# For each sequence within the record, replace the ID with the locus_tag
+
+inFile = open(inputGff, 'r')
+outFile1 = open(outputGff, 'w')
+outFile2 = open(outputTable, 'w')
+
+limit_info = dict(gff_type = ["CDS"],)
+for record in GFF.parse(inFile, limit_info=limit_info):
+    for seq in record.features:
+        seq.id = seq.qualifiers['locus_tag'][0] # this is a list for some reason
+        seq.qualifiers['ID'][0] = seq.id + "_" + genome
+        del seq.qualifiers['locus_tag']
+
+        taxonomy = taxonDict.get(genome)
+        product = productDict.get(seq.id)
+        outFile2.write(seq.qualifiers['ID'][0]+'\t'+seq.id[:18]+'\t'+str(taxonomy)+'\t'+str(product)+'\n')
+    GFF.write([record], outFile1)
+
+inFile.close()
+outFile1.close()
+outFile2.close()
+
+```
+
+2c. Concatenate fasta and table files, and save sorted gffs in a single directoryl
+
+move_processed_genomes.sh:
+```{bash, eval = F}
+#!/bin/bash
+
+# Add the internal standard gff file to one of the sorted ones
+
+sed '2q;d' ref_MAGs_SAGs/gffs/pFN18A_DNA_transcript.gff > line2.gff
+cat sorted.2619619040.gff line2.gff > temp && mv temp sorted.2619619040.gff
+
+# Move sorted gff files to their own folder
+
+mkdir sorted_gff_files
+mv sorted*gff sorted_gff_files/
+
+# Concatenate the table files
+
+cat *table.txt > genome_mapping.table.txt
+
+# Concatenate fasta files
+cat ref_MAGs_SAGs/fastas/*.fna > /mnt/gluster/amlinz/fw_genomes.fna
+
+while read line; do
+    cat metaG_bins/$line.fna >> /mnt/gluster/amlinz/fw_genomes.fna;
+    done < medium_GEODES_bins.txt
+
+
+```
+
+In an interactive session, merge all of the gff files.
+
+```{bash, eval = F}
+#Install genome tools
+tar xvzf genometools.tar.gz
+
+#Update the path variable
+export PATH=$(pwd)/genometools/bin:$PATH
+
+gt gff3 -sort yes -tidy -retainids -o fw_genomes.gff *gff
+
+mv fw_genomes.gff /mnt/gluster/amlinz/
+
+rm *gff
+rm -r genometools
+rm genometools.tar.gz
+```
+
+3. Mapping time!
+
+Hopefully, I can use my standard mapping scripts from mapping the ref MAGs and SAGs originally now that I have a single fasta and gff file. Just need to change the names of the input files.
+
+3a. Build the mapping index from the reference fasta file you generated in step 2.
+
+08buildindex2.sub:
+```{bash, eval = F}
+# build_metaG_index.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 08build_index_$(Cluster).log
+error = 08build_index_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (OpSysMajorVer == 6) && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/08build_index2.sh
+output = 08build_index_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 16GB
+request_disk = 8GB
+#
+#
+queue
+
+```
+
+08buildindex2.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+#Build a re-usable mapping index
+cp /mnt/gluster/amlinz/fw_genomes.fna .
+
+tar -xvzf BBMap_36.99.tar.gz
+bbmap/bbmap.sh ref=fw_genomes.fna -Xmx12g
+
+# Make ref/ a tarball and move to gluster
+tar czvf fw_genomes.tar.gz ref/
+
+cp fw_genomes.tar.gz /mnt/gluster/amlinz/
+rm fw_genomes.tar.gz
+rm *database.fna
+rm -rf bbmap/
+
+```
+
+3b. run the mapping itself
+
+Make a list of metatranscriptomes to run:
+```{bash, eval = F}
+ls /mnt/gluster/amlinz/GEODES_nonrRNA_metaTs_2017-08-28 > path2mappingfastqs.txt
+```
+
+
+09mapping.sub:
+```{bash, eval = F}
+# 09mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 09mapping_$(Cluster).log
+error = 09mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/09mapping.sh
+arguments = $(samplename)
+output = 09mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory =20GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2mappingfastqs.txt
+
+```
+
+09mapping.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+#Map metatranscriptome reads to my pre-indexed database of reference genomes
+#Transfer metaT from gluster
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/GEODES_nonrRNA_metaTs_2017-08-28/$1 .
+cp /mnt/gluster/amlinz/fw_genomes.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf fw_genomes.tar.gz
+gzip -d $1
+name=$(basename $1 | cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.95.genomes.mapped.sam minid=0.95 trd=T sam=1.3 threads=1 build=1 mappedonly=T -Xmx12g
+
+# I want to store the output as bam. Use samtools to convert.
+./samtools/bin/samtools view -b -S -o $name.95.genomes.mapped.bam $name.95.genomes.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.95.genomes.mapped.bam /mnt/gluster/amlinz/GEODES_genome_mapping_results/
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+
+```
+
+
+##4. Count and tabulate mapped reads.
+
+4a. Run featureCounts to count reads against the gff reference index
+
+Make list of files to run:
+```{bash, eval = F}
+for file in /mnt/gluster/amlinz/GEODES_genome_mapping_results/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > bamfiles.txt
+```
+
+Run 10featurecounts.sub:
+```{bash, eval = F}
+
+
+# 10featurecounts.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 10featurecounts_$(Cluster).log
+error = 10featurecounts_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/10featurecounts.sh
+arguments = $(samplename)
+output = 10featurecounts_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/subreads.tar.gz
+transfer_output_files = $(samplename).95.genomes.CDS.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 500MB
+request_disk = 100MB
+#
+# Tell HTCondor to run every file in the provided list:
+queue samplename from bamfiles.txt
+
+
+```
+
+10featurecounts.sh:
+```{bash, eval = F}
+
+
+#!/bin/bash
+#Count mapped reads
+cp /mnt/gluster/amlinz/GEODES_genome_mapping_results/$1.95.genomes.mapped.bam .
+cp /mnt/gluster/amlinz/fw_genomes.gff .
+
+#Unzip programs
+tar -xvzf subreads.tar.gz
+#Pair reads
+#Count reads
+./subread-1.5.2-source/bin/featureCounts -t CDS -g ID --fracOverlap 0.75 -M --fraction --donotsort -a fw_genomes.gff -o $1.95.genomes.CDS.txt $1.95.genomes.mapped.bam
+
+#Clean up - don't delete the text file, that is being sent back to the submit node
+rm *.tar.gz
+rm -r subread-1.5.2-source
+rm *bam
+rm *gff
+rm *.txt.summary
+
+
+```
+
+4b. Put the individual files together into a table
+
+```{bash, eval = F}
+# get rownames
+awk '{print $1}' GEODES001-nonrRNA.95.genomes.CDS.txt | tail -n +2 > rownames.txt
+
+# remove unnecessary info from each individual file
+for file in *.CDS.txt;do awk '{print $7}' $file | tail -n +3 > temp.txt;sample=$(basename $file |cut -d'.' -f1);echo $sample | cat - temp.txt > temp2.txt && mv temp2.txt $file;done
+
+# get list of files to compile                                                                 
+files=$(echo *.95.genomes.CDS.txt)
+
+# combine into table
+paste rownames.txt $files > pasted_table.txt
+
+# remove duplicate whitespaces
+ tr -s "\t" < pasted_table.txt > GEODES_genomes_2018-08-06.txt
+```
+
+4c. Remove blank rows from the table and in the key file, keep only genes with mapped reads.
+
+11tableprocessing.sub:
+```{bash, eval = F}
+
+# 11tableprocessing.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 11tableprocessing_$(Cluster).log
+error = 11tableprocessing_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/11tableprocessing.sh
+output = 11tableprocessing_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,GEODES_genes_2017-10-25.txt,scripts/genekey.py
+transfer_output_files = GEODES2refMAGsSAGs_readcounts.txt,GEODES2refMAGsSAGS_geneinfo.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+queue
+```
+
+11tableprocessing.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+tar xvzf python.tar.gz
+mkdir home
+export PATH=$(pwd)/python/bin:$PATH
+export HOME=$(pwd)/home
+
+cp /mnt/gluster/amlinz/ref_MAGs_SAGs_key.txt .
+chmod +x genekey.py
+
+python genekey.py
+
+rm GEODES_genes_2017-10-25.txt
+rm ref_MAGs_SAGs_key.txt
+rm genekey.py
+rm -r home
+rm -rf python
+rm python.tar.gz
+```
+
+genekey.py:
+```{bash, eval = F}
+#%%#############################################################################
+### Import packages
+################################################################################
+
+import pandas
+import os
+import sys
+
+#%%#############################################################################
+### Define input files
+################################################################################
+
+readcounts = 'GEODES_genes_2017-10-25.txt'
+genekey  = 'ref_MAGs_SAGs_key.txt'
+outputcounts = 'GEODES2refMAGsSAGs_readcounts.txt'
+outputkey = 'GEODES2refMAGsSAGS_geneinfo.txt'
+
+#%%#############################################################################
+### Remove rows of all 0s from the table of read counts and sort rows alphabetically
+### Remove the same genes from the gene key and sort alphabetically
+################################################################################
+
+# Open files
+
+df = pandas.read_table(readcounts)
+inKey = pandas.read_table(genekey, header=None)
+outTable = open(outputcounts, 'w')
+outKey = open(outputkey, 'w')
+
+# Remove rows that sum to 0
+df = df.loc[(df.sum(axis=1) != 0),]
+
+# Sort rows by gene name
+df = df.sort_values(by = 'Geneid')
+
+df.to_csv(outputcounts, index=False)
+
+# Remove genes in the key file that are no longer in the table
+# Or maybe keep only genes that are still in the table
+inKey = inKey[inKey[0].isin(df['Geneid'])]
+inKey = inKey.sort_values(by = 0)
+inKey.to_csv(outKey, index=False)
+
+```

@@ -18,8 +18,8 @@ read_counts$GEODES158 <- NULL
 #2236661004
 #2236661002
 
-genome <- "2236661002"
-lake <- "Mendota"
+genome <- "2236661005"
+lake <- "Sparkling"
 lakekey <- metadata$Lake[match(colnames(read_counts), metadata$Sample)]
 
 #What genes are expressed?
