@@ -7,9 +7,9 @@ theme_set(theme_cowplot(font_size=18))
 metadata <- read.csv(file = "C:/Users/Goose and Gander/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", header = T)
 
 # Metagenomic data
-metaG_reads <- read.table("E:/geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", row.names = 1, sep = "\t")
+metaG_reads <- read.table("C:/Users/Goose and Gander/Documents/geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", row.names = 1, sep = "\t")
 colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
-metaG_key <- read.table("E:/geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = "\t", quote = "")
+metaG_key <- read.table("C:/Users/Goose and Gander/Documents/geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = "\t", quote = "")
 colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
 lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
 metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
@@ -112,8 +112,8 @@ rm(trout_metaG)
 rm(spark_metaG)
 rm(metaG_key)
 #Mendota
-mnorm <- read.csv("E:/geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", header = T, row.names = 1)
-mendota_key <- read.csv("E:/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+mnorm <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+mendota_key <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 
 # How expressed is each phylum?
 mendota_key$Taxonomy <- gsub("Bacteria;", "", mendota_key$Taxonomy)
@@ -168,7 +168,7 @@ mendota_intersect$Type <- c("Virus", "Algae", "Algae", "Bacteria", "Bacteria", "
 
 p <- ggplot(mendota_intersect[which(mendota_intersect$Taxonomy != "Chloroflexi"), ], aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 5, size = 7.5) + scale_color_manual(values = c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Lake Mendota") + theme(legend.position = "none")
 
-save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/mendota_dna_vs_rna_no_chloroflexi.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
+#save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/mendota_dna_vs_rna_no_chloroflexi.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
 
 #Clear mendota data from workspace and start with sparkling
 
@@ -178,8 +178,8 @@ rm(wide_mnorm)
 rm(mendota_metaG_phyla)
 rm(mendota_phyla)
 
-snorm <- read.csv("E:/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
-spark_key <- read.csv("E:/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+snorm <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+spark_key <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 
 spark_key$Taxonomy <- gsub("Bacteria;", "", spark_key$Taxonomy)
 spark_key$Taxonomy <- gsub("Eukaryota;", "", spark_key$Taxonomy)
@@ -237,7 +237,7 @@ sparkling_intersect$metaG[which(is.na(sparkling_intersect$metaG) == T)] <- 0
 p <- ggplot(sparkling_intersect, aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 5, size = 7.5) + scale_color_manual(values = c("limegreen", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Sparkling Lake") + theme(legend.position = "none")
 #export as 6x8in pdf
 
-save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/spark_dna_vs_rna.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
+#save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/spark_dna_vs_rna.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
 
 rm(averaged_tax)
 rm(sparkling_intersect)
@@ -248,8 +248,8 @@ rm(spark_phyla)
 
 #Finally Trout bog
 
-tnorm <- read.csv("E:/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
-trout_key <- read.csv("E:/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", header = T)
+tnorm <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Trout_ID90_normalized_readcounts.csv", header = T, row.names = 1)
+trout_key <- read.csv("C:/Users/Goose and Gander/Documents/geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", header = T)
 
 trout_key$Taxonomy <- gsub("Bacteria;", "", trout_key$Taxonomy)
 trout_key$Taxonomy <- gsub("Eukaryota;", "", trout_key$Taxonomy)
@@ -306,5 +306,5 @@ trout_intersect$Type <- c("Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria
 p <- ggplot(trout_intersect, aes(x = metaG, y = Sums, color = Type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = Type), force = 15, size = 7.5) + scale_color_manual(values = c("limegreen", "royalblue", "goldenrod")) + labs(x = "Proportion of metagenomic reads assigned", y = "Transcripts/L assigned", title = "Trout Bog") + theme(legend.position = "none")
 #export as 6x8in pdf
 
-save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/trout_dna_vs_rna.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
+#save_plot("C:/Users/Goose and Gander/Desktop/geodes/Plots/trout_dna_vs_rna.pdf", p, base_height = 6, base_aspect_ratio = 8/6)
 
