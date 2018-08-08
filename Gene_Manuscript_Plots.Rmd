@@ -12,13 +12,14 @@ text-align: justify}
 
 ```{r, Setup, eval = T, echo = F, message = F, warning = F}
 # Set up environment
-path <- "D:/"
-path2 <- "C:/Users/Alex/"
+path <- "C:/Users/Goose and Gander/Documents/"
+path2 <- "C:/Users/Goose and Gander/"
 
 library(ggplot2)
 library(cowplot)
 library(reshape2)
 library(ggrepel)
+library(raster)
 # library(DESeq2)
 
 zscore <- function(counts){
@@ -50,12 +51,12 @@ chemdata$Lake[grep("SP", chemdata$Sample)] <- "Sparkling"
 chemdata$Lake[grep("TB", chemdata$Sample)] <- "Trout"
 
 # Metagenome data
-metaG_reads <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", sep = ""), row.names = 1, sep = "\t")
-colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
-metaG_key <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = ""), sep = "\t", quote = "")
-colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
-lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
-metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
+# metaG_reads <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", sep = ""), row.names = 1, sep = "\t")
+# colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
+# metaG_key <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = ""), sep = "\t", quote = "")
+# colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
+# lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
+# metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
 
 ```
 
@@ -168,7 +169,7 @@ print[1:10,3:4]
 
 
 
-```{r, fig1, eval = T}
+```{r, fig1, eval = F}
 # Process metagenome gene key to include a phylum column. Fix any weird formats.
 
 metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
@@ -291,7 +292,7 @@ mendota_phyla$type <- type_key$type[match(mendota_phyla$Taxonomy, type_key$phylu
 mendota_phyla <- mendota_phyla[which(is.na(mendota_phyla$metaG) == F),]
 
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-ggplot(mendota_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Lake Mendota") + theme(legend.position = "none")
+p1 <- ggplot(mendota_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Lake Mendota") + theme(legend.position = "none")
 
 #Clear mendota data from workspace and start with sparkling
 
@@ -301,11 +302,138 @@ ggplot(mendota_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size
 # rm(mendota_metaG_phyla)
 # rm(mendota_phyla)
 
+#Process Sparkling expression data
 
+# Similar to above, add phylum column and change weird formats
+spark_key$Taxonomy <- gsub("Bacteria;", "", spark_key$Taxonomy)
+spark_key$Taxonomy <- gsub("Eukaryota;", "", spark_key$Taxonomy)
+spark_key$Phylum <- sapply(strsplit(as.character(spark_key$Taxonomy),";"), `[`, 1)
 
+spark_key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", spark_key$Phylum)
+spark_key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", spark_key$Phylum)
+spark_key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", spark_key$Phylum)
+spark_key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", spark_key$Phylum)
+spark_key$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", spark_key$Phylum)
+spark_key$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", spark_key$Phylum)
+spark_key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("NO CLASSIFICATION BASED ON GIVEN PHYLODIST", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("None", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", spark_key$Phylum)
+spark_key$Phylum <- gsub("unclassified unclassified", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", spark_key$Phylum)
+spark_key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", spark_key$Phylum)
+spark_key$Phylum <- gsub("unclassified", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("Unclassified ", "Unclassified", spark_key$Phylum)
+spark_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark_key$Phylum)
+spark_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", spark_key$Phylum)
+spark_key$Phylum[grep("Blank", spark_key$Phylum)] <- "Unclassified"
+
+# Remove unclassified genes and the internal standard
+spark_key <- spark_key[grep("Unclassified|internal standard", spark_key$Phylum, invert = T), ]
+
+# Prep read count table and switch to long format
+mnorm$Genes <- rownames(mnorm)
+mnorm <- mnorm[which(mnorm$Genes %in% spark_key$Gene), ]
+colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
+mnorm <- melt(mnorm)
+# Add columns of timepoint and phylum
+mnorm$Timepoint <- metadata$Timepoint[match(mnorm$variable, metadata$Sample)]
+mnorm$Taxonomy <- spark_key$Phylum[match(mnorm$Genes, spark_key$Gene)]
+
+# Aggregate by phylum
+spark_phyla <- aggregate(value ~ Taxonomy, data = mnorm, mean)
+
+# Keep the top half of both expressed and abundant phyla for plotting
+keep_phyla <- c(spark_metaG_phyla$Phylum[which(spark_metaG_phyla$value > quantile(spark_metaG_phyla$value)[3])], spark_phyla$Taxonomy[which(spark_phyla$value > quantile(spark_phyla$value)[3])])
+spark_phyla <- spark_phyla[which(spark_phyla$Taxonomy %in% keep_phyla),]
+spark_phyla$metaG <- spark_metaG_phyla$value[match(spark_phyla$Taxonomy, spark_metaG_phyla$Phylum)]
+spark_phyla$type <- type_key$type[match(spark_phyla$Taxonomy, type_key$phylum)]
+spark_phyla <- spark_phyla[which(is.na(spark_phyla$metaG) == F),]
+
+p2 <- ggplot(spark_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Sparkling Lake") + theme(legend.position = "none")
+
+#Process Trout expression data
+
+# Similar to above, add phylum column and change weird formats
+trout_key$Taxonomy <- gsub("Bacteria;", "", trout_key$Taxonomy)
+trout_key$Taxonomy <- gsub("Eukaryota;", "", trout_key$Taxonomy)
+trout_key$Phylum <- sapply(strsplit(as.character(trout_key$Taxonomy),";"), `[`, 1)
+
+trout_key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", trout_key$Phylum)
+trout_key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", trout_key$Phylum)
+trout_key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", trout_key$Phylum)
+trout_key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", trout_key$Phylum)
+trout_key$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", trout_key$Phylum)
+trout_key$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", trout_key$Phylum)
+trout_key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("NO CLASSIFICATION BASED ON GIVEN PHYLODIST", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("None", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", trout_key$Phylum)
+trout_key$Phylum <- gsub("unclassified unclassified", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", trout_key$Phylum)
+trout_key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", trout_key$Phylum)
+trout_key$Phylum <- gsub("unclassified", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("Unclassified ", "Unclassified", trout_key$Phylum)
+trout_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", trout_key$Phylum)
+trout_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", trout_key$Phylum)
+trout_key$Phylum[grep("Blank", trout_key$Phylum)] <- "Unclassified"
+
+# Remove unclassified genes and the internal standard
+trout_key <- trout_key[grep("Unclassified|internal standard", trout_key$Phylum, invert = T), ]
+
+# Prep read count table and switch to long format
+mnorm$Genes <- rownames(mnorm)
+mnorm <- mnorm[which(mnorm$Genes %in% trout_key$Gene), ]
+colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
+mnorm <- melt(mnorm)
+# Add columns of timepoint and phylum
+mnorm$Timepoint <- metadata$Timepoint[match(mnorm$variable, metadata$Sample)]
+mnorm$Taxonomy <- trout_key$Phylum[match(mnorm$Genes, trout_key$Gene)]
+
+# Aggregate by phylum
+trout_phyla <- aggregate(value ~ Taxonomy, data = mnorm, mean)
+
+# Keep the top half of both expressed and abundant phyla for plotting
+keep_phyla <- c(trout_metaG_phyla$Phylum[which(trout_metaG_phyla$value > quantile(trout_metaG_phyla$value)[3])], trout_phyla$Taxonomy[which(trout_phyla$value > quantile(trout_phyla$value)[3])])
+trout_phyla <- trout_phyla[which(trout_phyla$Taxonomy %in% keep_phyla),]
+trout_phyla$metaG <- trout_metaG_phyla$value[match(trout_phyla$Taxonomy, trout_metaG_phyla$Phylum)]
+trout_phyla$type <- type_key$type[match(trout_phyla$Taxonomy, type_key$phylum)]
+trout_phyla <- trout_phyla[which(is.na(trout_phyla$metaG) == F),]
+
+p3 <- ggplot(trout_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Trout Bog") + theme(legend.position = "none")
+
+plot_grid(p1, p2, p3, nrow = 1)
+```
+
+### The figure 1 chunk is hefty and needs to be run on my work desktop
+
+**Figure 1. Most highly expressed or abundant phyla by lake.** To determine which phyla were most abundant or most expressed during our time series, we analyzed metagenomic and metatranscriptomic read counts. The expression of clustered, nonredundant genes was aggregated by phylum and compared to the coverage of those phyla in metagenomes. Genes that could not be classified in a phylum were not included in this analysis. No positive relationship was observed between expression and abundance. The identity of the most expressed and most abundant phyla varied by lake. One phylum, Chloroflexi, was removed from the plot of Lake Mendota due to orders of magnitude higher expression and abundance. This phylum is likely an outlier.
+
+```{r, eval = T, echo = F}
+# Write a function to calculate CoV within replicates and average by gene
+within_reps <- function(readcounts){
+  readcounts2 <- readcounts[which(rowSums(readcounts) > 10000), ]
+  colnames(readcounts2) <- gsub(".nonrRNA", "", colnames(readcounts2))
+  timepoints <- metadata$Timepoint[match(colnames(readcounts2), metadata$Sample)]
+  timelist <- unique(timepoints)
+  time_table <- readcounts2[,which(timepoints == timelist[1])]
+  results <- data.frame(timepoint1 = apply(time_table, 1, cv))
+  
+  for(i in 2:length(timelist)){
+    time_table <- readcounts2[,which(timepoints == timelist[i])]
+    next_timepoint <- data.frame(apply(time_table, 1, cv))
+    colnames(next_timepoint) <- paste("timepoint", i, sep = "")
+    results <- cbind(results, next_timepoint)
+  }
+  return(results)
+}
 
 ```
 
-
-**Figure 1 Most highly expressed or abundant phyla by lake.** The expression of clustered, nonredundant genes was aggregated by phylum and compared to the coverage of those phyla in metagenomes. Genes that could not be classified in a phylum were not included in this analysis. No positive relationship was observed between expression and abundance. The identity of the most expressed and most abundant phyla varied by lake. One phylum, Chloroflexi, was removed from the plot of Lake Mendota due to orders of magnitude higher expression and abundance. This phylum is likely an outlier.
-
+**Figure 2. Assessing the variability of metatranscriptomic read counts.** One aim of this metatranscriptomic study was to provide information on the variability in gene expression in freshwater that could be used to guide further metatranscriptomic experiments. We calculated the coefficient of variance (CoV) for each gene both within replicates (A) and across replicates (B). High levels of variability were observed in genes from all three lakes. In panels C-E, example trends over time of genes are shown. 
