@@ -15,30 +15,30 @@ text-align: justify}
 path <- "C:/Users/Goose and Gander/Documents/"
 path2 <- "C:/Users/Goose and Gander/"
 
-library(ggplot2)
-library(cowplot)
-library(reshape2)
-library(ggrepel)
-library(raster)
-# library(DESeq2)
-
-zscore <- function(counts){
-  z <- (counts - mean(counts)) / sd(counts)
-  return(z)
-}
-
-# Metatranscriptome data
-snorm <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
-tnorm <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
-mnorm <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
-
-snorm <- snorm[, which(colnames(snorm) != "GEODES014.nonrRNA" & colnames(snorm) != "GEODES033.nonrRNA")]
-tnorm <- tnorm[, which(colnames(tnorm) != "GEODES065.nonrRNA")]
-mnorm <- mnorm[, which(colnames(mnorm) != "GEODES158.nonrRNA")]
-
-mendota_key <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
-spark_key <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
-trout_key <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
+# library(ggplot2)
+# library(cowplot)
+# library(reshape2)
+# library(ggrepel)
+# library(raster)
+# # library(DESeq2)
+# 
+# zscore <- function(counts){
+#   z <- (counts - mean(counts)) / sd(counts)
+#   return(z)
+# }
+# 
+# # Metatranscriptome data
+# snorm <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+# tnorm <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+# mnorm <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+# 
+# snorm <- snorm[, which(colnames(snorm) != "GEODES014.nonrRNA" & colnames(snorm) != "GEODES033.nonrRNA")]
+# tnorm <- tnorm[, which(colnames(tnorm) != "GEODES065.nonrRNA")]
+# mnorm <- mnorm[, which(colnames(mnorm) != "GEODES158.nonrRNA")]
+# 
+# mendota_key <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
+# spark_key <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
+# trout_key <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
 
 # Sample data
 metadata <- read.csv(file = paste(path2, "Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", sep = ""), header = T)
@@ -415,10 +415,10 @@ plot_grid(p1, p2, p3, nrow = 1)
 
 **Figure 1. Most highly expressed or abundant phyla by lake.** To determine which phyla were most abundant or most expressed during our time series, we analyzed metagenomic and metatranscriptomic read counts. The expression of clustered, nonredundant genes was aggregated by phylum and compared to the coverage of those phyla in metagenomes. Genes that could not be classified in a phylum were not included in this analysis. No positive relationship was observed between expression and abundance. The identity of the most expressed and most abundant phyla varied by lake. One phylum, Chloroflexi, was removed from the plot of Lake Mendota due to orders of magnitude higher expression and abundance. This phylum is likely an outlier.
 
-```{r, eval = T, echo = F}
+```{r, eval = F, echo = F}
 # Write a function to calculate CoV within replicates and average by gene
 within_reps <- function(readcounts){
-  readcounts2 <- readcounts[which(rowSums(readcounts) > 10000), ]
+  readcounts2 <- readcounts[which(rowSums(readcounts) > 1000), ]
   colnames(readcounts2) <- gsub(".nonrRNA", "", colnames(readcounts2))
   timepoints <- metadata$Timepoint[match(colnames(readcounts2), metadata$Sample)]
   timelist <- unique(timepoints)
@@ -426,14 +426,42 @@ within_reps <- function(readcounts){
   results <- data.frame(timepoint1 = apply(time_table, 1, cv))
   
   for(i in 2:length(timelist)){
-    time_table <- readcounts2[,which(timepoints == timelist[i])]
-    next_timepoint <- data.frame(apply(time_table, 1, cv))
-    colnames(next_timepoint) <- paste("timepoint", i, sep = "")
-    results <- cbind(results, next_timepoint)
+    if(length(which(timepoints == timelist[i])) > 1){
+      time_table <- readcounts2[,which(timepoints == timelist[i])]
+      next_timepoint <- data.frame(apply(time_table, 1, cv))
+      colnames(next_timepoint) <- paste("timepoint", i, sep = "")
+      results <- cbind(results, next_timepoint)
+    }
   }
   return(results)
 }
 
+mendota_within <- within_reps(mnorm)
+mendota_within <- apply(mendota_within, 1, mean, na.rm = T)
+mendota_across <- apply(mnorm, 1, cv, na.rm = T)
+cv_stat <- c(rep("within replicates", length(mendota_within)), rep("across samples", length(mendota_across)))
+mendota_cv_stats <- data.frame(type = cv_stat, stat = c(mendota_within, mendota_across))
+
+p1 <- ggplot(mendota_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Lake Mendota") + theme(legend.title = element_blank())
+
+spark_within <- within_reps(snorm)
+spark_within <- apply(spark_within, 1, mean, na.rm = T)
+spark_across <- apply(snorm, 1, cv, na.rm = T)
+cv_stat <- c(rep("within replicates", length(spark_within)), rep("across samples", length(spark_across)))
+spark_cv_stats <- data.frame(type = cv_stat, stat = c(spark_within, spark_across))
+
+p2 <- ggplot(spark_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Sparkling Lake") + theme(legend.title = element_blank())
+
+
+trout_within <- within_reps(tnorm)
+trout_within <- apply(trout_within, 1, mean, na.rm = T)
+trout_across <- apply(tnorm, 1, cv, na.rm = T)
+cv_stat <- c(rep("within replicates", length(trout_within)), rep("across samples", length(trout_across)))
+trout_cv_stats <- data.frame(type = cv_stat, stat = c(trout_within, trout_across))
+
+p3 <- ggplot(trout_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Trout Bog") + theme(legend.title = element_blank())
+
+plot_grid(p1, p2, p3, nrow = 3, labels = c("A", "B", "C"))
 ```
 
 **Figure 2. Assessing the variability of metatranscriptomic read counts.** One aim of this metatranscriptomic study was to provide information on the variability in gene expression in freshwater that could be used to guide further metatranscriptomic experiments. We calculated the coefficient of variance (CoV) for each gene both within replicates (A) and across replicates (B). High levels of variability were observed in genes from all three lakes. In panels C-E, example trends over time of genes are shown. 
