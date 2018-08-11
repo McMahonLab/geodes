@@ -15,30 +15,30 @@ text-align: justify}
 path <- "C:/Users/Goose and Gander/Documents/"
 path2 <- "C:/Users/Goose and Gander/"
 
-# library(ggplot2)
-# library(cowplot)
-# library(reshape2)
-# library(ggrepel)
-# library(raster)
-# # library(DESeq2)
-# 
-# zscore <- function(counts){
-#   z <- (counts - mean(counts)) / sd(counts)
-#   return(z)
-# }
-# 
-# # Metatranscriptome data
-# snorm <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
-# tnorm <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
-# mnorm <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
-# 
-# snorm <- snorm[, which(colnames(snorm) != "GEODES014.nonrRNA" & colnames(snorm) != "GEODES033.nonrRNA")]
-# tnorm <- tnorm[, which(colnames(tnorm) != "GEODES065.nonrRNA")]
-# mnorm <- mnorm[, which(colnames(mnorm) != "GEODES158.nonrRNA")]
-# 
-# mendota_key <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
-# spark_key <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
-# trout_key <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
+library(ggplot2)
+library(cowplot)
+library(reshape2)
+library(ggrepel)
+library(raster)
+library(DESeq2)
+
+zscore <- function(counts){
+  z <- (counts - mean(counts)) / sd(counts)
+  return(z)
+}
+
+# Metatranscriptome data
+snorm <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+tnorm <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+mnorm <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+
+snorm <- snorm[, which(colnames(snorm) != "GEODES014.nonrRNA" & colnames(snorm) != "GEODES033.nonrRNA")]
+tnorm <- tnorm[, which(colnames(tnorm) != "GEODES065.nonrRNA")]
+mnorm <- mnorm[, which(colnames(mnorm) != "GEODES158.nonrRNA")]
+
+mendota_key <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
+spark_key <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
+trout_key <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_genekey_reclassified_2018-03-03.csv", sep = ""), header = T)
 
 # Sample data
 metadata <- read.csv(file = paste(path2, "Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", sep = ""), header = T)
@@ -169,81 +169,82 @@ print[1:10,3:4]
 
 
 
-```{r, fig1, eval = F}
+```{r, fig1, eval = T, echo = F}
 # Process metagenome gene key to include a phylum column. Fix any weird formats.
-
-metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
-metaG_key$Taxonomy <- gsub("Eukaryota;", "", metaG_key$Taxonomy)
-metaG_key$Phylum <- sapply(strsplit(as.character(metaG_key$Taxonomy),";"), `[`, 1)
-
-metaG_key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("NO CLASSIFICATION BASED ON GIVEN PHYLODIST", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("None", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("unclassified unclassified", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("unclassified", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("Unclassified ", "Unclassified", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("TM7", "Saccharibacteria", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", metaG_key$Phylum)
-metaG_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", metaG_key$Phylum)
-metaG_key$Phylum[which(is.na(metaG_key$Phylum) == T)] <- "Unclassified"
-metaG_key$Phylum[grep("Blank", metaG_key$Phylum)] <- "Unclassified"
-
-# Remove unclassified genes to save on RAM
-metaG_key <- metaG_key[which(metaG_key$Phylum != "Unclassified"),]
-
-# Split metagenome read count tables by lake and prep for melting
-metaG_reads$Genes <- rownames(metaG_reads)
-metaG_reads <- metaG_reads[match(metaG_reads$Genes, metaG_key$Gene),]
-spark_metaG <- metaG_reads[,c(1,2, 11)]
-trout_metaG <- metaG_reads[,c(3,4, 11)]
-mendota_metaG <- metaG_reads[,c(5,6, 11)]
-
-# Use melt to switch from wide to long format
-spark_metaG <- melt(spark_metaG)
-trout_metaG <- melt(trout_metaG)
-mendota_metaG <- melt(mendota_metaG)
-
-# Add phylum column to each melted lake table
-mendota_metaG$Phylum <- metaG_key$Phylum[match(mendota_metaG$Genes, metaG_key$Gene)]
-trout_metaG$Phylum <- metaG_key$Phylum[match(trout_metaG$Genes, metaG_key$Gene)]
-spark_metaG$Phylum <- metaG_key$Phylum[match(spark_metaG$Genes, metaG_key$Gene)]
-
-# Aggregate counts by phylum
-mendota_metaG_phyla <- aggregate(value ~ Phylum, data = mendota_metaG, mean)
-spark_metaG_phyla <- aggregate(value ~ Phylum, data = spark_metaG, mean)
-trout_metaG_phyla <- aggregate(value ~ Phylum, data = trout_metaG, mean)
-
-# # Remove metaG datasets not needed any more to save RAM
-# rm(metaG_reads)
-# rm(mendota_metaG)
-# rm(trout_metaG)
-# rm(spark_metaG)
-# rm(metaG_key)
-
-# Include a key for colorcoding phyla by broader classification
-
-type_key <- data.frame(phylum = c("Actinobacteria", "Bacteroidetes", "Chloroflexi", "Crenarchaeota", "Cryptophyta", "Cyanobacteria", "Gemmatimonadetes", "Heterokonta", "Ignavibacteria", "Planctomycetes", "Proteobacteria", "Verrucomicrobia", "Viruses"), type = c("Bacteria", "Bacteria", "Bacteria", "Archaea", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses"))
+# 
+# metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
+# metaG_key$Taxonomy <- gsub("Eukaryota;", "", metaG_key$Taxonomy)
+# metaG_key$Phylum <- sapply(strsplit(as.character(metaG_key$Taxonomy),";"), `[`, 1)
+# 
+# metaG_key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("Haptophyta,Prymnesiophyceae,Isochrysidales,Noelaerhabdaceae,Emiliania,huxleyi", "Haptophyta", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("Heterokonta,Coscinodiscophyceae,Thalassiosirales,Thalassiosiraceae,Thalassiosira,pseudonana", "Heterokonta", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("Heterokonta,Pelagophyceae,Pelagomonadales,Pelagomonadaceae,Aureococcus,anophagefferens", "Heterokonta", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("Heterokonta,Ochrophyta,Eustigmataphyceae,Eustigmataceae,Nannochloropsis,gaditana", "Heterokonta", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("Heterokonta,Bacillariophyceae,Naviculales,Phaeodactylaceae,Phaeodactylum,tricornutum", "Heterokonta", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("unclassified unclassified unclassified unclassified unclassified", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("unclassified unclassified unclassified unclassified", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("unclassified unclassified unclassified", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("NO CLASSIFICATION MH", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("NO CLASSIFICATION LP", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("NO CLASSIFICATION BASED ON GIVEN PHYLODIST", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("None", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("unclassified unclassified Perkinsida", "Perkinsozoa", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("unclassified unclassified", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("unclassified Oligohymenophorea", "Ciliophora", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("unclassified Pelagophyceae", "Ochrophyta", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("unclassified", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("Unclassified ", "Unclassified", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("TM7", "Saccharibacteria", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("Ignavibacteriae", "Ignavibacteria", metaG_key$Phylum)
+# metaG_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", metaG_key$Phylum)
+# metaG_key$Phylum[which(is.na(metaG_key$Phylum) == T)] <- "Unclassified"
+# metaG_key$Phylum[grep("Blank", metaG_key$Phylum)] <- "Unclassified"
+# 
+# # Remove unclassified genes to save on RAM
+# metaG_key <- metaG_key[which(metaG_key$Phylum != "Unclassified"),]
+# 
+# # Split metagenome read count tables by lake and prep for melting
+# metaG_reads$Genes <- rownames(metaG_reads)
+# metaG_reads <- metaG_reads[match(metaG_reads$Genes, metaG_key$Gene),]
+# spark_metaG <- metaG_reads[,c(1,2, 11)]
+# trout_metaG <- metaG_reads[,c(3,4, 11)]
+# mendota_metaG <- metaG_reads[,c(5,6, 11)]
+# 
+# # Use melt to switch from wide to long format
+# spark_metaG <- melt(spark_metaG)
+# trout_metaG <- melt(trout_metaG)
+# mendota_metaG <- melt(mendota_metaG)
+# 
+# # Add phylum column to each melted lake table
+# mendota_metaG$Phylum <- metaG_key$Phylum[match(mendota_metaG$Genes, metaG_key$Gene)]
+# trout_metaG$Phylum <- metaG_key$Phylum[match(trout_metaG$Genes, metaG_key$Gene)]
+# spark_metaG$Phylum <- metaG_key$Phylum[match(spark_metaG$Genes, metaG_key$Gene)]
+# 
+# # Aggregate counts by phylum
+# mendota_metaG_phyla <- aggregate(value ~ Phylum, data = mendota_metaG, mean)
+# spark_metaG_phyla <- aggregate(value ~ Phylum, data = spark_metaG, mean)
+# trout_metaG_phyla <- aggregate(value ~ Phylum, data = trout_metaG, mean)
+# 
+# # # Remove metaG datasets not needed any more to save RAM
+# # rm(metaG_reads)
+# # rm(mendota_metaG)
+# # rm(trout_metaG)
+# # rm(spark_metaG)
+# # rm(metaG_key)
+# 
+# # Include a key for colorcoding phyla by broader classification
+# 
+# type_key <- data.frame(phylum = c("Actinobacteria", "Bacteroidetes", "Chloroflexi", "Crenarchaeota", "Cryptophyta", "Cyanobacteria", "Gemmatimonadetes", "Heterokonta", "Ignavibacteria", "Planctomycetes", "Proteobacteria", "Verrucomicrobia", "Viruses"), type = c("Bacteria", "Bacteria", "Bacteria", "Archaea", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses"))
 
 
 #Process Mendota expression data
 
 # Similar to above, add phylum column and change weird formats
 mendota_key$Taxonomy <- gsub("Bacteria;", "", mendota_key$Taxonomy)
+mendota_key$Taxonomy <- gsub("Proteobacteria;", "", mendota_key$Taxonomy)
 mendota_key$Taxonomy <- gsub("Eukaryota;", "", mendota_key$Taxonomy)
 mendota_key$Phylum <- sapply(strsplit(as.character(mendota_key$Taxonomy),";"), `[`, 1)
 
@@ -269,43 +270,44 @@ mendota_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mendota_k
 mendota_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", mendota_key$Phylum)
 mendota_key$Phylum[grep("Blank", mendota_key$Phylum)] <- "Unclassified"
 
-# Remove unclassified genes and the internal standard
-mendota_key <- mendota_key[grep("Unclassified|internal standard", mendota_key$Phylum, invert = T), ]
-
-# Prep read count table and switch to long format
-mnorm$Genes <- rownames(mnorm)
-mnorm <- mnorm[which(mnorm$Genes %in% mendota_key$Gene), ]
-colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
-mnorm <- melt(mnorm)
-# Add columns of timepoint and phylum
-mnorm$Timepoint <- metadata$Timepoint[match(mnorm$variable, metadata$Sample)]
-mnorm$Taxonomy <- mendota_key$Phylum[match(mnorm$Genes, mendota_key$Gene)]
-
-# Aggregate by phylum
-mendota_phyla <- aggregate(value ~ Taxonomy, data = mnorm, mean)
-
-# Keep the top half of both expressed and abundant phyla for plotting
-keep_phyla <- c(mendota_metaG_phyla$Phylum[which(mendota_metaG_phyla$value > quantile(mendota_metaG_phyla$value)[3])], mendota_phyla$Taxonomy[which(mendota_phyla$value > quantile(mendota_phyla$value)[3])])
-mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy %in% keep_phyla),]
-mendota_phyla$metaG <- mendota_metaG_phyla$value[match(mendota_phyla$Taxonomy, mendota_metaG_phyla$Phylum)]
-mendota_phyla$type <- type_key$type[match(mendota_phyla$Taxonomy, type_key$phylum)]
-mendota_phyla <- mendota_phyla[which(is.na(mendota_phyla$metaG) == F),]
-
-# Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p1 <- ggplot(mendota_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Lake Mendota") + theme(legend.position = "none")
-
-#Clear mendota data from workspace and start with sparkling
-
-# rm(averaged_tax)
-# rm(mendota_intersect)
-# rm(wide_mnorm)
-# rm(mendota_metaG_phyla)
-# rm(mendota_phyla)
-
-#Process Sparkling expression data
-
-# Similar to above, add phylum column and change weird formats
+# # Remove unclassified genes and the internal standard
+# mendota_key <- mendota_key[grep("Unclassified|internal standard", mendota_key$Phylum, invert = T), ]
+# 
+# # Prep read count table and switch to long format
+# mnorm$Genes <- rownames(mnorm)
+# mnorm <- mnorm[which(mnorm$Genes %in% mendota_key$Gene), ]
+# colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
+# mnorm <- melt(mnorm)
+# # Add columns of timepoint and phylum
+# mnorm$Timepoint <- metadata$Timepoint[match(mnorm$variable, metadata$Sample)]
+# mnorm$Taxonomy <- mendota_key$Phylum[match(mnorm$Genes, mendota_key$Gene)]
+# 
+# # Aggregate by phylum
+# mendota_phyla <- aggregate(value ~ Taxonomy, data = mnorm, mean)
+# 
+# # Keep the top half of both expressed and abundant phyla for plotting
+# keep_phyla <- c(mendota_metaG_phyla$Phylum[which(mendota_metaG_phyla$value > quantile(mendota_metaG_phyla$value)[3])], mendota_phyla$Taxonomy[which(mendota_phyla$value > quantile(mendota_phyla$value)[3])])
+# mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy %in% keep_phyla),]
+# mendota_phyla$metaG <- mendota_metaG_phyla$value[match(mendota_phyla$Taxonomy, mendota_metaG_phyla$Phylum)]
+# mendota_phyla$type <- type_key$type[match(mendota_phyla$Taxonomy, type_key$phylum)]
+# mendota_phyla <- mendota_phyla[which(is.na(mendota_phyla$metaG) == F),]
+# 
+# # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
+# p1 <- ggplot(mendota_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Lake Mendota") + theme(legend.position = "none")
+# 
+# #Clear mendota data from workspace and start with sparkling
+# 
+# # rm(averaged_tax)
+# # rm(mendota_intersect)
+# # rm(wide_mnorm)
+# # rm(mendota_metaG_phyla)
+# # rm(mendota_phyla)
+# 
+# #Process Sparkling expression data
+# 
+# # Similar to above, add phylum column and change weird formats
 spark_key$Taxonomy <- gsub("Bacteria;", "", spark_key$Taxonomy)
+spark_key$Taxonomy <- gsub("Proteobacteria;", "", spark_key$Taxonomy)
 spark_key$Taxonomy <- gsub("Eukaryota;", "", spark_key$Taxonomy)
 spark_key$Phylum <- sapply(strsplit(as.character(spark_key$Taxonomy),";"), `[`, 1)
 
@@ -331,34 +333,35 @@ spark_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark_key$P
 spark_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", spark_key$Phylum)
 spark_key$Phylum[grep("Blank", spark_key$Phylum)] <- "Unclassified"
 
-# Remove unclassified genes and the internal standard
-spark_key <- spark_key[grep("Unclassified|internal standard", spark_key$Phylum, invert = T), ]
-
-# Prep read count table and switch to long format
-mnorm$Genes <- rownames(mnorm)
-mnorm <- mnorm[which(mnorm$Genes %in% spark_key$Gene), ]
-colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
-mnorm <- melt(mnorm)
-# Add columns of timepoint and phylum
-mnorm$Timepoint <- metadata$Timepoint[match(mnorm$variable, metadata$Sample)]
-mnorm$Taxonomy <- spark_key$Phylum[match(mnorm$Genes, spark_key$Gene)]
-
-# Aggregate by phylum
-spark_phyla <- aggregate(value ~ Taxonomy, data = mnorm, mean)
-
-# Keep the top half of both expressed and abundant phyla for plotting
-keep_phyla <- c(spark_metaG_phyla$Phylum[which(spark_metaG_phyla$value > quantile(spark_metaG_phyla$value)[3])], spark_phyla$Taxonomy[which(spark_phyla$value > quantile(spark_phyla$value)[3])])
-spark_phyla <- spark_phyla[which(spark_phyla$Taxonomy %in% keep_phyla),]
-spark_phyla$metaG <- spark_metaG_phyla$value[match(spark_phyla$Taxonomy, spark_metaG_phyla$Phylum)]
-spark_phyla$type <- type_key$type[match(spark_phyla$Taxonomy, type_key$phylum)]
-spark_phyla <- spark_phyla[which(is.na(spark_phyla$metaG) == F),]
-
-p2 <- ggplot(spark_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Sparkling Lake") + theme(legend.position = "none")
-
-#Process Trout expression data
-
-# Similar to above, add phylum column and change weird formats
+# # Remove unclassified genes and the internal standard
+# spark_key <- spark_key[grep("Unclassified|internal standard", spark_key$Phylum, invert = T), ]
+# 
+# # Prep read count table and switch to long format
+# snorm$Genes <- rownames(snorm)
+# snorm <- snorm[which(snorm$Genes %in% spark_key$Gene), ]
+# colnames(snorm) <- gsub(".nonrRNA", "", colnames(snorm))
+# snorm <- melt(snorm)
+# # Add columns of timepoint and phylum
+# snorm$Timepoint <- metadata$Timepoint[match(snorm$variable, metadata$Sample)]
+# snorm$Taxonomy <- spark_key$Phylum[match(snorm$Genes, spark_key$Gene)]
+# 
+# # Aggregate by phylum
+# spark_phyla <- aggregate(value ~ Taxonomy, data = snorm, mean)
+# 
+# # Keep the top half of both expressed and abundant phyla for plotting
+# keep_phyla <- c(spark_metaG_phyla$Phylum[which(spark_metaG_phyla$value > quantile(spark_metaG_phyla$value)[3])], spark_phyla$Taxonomy[which(spark_phyla$value > quantile(spark_phyla$value)[3])])
+# spark_phyla <- spark_phyla[which(spark_phyla$Taxonomy %in% keep_phyla),]
+# spark_phyla$metaG <- spark_metaG_phyla$value[match(spark_phyla$Taxonomy, spark_metaG_phyla$Phylum)]
+# spark_phyla$type <- type_key$type[match(spark_phyla$Taxonomy, type_key$phylum)]
+# spark_phyla <- spark_phyla[which(is.na(spark_phyla$metaG) == F),]
+# 
+# p2 <- ggplot(spark_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Sparkling Lake") + theme(legend.position = "none")
+# 
+# #Process Trout expression data
+# 
+# # Similar to above, add phylum column and change weird formats
 trout_key$Taxonomy <- gsub("Bacteria;", "", trout_key$Taxonomy)
+trout_key$Taxonomy <- gsub("Proteobacteria;", "", trout_key$Taxonomy)
 trout_key$Taxonomy <- gsub("Eukaryota;", "", trout_key$Taxonomy)
 trout_key$Phylum <- sapply(strsplit(as.character(trout_key$Taxonomy),";"), `[`, 1)
 
@@ -384,31 +387,31 @@ trout_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", trout_key$P
 trout_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", trout_key$Phylum)
 trout_key$Phylum[grep("Blank", trout_key$Phylum)] <- "Unclassified"
 
-# Remove unclassified genes and the internal standard
-trout_key <- trout_key[grep("Unclassified|internal standard", trout_key$Phylum, invert = T), ]
-
-# Prep read count table and switch to long format
-mnorm$Genes <- rownames(mnorm)
-mnorm <- mnorm[which(mnorm$Genes %in% trout_key$Gene), ]
-colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
-mnorm <- melt(mnorm)
-# Add columns of timepoint and phylum
-mnorm$Timepoint <- metadata$Timepoint[match(mnorm$variable, metadata$Sample)]
-mnorm$Taxonomy <- trout_key$Phylum[match(mnorm$Genes, trout_key$Gene)]
-
-# Aggregate by phylum
-trout_phyla <- aggregate(value ~ Taxonomy, data = mnorm, mean)
-
-# Keep the top half of both expressed and abundant phyla for plotting
-keep_phyla <- c(trout_metaG_phyla$Phylum[which(trout_metaG_phyla$value > quantile(trout_metaG_phyla$value)[3])], trout_phyla$Taxonomy[which(trout_phyla$value > quantile(trout_phyla$value)[3])])
-trout_phyla <- trout_phyla[which(trout_phyla$Taxonomy %in% keep_phyla),]
-trout_phyla$metaG <- trout_metaG_phyla$value[match(trout_phyla$Taxonomy, trout_metaG_phyla$Phylum)]
-trout_phyla$type <- type_key$type[match(trout_phyla$Taxonomy, type_key$phylum)]
-trout_phyla <- trout_phyla[which(is.na(trout_phyla$metaG) == F),]
-
-p3 <- ggplot(trout_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Trout Bog") + theme(legend.position = "none")
-
-plot_grid(p1, p2, p3, nrow = 1)
+# # Remove unclassified genes and the internal standard
+# trout_key <- trout_key[grep("Unclassified|internal standard", trout_key$Phylum, invert = T), ]
+# 
+# # Prep read count table and switch to long format
+# tnorm$Genes <- rownames(tnorm)
+# tnorm <- tnorm[which(tnorm$Genes %in% trout_key$Gene), ]
+# colnames(tnorm) <- gsub(".nonrRNA", "", colnames(tnorm))
+# tnorm <- melt(tnorm)
+# # Add columns of timepoint and phylum
+# tnorm$Timepoint <- metadata$Timepoint[match(tnorm$variable, metadata$Sample)]
+# tnorm$Taxonomy <- trout_key$Phylum[match(tnorm$Genes, trout_key$Gene)]
+# 
+# # Aggregate by phylum
+# trout_phyla <- aggregate(value ~ Taxonomy, data = tnorm, mean)
+# 
+# # Keep the top half of both expressed and abundant phyla for plotting
+# keep_phyla <- c(trout_metaG_phyla$Phylum[which(trout_metaG_phyla$value > quantile(trout_metaG_phyla$value)[3])], trout_phyla$Taxonomy[which(trout_phyla$value > quantile(trout_phyla$value)[3])])
+# trout_phyla <- trout_phyla[which(trout_phyla$Taxonomy %in% keep_phyla),]
+# trout_phyla$metaG <- trout_metaG_phyla$value[match(trout_phyla$Taxonomy, trout_metaG_phyla$Phylum)]
+# trout_phyla$type <- type_key$type[match(trout_phyla$Taxonomy, type_key$phylum)]
+# trout_phyla <- trout_phyla[which(is.na(trout_phyla$metaG) == F),]
+# 
+# p3 <- ggplot(trout_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5) + geom_label_repel(aes(label = Taxonomy, color = type), force = 5, size = 7.5) + scale_color_manual(values = c("royalblue", "goldenrod")) + labs(x = "Mean proportion of metagenomic reads assigned", y = "Mean Transcripts/L assigned", title = "Trout Bog") + theme(legend.position = "none")
+# 
+# plot_grid(p1, p2, p3, nrow = 1)
 ```
 
 ### The figure 1 chunk is hefty and needs to be run on my work desktop
@@ -464,4 +467,375 @@ p3 <- ggplot(trout_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5)
 plot_grid(p1, p2, p3, nrow = 3, labels = c("A", "B", "C"))
 ```
 
+### Revise to include 1 lake since CoV is pretty equivalent between them. (so 4 panels total). Move the rest to supplemental
+
 **Figure 2. Assessing the variability of metatranscriptomic read counts.** One aim of this metatranscriptomic study was to provide information on the variability in gene expression in freshwater that could be used to guide further metatranscriptomic experiments. We calculated the coefficient of variance (CoV) for each gene both within replicates (A) and across replicates (B). High levels of variability were observed in genes from all three lakes. In panels C-E, example trends over time of genes are shown. 
+
+
+```{r, eval = T, warning = F, message = F, echo = F}
+
+##### DESeq differential expression testing
+
+abun_mnorm <- mnorm[order(rowSums(mnorm), decreasing = T), ]
+abun_mnorm <- abun_mnorm[1:20000,]
+
+colnames(abun_mnorm) <- gsub(".nonrRNA", "", colnames(abun_mnorm))
+
+input <- as.matrix(abun_mnorm)
+input <- input/100
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_mnorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_mnorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+sig.res <- res[which(res$padj < 0.05), ]
+sig.res.day <- sig.res[which(sig.res$log2FoldChange < 0), ]
+sig.res.night <- sig.res[which(sig.res$log2FoldChange > 0), ]
+sig.res.day.key <- mendota_key[match(rownames(sig.res.day), mendota_key$Gene),]
+sig.res.night.key <- mendota_key[match(rownames(sig.res.night), mendota_key$Gene),]
+
+# Make plots of this aggreagted by short taxa and groupd products
+
+sig.res.day.key$Taxonomy <- gsub(";;;", "", sig.res.day.key$Taxonomy)
+sig.res.day.key$Taxonomy <- gsub(";;", "", sig.res.day.key$Taxonomy)
+sig.res.day.key$Taxonomy <- gsub(";$", "", sig.res.day.key$Taxonomy)
+spl <- strsplit(as.character(sig.res.day.key$Taxonomy), ";")
+sig.res.day.key$ShortTax <- sapply(lapply(spl, tail, 1), paste, collapse=";")
+
+sig.res.night.key$Taxonomy <- gsub(";;;", "", sig.res.night.key$Taxonomy)
+sig.res.night.key$Taxonomy <- gsub(";;", "", sig.res.night.key$Taxonomy)
+sig.res.night.key$Taxonomy <- gsub(";$", "", sig.res.night.key$Taxonomy)
+spl <- strsplit(as.character(sig.res.night.key$Taxonomy), ";")
+sig.res.night.key$ShortTax <- sapply(lapply(spl, tail, 1), paste, collapse=";")
+
+# Make column by certain key words 
+sig.res.day.key$Category <- "None"
+sig.res.day.key$Category[grep("photo|Photo", sig.res.day.key$Product)] <- "Photosynthesis"
+sig.res.day.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.day.key$Product)] <- "Rhodopsin"
+sig.res.day.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.day.key$Product)] <- "Sugar degradation"
+sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RuBisCO"
+sig.res.day.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.day.key$Product)] <- "Polyamines"
+sig.res.day.key$Category[grep("citrate lyase|Citrate lyase", sig.res.day.key$Product)] <- "rTCA"
+sig.res.day.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.day.key$Product)] <- "Nitrogenase"
+sig.res.day.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.day.key$Product)] <- "Chitinase"
+sig.res.day.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.day.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.day.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.day.key$Product)] <- "Alkaline_phosphatase"
+sig.res.day.key$Category[grep("cellulase|cellulose", sig.res.day.key$Product)] <- "Cellulase"
+sig.res.day.key$Category[grep("peroxidase|peroxide|catalase", sig.res.day.key$Product)] <- "ROS"
+sig.res.day.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.day.key$Product)] <- "Methane/Ammonia"
+sig.res.day.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.day.key$Product)] <- "Nitrite_reduction"
+sig.res.day.key$Category[grep("urease", sig.res.day.key$Product)] <- "Urease"
+sig.res.day.key$Category[grep("protease", sig.res.day.key$Product)] <- "Protease"
+
+sig.res.night.key$Category <- "None"
+sig.res.night.key$Category[grep("photo|Photo", sig.res.night.key$Product)] <- "Photosynthesis"
+sig.res.night.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.night.key$Product)] <- "Rhodopsin"
+sig.res.night.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.night.key$Product)] <- "Sugar degradation"
+sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RuBisCO"
+sig.res.night.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.night.key$Product)] <- "Polyamines"
+sig.res.night.key$Category[grep("citrate lyase|Citrate lyase", sig.res.night.key$Product)] <- "rTCA"
+sig.res.night.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.night.key$Product)] <- "Nitrogenase"
+sig.res.night.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.night.key$Product)] <- "Chitinase"
+sig.res.night.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.night.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.night.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.night.key$Product)] <- "Alkaline_phosphatase"
+sig.res.night.key$Category[grep("cellulase|cellulose", sig.res.night.key$Product)] <- "Cellulase"
+sig.res.night.key$Category[grep("peroxidase|peroxide|catalase", sig.res.night.key$Product)] <- "ROS"
+sig.res.night.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.night.key$Product)] <- "Methane/Ammonia"
+sig.res.night.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.night.key$Product)] <- "Nitrite_reduction"
+sig.res.night.key$Category[grep("urease", sig.res.night.key$Product)] <- "Urease"
+sig.res.night.key$Category[grep("protease", sig.res.night.key$Product)] <- "Protease"
+
+sig.res.day.key$Condition <- "day"
+sig.res.night.key$Condition <- "night"
+
+sig.abun_mnorm_day <- abun_mnorm[match(sig.res.day.key$Gene, rownames(abun_mnorm)), which(conditions == "day")]
+sig.res.day.key$totals <- rowSums(sig.abun_mnorm_day)
+sig.abun_mnorm_night <- abun_mnorm[match(sig.res.night.key$Gene, rownames(abun_mnorm)), which(conditions == "night")]
+sig.res.night.key$totals <- rowSums(sig.abun_mnorm_night)
+
+sig.res.key <- rbind(sig.res.day.key, sig.res.night.key)
+# Add in zero counts so bars are the same widths
+
+dummy <- data.frame("Gene" = rep("nogene", 4), "Genome" = rep("nogenome", 4), "Taxonomy" = rep("notax", 4), "Product" = rep("noproduct", 4), "Phylum" = rep("Unclassified", 4), "ShortTax" = rep("noshorttax", 4), "Category" = c("Alkaline_phosphatase", "Chitinase", "Nitrite_reduction", "Polyamines"), "Condition" = c("night", "day", "night", "day"), "totals" = c(0, 0, 0, 0))
+
+sig.res.key <- rbind(sig.res.key, dummy)
+#sig.res.key$Phylum <- mendota_key$Phylum[match(sig.res.key$Gene, mendota_key$Gene)]
+
+simple.sig.res.key <- aggregate(totals ~ Category + Condition, sig.res.key, sum)
+simple.sig.res.key$totals[which(simple.sig.res.key$totals > 150000000000)] <- 150000000000
+simple.sig.res.key <- simple.sig.res.key[grep("Photosynthesis|Polyamines|Rhodopsin|ROS|RuBisCO|Sugar degradation", simple.sig.res.key$Category), ]
+
+p1 <- ggplot(data = simple.sig.res.key[which(simple.sig.res.key$Category != "None"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Mendota", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0))
+
+# Plot taxonomy information as proportional bars
+sig.res.key2 <- sig.res.key[grep("Photosynthesis|Polyamines|Rhodopsin|ROS|RuBisCO|Sugar degradation", sig.res.key$Category), ]
+sig.res.key2$Phylum[which(is.na(sig.res.key2$Phylum) == T)] <- "Unclassified"
+
+p2 <- ggplot(data = sig.res.key2[which(sig.res.key2$Condition == "day"), ], aes(x = Category, y = totals, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Day")
+#+ scale_fill_manual(values = c("#ff7f00", "#1f78b4", "#33a02c", "#e31a1c", "#ffff99", "darkgrey", "#6a3d9a"))
+
+p3 <- ggplot(data = sig.res.key2[which(sig.res.key2$Condition == "night"), ], aes(x = Category, y = totals, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Night")
+#+ scale_fill_manual(values = c("#ff7f00", "#1f78b4", "#b2df8a", "#33a02c", "#b15928", "#ffff99", "darkgrey", "#6a3d9a"))
+
+#plot_grid(p1, p2, p3, nrow = 1, labels = c("A", "B", "C"))
+p1
+p2
+p3
+
+# Repeat with Sparkling
+
+abun_snorm <- snorm[order(rowSums(snorm), decreasing = T), ]
+abun_snorm <- abun_snorm[1:20000,]
+
+colnames(abun_snorm) <- gsub(".nonrRNA", "", colnames(abun_snorm))
+
+input <- as.matrix(abun_snorm)
+input <- input/100
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_snorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_snorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+sig.res <- res[which(res$padj < 0.05), ]
+sig.res.day <- sig.res[which(sig.res$log2FoldChange < 0), ]
+sig.res.night <- sig.res[which(sig.res$log2FoldChange > 0), ]
+sig.res.day.key <- spark_key[match(rownames(sig.res.day), spark_key$Gene),]
+sig.res.night.key <- spark_key[match(rownames(sig.res.night), spark_key$Gene),]
+
+# Make plots of this aggreagted by short taxa and groupd products
+
+sig.res.day.key$Taxonomy <- gsub(";;;", "", sig.res.day.key$Taxonomy)
+sig.res.day.key$Taxonomy <- gsub(";;", "", sig.res.day.key$Taxonomy)
+sig.res.day.key$Taxonomy <- gsub(";$", "", sig.res.day.key$Taxonomy)
+spl <- strsplit(as.character(sig.res.day.key$Taxonomy), ";")
+sig.res.day.key$ShortTax <- sapply(lapply(spl, tail, 1), paste, collapse=";")
+
+sig.res.night.key$Taxonomy <- gsub(";;;", "", sig.res.night.key$Taxonomy)
+sig.res.night.key$Taxonomy <- gsub(";;", "", sig.res.night.key$Taxonomy)
+sig.res.night.key$Taxonomy <- gsub(";$", "", sig.res.night.key$Taxonomy)
+spl <- strsplit(as.character(sig.res.night.key$Taxonomy), ";")
+sig.res.night.key$ShortTax <- sapply(lapply(spl, tail, 1), paste, collapse=";")
+
+# Make column by certain key words 
+sig.res.day.key$Category <- "None"
+sig.res.day.key$Category[grep("photo|Photo", sig.res.day.key$Product)] <- "Photosynthesis"
+sig.res.day.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.day.key$Product)] <- "Rhodopsin"
+sig.res.day.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.day.key$Product)] <- "Sugar degradation"
+sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RuBisCO"
+sig.res.day.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.day.key$Product)] <- "Polyamines"
+sig.res.day.key$Category[grep("citrate lyase|Citrate lyase", sig.res.day.key$Product)] <- "rTCA"
+sig.res.day.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.day.key$Product)] <- "Nitrogenase"
+sig.res.day.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.day.key$Product)] <- "Chitinase"
+sig.res.day.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.day.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.day.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.day.key$Product)] <- "Alkaline_phosphatase"
+sig.res.day.key$Category[grep("cellulase|cellulose", sig.res.day.key$Product)] <- "Cellulase"
+sig.res.day.key$Category[grep("peroxidase|peroxide|catalase", sig.res.day.key$Product)] <- "ROS"
+sig.res.day.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.day.key$Product)] <- "Methane/Ammonia"
+sig.res.day.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.day.key$Product)] <- "Nitrite_reduction"
+sig.res.day.key$Category[grep("urease", sig.res.day.key$Product)] <- "Urease"
+sig.res.day.key$Category[grep("protease", sig.res.day.key$Product)] <- "Protease"
+
+sig.res.night.key$Category <- "None"
+sig.res.night.key$Category[grep("photo|Photo", sig.res.night.key$Product)] <- "Photosynthesis"
+sig.res.night.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.night.key$Product)] <- "Rhodopsin"
+sig.res.night.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.night.key$Product)] <- "Sugar degradation"
+sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RuBisCO"
+sig.res.night.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.night.key$Product)] <- "Polyamines"
+sig.res.night.key$Category[grep("citrate lyase|Citrate lyase", sig.res.night.key$Product)] <- "rTCA"
+sig.res.night.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.night.key$Product)] <- "Nitrogenase"
+sig.res.night.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.night.key$Product)] <- "Chitinase"
+sig.res.night.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.night.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.night.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.night.key$Product)] <- "Alkaline_phosphatase"
+sig.res.night.key$Category[grep("cellulase|cellulose", sig.res.night.key$Product)] <- "Cellulase"
+sig.res.night.key$Category[grep("peroxidase|peroxide|catalase", sig.res.night.key$Product)] <- "ROS"
+sig.res.night.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.night.key$Product)] <- "Methane/Ammonia"
+sig.res.night.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.night.key$Product)] <- "Nitrite_reduction"
+sig.res.night.key$Category[grep("urease", sig.res.night.key$Product)] <- "Urease"
+sig.res.night.key$Category[grep("protease", sig.res.night.key$Product)] <- "Protease"
+
+sig.res.day.key$Condition <- "day"
+sig.res.night.key$Condition <- "night"
+
+sig.abun_snorm_day <- abun_snorm[match(sig.res.day.key$Gene, rownames(abun_snorm)), which(conditions == "day")]
+sig.res.day.key$totals <- rowSums(sig.abun_snorm_day)
+sig.abun_snorm_night <- abun_snorm[match(sig.res.night.key$Gene, rownames(abun_snorm)), which(conditions == "night")]
+sig.res.night.key$totals <- rowSums(sig.abun_snorm_night)
+
+sig.res.key <- rbind(sig.res.day.key, sig.res.night.key)
+# Add in zero counts so bars are the same widths
+
+dummy <- data.frame("Gene" = rep("nogene", 4), "Genome" = rep("nogenome", 4), "Taxonomy" = rep("notax", 4), "Product" = rep("noproduct", 4), "Phylum" = rep("Unclassified", 4), "ShortTax" = rep("noshorttax", 4), "Category" = c("Alkaline_phosphatase", "Chitinase", "Nitrite_reduction", "Polyamines"), "Condition" = c("night", "day", "night", "day"), "totals" = c(0, 0, 0, 0))
+
+sig.res.key <- rbind(sig.res.key, dummy)
+#sig.res.key$Phylum <- spark_key$Phylum[match(sig.res.key$Gene, spark_key$Gene)]
+
+simple.sig.res.key <- aggregate(totals ~ Category + Condition, sig.res.key, sum)
+simple.sig.res.key$totals[which(simple.sig.res.key$totals > 25000000000)] <- 25000000000
+simple.sig.res.key <- simple.sig.res.key[grep("Photosynthesis|Polyamines|Rhodopsin|ROS|RuBisCO|Sugar degradation", simple.sig.res.key$Category), ]
+
+p1 <- ggplot(data = simple.sig.res.key[which(simple.sig.res.key$Category != "None"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Sparkling Lake", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0))
+
+# Plot taxonomy information as proportional bars
+sig.res.key2 <- sig.res.key[grep("Photosynthesis|Polyamines|Rhodopsin|ROS|RuBisCO|Sugar degradation", sig.res.key$Category), ]
+sig.res.key2$Phylum[which(is.na(sig.res.key2$Phylum) == T)] <- "Unclassified"
+
+p2 <- ggplot(data = sig.res.key2[which(sig.res.key2$Condition == "day"), ], aes(x = Category, y = totals, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Day")
+#+ scale_fill_manual(values = c("#ff7f00", "#1f78b4", "#33a02c", "#e31a1c", "#ffff99", "darkgrey", "#6a3d9a"))
+
+p3 <- ggplot(data = sig.res.key2[which(sig.res.key2$Condition == "night"), ], aes(x = Category, y = totals, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Night")
+#+ scale_fill_manual(values = c("#ff7f00", "#1f78b4", "#b2df8a", "#33a02c", "#b15928", "#ffff99", "darkgrey", "#6a3d9a"))
+
+#plot_grid(p1, p2, p3, nrow = 1, labels = c("A", "B", "C"))
+p1
+p2
+p3
+
+# Repeat with Trout Bog
+
+abun_tnorm <- tnorm[order(rowSums(tnorm), decreasing = T), ]
+abun_tnorm <- abun_tnorm[1:20000,]
+
+colnames(abun_tnorm) <- gsub(".nonrRNA", "", colnames(abun_tnorm))
+
+input <- as.matrix(abun_tnorm)
+input <- input/500
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_tnorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_tnorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+sig.res <- res[which(res$padj < 0.05), ]
+sig.res.day <- sig.res[which(sig.res$log2FoldChange < 0), ]
+sig.res.night <- sig.res[which(sig.res$log2FoldChange > 0), ]
+sig.res.day.key <- trout_key[match(rownames(sig.res.day), trout_key$Gene),]
+sig.res.night.key <- trout_key[match(rownames(sig.res.night), trout_key$Gene),]
+
+# Make plots of this aggreagted by short taxa and groupd products
+
+sig.res.day.key$Taxonomy <- gsub(";;;", "", sig.res.day.key$Taxonomy)
+sig.res.day.key$Taxonomy <- gsub(";;", "", sig.res.day.key$Taxonomy)
+sig.res.day.key$Taxonomy <- gsub(";$", "", sig.res.day.key$Taxonomy)
+spl <- strsplit(as.character(sig.res.day.key$Taxonomy), ";")
+sig.res.day.key$ShortTax <- sapply(lapply(spl, tail, 1), paste, collapse=";")
+
+sig.res.night.key$Taxonomy <- gsub(";;;", "", sig.res.night.key$Taxonomy)
+sig.res.night.key$Taxonomy <- gsub(";;", "", sig.res.night.key$Taxonomy)
+sig.res.night.key$Taxonomy <- gsub(";$", "", sig.res.night.key$Taxonomy)
+spl <- strsplit(as.character(sig.res.night.key$Taxonomy), ";")
+sig.res.night.key$ShortTax <- sapply(lapply(spl, tail, 1), paste, collapse=";")
+
+# Make column by certain key words 
+sig.res.day.key$Category <- "None"
+sig.res.day.key$Category[grep("photo|Photo", sig.res.day.key$Product)] <- "Photosynthesis"
+sig.res.day.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.day.key$Product)] <- "Rhodopsin"
+sig.res.day.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.day.key$Product)] <- "Sugar degradation"
+sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RuBisCO"
+sig.res.day.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.day.key$Product)] <- "Polyamines"
+sig.res.day.key$Category[grep("citrate lyase|Citrate lyase", sig.res.day.key$Product)] <- "rTCA"
+sig.res.day.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.day.key$Product)] <- "Nitrogenase"
+sig.res.day.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.day.key$Product)] <- "Chitinase"
+sig.res.day.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.day.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.day.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.day.key$Product)] <- "Alkaline_phosphatase"
+sig.res.day.key$Category[grep("cellulase|cellulose", sig.res.day.key$Product)] <- "Cellulase"
+sig.res.day.key$Category[grep("peroxidase|peroxide|catalase", sig.res.day.key$Product)] <- "ROS"
+sig.res.day.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.day.key$Product)] <- "Methane/Ammonia"
+sig.res.day.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.day.key$Product)] <- "Nitrite_reduction"
+sig.res.day.key$Category[grep("urease", sig.res.day.key$Product)] <- "Urease"
+sig.res.day.key$Category[grep("protease", sig.res.day.key$Product)] <- "Protease"
+
+sig.res.night.key$Category <- "None"
+sig.res.night.key$Category[grep("photo|Photo", sig.res.night.key$Product)] <- "Photosynthesis"
+sig.res.night.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.night.key$Product)] <- "Rhodopsin"
+sig.res.night.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.night.key$Product)] <- "Sugar degradation"
+sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RuBisCO"
+sig.res.night.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.night.key$Product)] <- "Polyamines"
+sig.res.night.key$Category[grep("citrate lyase|Citrate lyase", sig.res.night.key$Product)] <- "rTCA"
+sig.res.night.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.night.key$Product)] <- "Nitrogenase"
+sig.res.night.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.night.key$Product)] <- "Chitinase"
+sig.res.night.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.night.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.night.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.night.key$Product)] <- "Alkaline_phosphatase"
+sig.res.night.key$Category[grep("cellulase|cellulose", sig.res.night.key$Product)] <- "Cellulase"
+sig.res.night.key$Category[grep("peroxidase|peroxide|catalase", sig.res.night.key$Product)] <- "ROS"
+sig.res.night.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.night.key$Product)] <- "Methane/Ammonia"
+sig.res.night.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.night.key$Product)] <- "Nitrite_reduction"
+sig.res.night.key$Category[grep("urease", sig.res.night.key$Product)] <- "Urease"
+sig.res.night.key$Category[grep("protease", sig.res.night.key$Product)] <- "Protease"
+
+sig.res.day.key$Condition <- "day"
+sig.res.night.key$Condition <- "night"
+
+sig.abun_tnorm_day <- abun_tnorm[match(sig.res.day.key$Gene, rownames(abun_tnorm)), which(conditions == "day")]
+sig.res.day.key$totals <- rowSums(sig.abun_tnorm_day)
+sig.abun_tnorm_night <- abun_tnorm[match(sig.res.night.key$Gene, rownames(abun_tnorm)), which(conditions == "night")]
+sig.res.night.key$totals <- rowSums(sig.abun_tnorm_night)
+
+sig.res.key <- rbind(sig.res.day.key, sig.res.night.key)
+# Add in zero counts so bars are the same widths
+
+dummy <- data.frame("Gene" = rep("nogene", 4), "Genome" = rep("nogenome", 4), "Taxonomy" = rep("notax", 4), "Product" = rep("noproduct", 4), "Phylum" = rep("Unclassified", 4), "ShortTax" = rep("noshorttax", 4), "Category" = c("Alkaline_phosphatase", "Chitinase", "Nitrite_reduction", "Polyamines"), "Condition" = c("night", "day", "night", "day"), "totals" = c(0, 0, 0, 0))
+
+sig.res.key <- rbind(sig.res.key, dummy)
+#sig.res.key$Phylum <- trout_key$Phylum[match(sig.res.key$Gene, trout_key$Gene)]
+
+simple.sig.res.key <- aggregate(totals ~ Category + Condition, sig.res.key, sum)
+simple.sig.res.key$totals[which(simple.sig.res.key$totals > 500000000000)] <- 500000000000
+simple.sig.res.key <- simple.sig.res.key[grep("Photosynthesis|Polyamines|Rhodopsin|ROS|RuBisCO|Sugar degradation", simple.sig.res.key$Category), ]
+
+p1 <- ggplot(data = simple.sig.res.key[which(simple.sig.res.key$Category != "None"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Trout Bog", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0))
+
+# Plot taxonomy information as proportional bars
+sig.res.key2 <- sig.res.key[grep("Photosynthesis|Polyamines|Rhodopsin|ROS|RuBisCO|Sugar degradation", sig.res.key$Category), ]
+sig.res.key2$Phylum[which(is.na(sig.res.key2$Phylum) == T)] <- "Unclassified"
+
+p2 <- ggplot(data = sig.res.key2[which(sig.res.key2$Condition == "day"), ], aes(x = Category, y = totals, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Day")
+#+ scale_fill_manual(values = c("#ff7f00", "#1f78b4", "#33a02c", "#e31a1c", "#ffff99", "darkgrey", "#6a3d9a"))
+
+p3 <- ggplot(data = sig.res.key2[which(sig.res.key2$Condition == "night"), ], aes(x = Category, y = totals, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Night")
+#+ scale_fill_manual(values = c("#ff7f00", "#1f78b4", "#b2df8a", "#33a02c", "#b15928", "#ffff99", "darkgrey", "#6a3d9a"))
+
+#plot_grid(p1, p2, p3, nrow = 1, labels = c("A", "B", "C"))
+p1
+p2
+p3
+```
+
+# include carboxylates. split proteos. suppress errors. repeat by lake. find way to make phylum legend universal? use zero entries?
+
+
+**Figure 3. Differential expression in day vs. night in Lake Mendota.** Many genes were differentially expressed depending on light conditions in Lake Mendota. For example, sugar transport was more highly expressed at night, while nitrogen cycling genes were more highly expressed during the day. 
