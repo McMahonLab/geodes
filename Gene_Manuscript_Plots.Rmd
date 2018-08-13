@@ -445,26 +445,37 @@ mendota_across <- apply(mnorm, 1, cv, na.rm = T)
 cv_stat <- c(rep("within replicates", length(mendota_within)), rep("across samples", length(mendota_across)))
 mendota_cv_stats <- data.frame(type = cv_stat, stat = c(mendota_within, mendota_across))
 
-p1 <- ggplot(mendota_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Lake Mendota") + theme(legend.title = element_blank())
+ggplot(mendota_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Lake Mendota") + theme(legend.title = element_blank())
 
-spark_within <- within_reps(snorm)
-spark_within <- apply(spark_within, 1, mean, na.rm = T)
-spark_across <- apply(snorm, 1, cv, na.rm = T)
-cv_stat <- c(rep("within replicates", length(spark_within)), rep("across samples", length(spark_across)))
-spark_cv_stats <- data.frame(type = cv_stat, stat = c(spark_within, spark_across))
+# spark_within <- within_reps(snorm)
+# spark_within <- apply(spark_within, 1, mean, na.rm = T)
+# spark_across <- apply(snorm, 1, cv, na.rm = T)
+# cv_stat <- c(rep("within replicates", length(spark_within)), rep("across samples", length(spark_across)))
+# spark_cv_stats <- data.frame(type = cv_stat, stat = c(spark_within, spark_across))
+# 
+# p2 <- ggplot(spark_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Sparkling Lake") + theme(legend.title = element_blank())
+# 
+# 
+# trout_within <- within_reps(tnorm)
+# trout_within <- apply(trout_within, 1, mean, na.rm = T)
+# trout_across <- apply(tnorm, 1, cv, na.rm = T)
+# cv_stat <- c(rep("within replicates", length(trout_within)), rep("across samples", length(trout_across)))
+# trout_cv_stats <- data.frame(type = cv_stat, stat = c(trout_within, trout_across))
+# 
+# p3 <- ggplot(trout_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Trout Bog") + theme(legend.title = element_blank())
+# 
+# plot_grid(p1, p2, p3, nrow = 3, labels = c("A", "B", "C"))
 
-p2 <- ggplot(spark_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Sparkling Lake") + theme(legend.title = element_blank())
+# Plot example trends
+mnorm2 <- mnorm
+mnorm2$Genes <- rownames(mnorm2)
+mnorm2 <- melt(mnorm2)
+mnorm2$variable <- gsub(".nonrRNA", "", mnorm2$variable)
+mnorm2$Time <- metadata$Timepoint[match(mnorm2$variable, metadata$Sample)]
+agg_mnorm <- aggregate(value ~ Time + Genes, mnorm2, mean)
+agg_mnorm$Time <- factor(agg_mnorm$Time, levels = c("0", "4", "8", "12", "16", "20", "24", "28", "32", "36", "40", "44"))
 
-
-trout_within <- within_reps(tnorm)
-trout_within <- apply(trout_within, 1, mean, na.rm = T)
-trout_across <- apply(tnorm, 1, cv, na.rm = T)
-cv_stat <- c(rep("within replicates", length(trout_within)), rep("across samples", length(trout_across)))
-trout_cv_stats <- data.frame(type = cv_stat, stat = c(trout_within, trout_across))
-
-p3 <- ggplot(trout_cv_stats, aes(stat, fill = type)) + geom_density(alpha = 0.5) + scale_fill_manual(values = c("#d8b365", "#5ab4ac")) + labs(x = "Coefficent of Variance (%)", title = "Trout Bog") + theme(legend.title = element_blank())
-
-plot_grid(p1, p2, p3, nrow = 3, labels = c("A", "B", "C"))
+#example <- as.data.frame(zscore(mnorm))
 ```
 
 ### Revise to include 1 lake since CoV is pretty equivalent between them. (so 4 panels total). Move the rest to supplemental
