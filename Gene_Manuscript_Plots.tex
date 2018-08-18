@@ -1,0 +1,382 @@
+\documentclass[]{article}
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\usepackage{fixltx2e} % provides \textsubscript
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+\else % if luatex or xelatex
+  \ifxetex
+    \usepackage{mathspec}
+  \else
+    \usepackage{fontspec}
+  \fi
+  \defaultfontfeatures{Ligatures=TeX,Scale=MatchLowercase}
+\fi
+% use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+% use microtype if available
+\IfFileExists{microtype.sty}{%
+\usepackage{microtype}
+\UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\hypersetup{unicode=true,
+            pdfauthor={Alex Linz},
+            pdfborder={0 0 0},
+            breaklinks=true}
+\urlstyle{same}  % don't use monospace font for urls
+\usepackage{longtable,booktabs}
+\usepackage{graphicx,grffile}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+\IfFileExists{parskip.sty}{%
+\usepackage{parskip}
+}{% else
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+}
+\setlength{\emergencystretch}{3em}  % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{0}
+% Redefines (sub)paragraphs to behave more like sections
+\ifx\paragraph\undefined\else
+\let\oldparagraph\paragraph
+\renewcommand{\paragraph}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+\let\oldsubparagraph\subparagraph
+\renewcommand{\subparagraph}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+
+%%% Use protect on footnotes to avoid problems with footnotes in titles
+\let\rmarkdownfootnote\footnote%
+\def\footnote{\protect\rmarkdownfootnote}
+
+%%% Change title format to be more compact
+\usepackage{titling}
+
+% Create subtitle command for use in maketitle
+\newcommand{\subtitle}[1]{
+  \posttitle{
+    \begin{center}\large#1\end{center}
+    }
+}
+
+\setlength{\droptitle}{-2em}
+
+  \title{}
+    \pretitle{\vspace{\droptitle}}
+  \posttitle{}
+    \author{Alex Linz}
+    \preauthor{\centering\large\emph}
+  \postauthor{\par}
+      \predate{\centering\large\emph}
+  \postdate{\par}
+    \date{August 7, 2018}
+
+
+\begin{document}
+
+\section{Metatranscriptomics reveals interactions between phototrophs
+and heterotrophs in
+freshwater}\label{metatranscriptomics-reveals-interactions-between-phototrophs-and-heterotrophs-in-freshwater}
+
+\subsubsection{Main text tables and
+figures.}\label{main-text-tables-and-figures.}
+
+\textbf{Table 1. Comparison of Sparkling Lake, Lake Mendota, and Trout
+Bog.} These three lakes were chosen for comparative metatranscriptomics
+because of their varying trophic statuses, extensive historical data,
+and previous microbial sampling. Data on surface area, maximum depth,
+and development on shoreline courtesy of NTL-LTER
+\textless{}lter.limnology.wisc.edu\textgreater{}. Temperature, dissolved
+oxygen, pH, and conductivity were measured using a HydroLab DS5x Sonde
+and are averaged over all sampling depths and timepoints for each lake.
+Chlorophyll and phycocyanin concentrations were measured from the
+integrated epilimnion samples using a methanol extraction protocol and
+averaged over all timepoints. Secchi depth was measured at the first
+timepoint for each lake. Bacterial production was quantified via
+C14-leucine incorporation and averaged over all timepoints. Due to
+thunderstorms the night of July 8th, the final 1AM timepoint in
+Sparkling Lake was collected on July 9th instead.
+
+\begin{longtable}[]{@{}lccc@{}}
+\toprule
+& Lake Mendota & Trout Bog & Sparkling Lake\tabularnewline
+\midrule
+\endhead
+Surface area (km\^{}2) & 39.6 & 0.001 & 0.637\tabularnewline
+Maximum depth (m) & 25.3 & 7.9 & 20\tabularnewline
+Trophic status & Eutrophic & Humic & Oligotrophic\tabularnewline
+Location & Madison, WI USA & Boulder Junction, WI USA & Boulder
+Junction, WI USA\tabularnewline
+GPS Coordinates & 43.1113, -89.4255 & 46.0412, -89.6861 & 46.0091,
+-89.6695\tabularnewline
+Shoreline development & High & Low & Moderate\tabularnewline
+Epilimnion sampling depth & 0-7m & 0-1.5m & 0-4m\tabularnewline
+Temperature (C) & 24.61 & 19.51 & 23.33\tabularnewline
+Dissolved oxygen (mg/L) & 9.71 & 5.33 & 9.25\tabularnewline
+pH & 8.64 & 4.03 & 7.52\tabularnewline
+Conductivity (uS/cm) & 608 & 25.87 & 174.54\tabularnewline
+Total phosphorus (ug/L) & 18.81 & 23.17 & 6.44\tabularnewline
+Total nitrogen (ug/L) & 625.83 & 667.98 & 346.46\tabularnewline
+Total dissolved phosphorus (ug/L) & 8.83 & 15.41 & 5.42\tabularnewline
+Total dissolved nitrogen (ug/L) & 506.7 & 587.51 & 305.17\tabularnewline
+Chlorophyll (ug/L) & 6.14 & 14.44 & 1.77\tabularnewline
+Phycocyanin (ug/L) & 0.74 & 1.94 & 3.15\tabularnewline
+Bacterial production (cpm) & 60.02 & 30.3 & 3.15\tabularnewline
+Secchi depth (m) & 4.8 & 1.1 & 6.2\tabularnewline
+Sampling dates (2016) & July 14-16 & July 8-10 & July 6-9\tabularnewline
+Sunrise/sunset time & 5:32/20:35 & 5:18/20:49 &
+5:17/20:50\tabularnewline
+\bottomrule
+\end{longtable}
+
+\textbf{Table 2. Top 10 most expressed genes in each study site.} Coding
+regions from reference genomes and metagenome assemblies were clustered
+at 97\% sequence similarity, and the longest coding region was chosen as
+the representative sequence. Metatranscriptomic reads were mapped to
+these representative sequences. The top 10 most expressed sequences from
+each lake, without any filters, are presented here. Annotations and
+classifications are derived from the sequence to which each read mapped.
+
+\begin{longtable}[]{@{}lll@{}}
+\toprule
+\begin{minipage}[b]{0.24\columnwidth}\raggedright\strut
+Lake Mendota\strut
+\end{minipage} & \begin{minipage}[b]{0.33\columnwidth}\raggedright\strut
+Trout Bog\strut
+\end{minipage} & \begin{minipage}[b]{0.33\columnwidth}\raggedright\strut
+Sparkling Lake\strut
+\end{minipage}\tabularnewline
+\midrule
+\endhead
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (Cyanobacteria)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Ribulose-bisphosphate carboxylase large chain (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (Cyanobacteria)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II CP43 chlorophyll apoprotein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (Cyanobacteria)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Putative beta-barrel porin2, OmpL-like (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (Cyanobacteria)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (Chitinophagaceae)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Ribulose-bisphosphate carboxylase large chain (Cyanobacteria)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P700 chlorophyll a apoprotein A2 (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+PQQ-dependent dehydrogenase (LD28)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II CP47 chlorophyll apoprotein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Hypothetical protein (Bdellovibrio)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P700 chlorophyll a apoprotein A2 (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Ribulose-bisphosphate carboxylase large chain (Cyanobacteria)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Photosystem II P680 reaction center D1 protein (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Hypothetical protein (unclassified)\strut
+\end{minipage}\tabularnewline
+\bottomrule
+\end{longtable}
+
+\textbf{Table 3. Top 10 most expressed annotated heterotrophic genes in
+each study site.} Coding regions from reference genomes and metagenome
+assemblies were clustered at 97\% sequence similarity, and the longest
+coding region was chosen as the representative sequence.
+Metatranscriptomic reads were mapped to these representative sequences.
+The top 10 most expressed genes from each lake, filtered to exclude
+photosynthetic genes, phototrophic organisms, hypothetical genes, and
+unclassified genes, are presented here. Annotations and classifications
+are derived from the sequence to which each read mapped.
+
+\begin{longtable}[]{@{}lll@{}}
+\toprule
+\begin{minipage}[b]{0.24\columnwidth}\raggedright\strut
+Lake Mendota\strut
+\end{minipage} & \begin{minipage}[b]{0.33\columnwidth}\raggedright\strut
+Trout Bog\strut
+\end{minipage} & \begin{minipage}[b]{0.33\columnwidth}\raggedright\strut
+Sparkling Lake\strut
+\end{minipage}\tabularnewline
+\midrule
+\endhead
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+PQQ-dependent dehydrogenase (LD28)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Putative beta-barrel porin-2, OmpL-like (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Chaperonin GroEL (Deltaproteobacteria)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Translation elongation factor TU (Bacteroidetes)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Ig-like domain group 3 (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Fibronectin type III domain (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+YTV protein (Actinobacteria)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Ig-like domain group 1 (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+S-layer homology domain (Fimbriimonas ginsengisoli)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Translation elongation factor EF-G (acI-A6)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+PEP-CTERM motif (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Cytochrome c oxidase subunit 1 (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+DNA-directed RNA polymerase (acI-A6)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Cytochrome c oxidase subunit 1 (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Cytochrome c oxidase subunit 2 (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Probable sodium:solute symporter (LD12)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Cytochrome b6 (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+HYR domain, putative metal-binding (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+DNA-directed RNA polymerase (acI-A6)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Ig-like group 1 (acI-B)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+F-type H+-transporting ATPase subunit beta (Chitinophagia)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Phycoerythrin alpha chain (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+S-layer homology domain (Fimbriimonas)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+molecular chaperone HtpG (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+ABC-type sugar transport system (acI-B1)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Ribonucleoside-diphosphate reductase alpha chain (Pedosphaera
+parvula)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Glucose dehydrogenase (unclassified)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.24\columnwidth}\raggedright\strut
+Translation elongation factor EF-G (acI-A6)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+DNA-directed RNA polymerase subunit B (unclassified)\strut
+\end{minipage} & \begin{minipage}[t]{0.33\columnwidth}\raggedright\strut
+Lactocepin (unclassified)\strut
+\end{minipage}\tabularnewline
+\bottomrule
+\end{longtable}
+
+\includegraphics{Gene_Manuscript_Plots_files/figure-latex/fig1-1.pdf}
+
+\textbf{Figure 1. Most highly expressed or abundant phyla by lake.} To
+determine which phyla were most abundant or most expressed during our
+time series, we analyzed metagenomic and metatranscriptomic read counts.
+The expression of clustered, nonredundant genes was aggregated by phylum
+and compared to the coverage of those phyla in metagenomes. Genes that
+could not be classified in a phylum were not included in this analysis.
+No positive relationship was observed between expression and abundance.
+The identity of the most expressed and most abundant phyla varied by
+lake. One phylum, Chloroflexi, was removed from the plot of Lake Mendota
+due to orders of magnitude higher expression and abundance. This phylum
+is likely an outlier.
+
+\begin{center}\rule{0.5\linewidth}{\linethickness}\end{center}
+
+\subsubsection{Revise to include 1 lake since CoV is pretty equivalent
+between them. (so 4 panels total). Move the rest to
+supplemental}\label{revise-to-include-1-lake-since-cov-is-pretty-equivalent-between-them.-so-4-panels-total.-move-the-rest-to-supplemental}
+
+\textbf{Figure 2. Assessing the variability of metatranscriptomic read
+counts.} One aim of this metatranscriptomic study was to provide
+information on the variability in gene expression in freshwater that
+could be used to guide further metatranscriptomic experiments. We
+calculated the coefficient of variance (CoV) for each gene both within
+replicates (A) and across replicates (B). High levels of variability
+were observed in genes from all three lakes. In panels C-E, example
+trends over time of genes are shown.
+
+\section{include carboxylates. split proteos. suppress errors. repeat by
+lake. find way to make phylum legend universal? use zero
+entries?}\label{include-carboxylates.-split-proteos.-suppress-errors.-repeat-by-lake.-find-way-to-make-phylum-legend-universal-use-zero-entries}
+
+\textbf{Figure 3. Differential expression in day vs.~night in Lake
+Mendota.} Many genes were differentially expressed depending on light
+conditions in Lake Mendota. For example, sugar transport was more highly
+expressed at night, while nitrogen cycling genes were more highly
+expressed during the day.
+
+\section{Supplemental figures}\label{supplemental-figures}
+
+mapping database
+
+IMGOIDS of pretty much everything
+
+environmental data of interest
+
+other cv plots
+
+
+\end{document}

@@ -428,6 +428,9 @@ mv sorted*gff sorted_gff_files/
 
 cat *table.txt > genome_mapping.table.txt
 
+# Add header
+sed -i '1iGeneid, Genome, Product' genome_mapping.table.txt
+
 # Concatenate fasta files
 cat ref_MAGs_SAGs/fastas/*.fna > /mnt/gluster/amlinz/fw_genomes.fna
 
@@ -691,107 +694,41 @@ paste rownames.txt $files > pasted_table.txt
  tr -s "\t" < pasted_table.txt > GEODES_genomes_2018-08-06.txt
 ```
 
-4c. Remove blank rows from the table and in the key file, keep only genes with mapped reads.
 
-11tableprocessing.sub:
-```{bash, eval = F}
+##5. Normalize read counts to transcripts per liter
 
-# 11tableprocessing.sub
-#
-#
-# Specify the HTCondor Universe
-universe = vanilla
-log = 11tableprocessing_$(Cluster).log
-error = 11tableprocessing_$(Cluster)_$(Process).err
-requirements = (OpSys == "LINUX")
-#
-# Specify your executable, arguments, and a file for HTCondor to store standard
-#  output.
-executable = executables/11tableprocessing.sh
-output = 11tableprocessing_$(Cluster).out
-#
-# Specify that HTCondor should transfer files to and from the
-#  computer where each job runs.
-should_transfer_files = YES
-when_to_transfer_output = ON_EXIT
-transfer_input_files = zipped/python.tar.gz,GEODES_genes_2017-10-25.txt,scripts/genekey.py
-transfer_output_files = GEODES2refMAGsSAGs_readcounts.txt,GEODES2refMAGsSAGS_geneinfo.txt
-#
-# Tell HTCondor what amount of compute resources
-#  each job will need on the computer where it runs.
-Requirements = (Target.HasGluster == true)
-request_cpus = 1
-request_memory = 4GB
-request_disk = 2GB
-#
-queue
-```
+```{r, eval = F}
+readCounts <- read.table("C:/Users/Goose and Gander/Documents/geodes_data_tables/GEODES_genomes_2018-08-06.txt", header = T, row.names = 1, sep = "\t", fill = NA, quote = "")
+sample_data <- read.csv("C:/Users/Goose and Gander/Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv")
+genekey <- read.table("C:/Users/Goose and Gander/Documents/geodes_data_tables/genome_mapping.table.txt", sep = "\t", fill = NA, quote = "", header = T)
 
-11tableprocessing.sh:
-```{bash, eval = F}
+# Remove samples with poor std
+std <- readCounts[which(rownames(readCounts) == "pFN18A_DNA_transcript"),]
+readCounts2 <- readCounts[, which(std > 50)]
 
-#!/bin/bash
-tar xvzf python.tar.gz
-mkdir home
-export PATH=$(pwd)/python/bin:$PATH
-export HOME=$(pwd)/home
+# Remove rows that sum to zero and trim genekey to match
+readCounts2 <- readCounts2[which(rowSums(readCounts2) > 0), ]
+genekey2 <- genekey[match(rownames(readCounts2), genekey$Geneid), ]
 
-cp /mnt/gluster/amlinz/ref_MAGs_SAGs_key.txt .
-chmod +x genekey.py
+# Calculate standard normalization factor
 
-python genekey.py
+std2 <- readCounts2[which(rownames(readCounts2) == "pFN18A_DNA_transcript"),]
+std_factor <- std2/614000000
 
-rm GEODES_genes_2017-10-25.txt
-rm ref_MAGs_SAGs_key.txt
-rm genekey.py
-rm -r home
-rm -rf python
-rm python.tar.gz
-```
+# Calculate volume factor
 
-genekey.py:
-```{bash, eval = F}
-#%%#############################################################################
-### Import packages
-################################################################################
+new_sample_data <- sample_data[match(substr(start = 1, stop = 9, colnames(readCounts2)), sample_data$Sample[1:109]), ]
+vol_factor <- new_sample_data$Vol_Filtered
 
-import pandas
-import os
-import sys
+norm_val <- std_factor * vol_factor
+# Normalize to transcripts/L
 
-#%%#############################################################################
-### Define input files
-################################################################################
+for(i in 1:length(norm_val)){
+  readCounts2[,i] <- readCounts2[,i]/as.numeric(norm_val[i])
+}
 
-readcounts = 'GEODES_genes_2017-10-25.txt'
-genekey  = 'ref_MAGs_SAGs_key.txt'
-outputcounts = 'GEODES2refMAGsSAGs_readcounts.txt'
-outputkey = 'GEODES2refMAGsSAGS_geneinfo.txt'
-
-#%%#############################################################################
-### Remove rows of all 0s from the table of read counts and sort rows alphabetically
-### Remove the same genes from the gene key and sort alphabetically
-################################################################################
-
-# Open files
-
-df = pandas.read_table(readcounts)
-inKey = pandas.read_table(genekey, header=None)
-outTable = open(outputcounts, 'w')
-outKey = open(outputkey, 'w')
-
-# Remove rows that sum to 0
-df = df.loc[(df.sum(axis=1) != 0),]
-
-# Sort rows by gene name
-df = df.sort_values(by = 'Geneid')
-
-df.to_csv(outputcounts, index=False)
-
-# Remove genes in the key file that are no longer in the table
-# Or maybe keep only genes that are still in the table
-inKey = inKey[inKey[0].isin(df['Geneid'])]
-inKey = inKey.sort_values(by = 0)
-inKey.to_csv(outKey, index=False)
+# Save normalized table
+write.csv(readCounts2, "C:/Users/Goose and Gander/Documents/geodes_data_tables/GEODES_genomes_normalized.csv", quote = F)
+write.csv(genekey2, "C:/Users/Goose and Gander/Documents/geodes_data_tables/GEODES_genomes_genekey.csv", quote = F)
 
 ```
