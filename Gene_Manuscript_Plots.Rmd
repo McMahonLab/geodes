@@ -15,8 +15,8 @@ text-align: justify}
 
 ```{r, Setup, eval = T, echo = F, message = F, warning = F}
 # Set up environment
-path <- "C:/Users/Goose and Gander/Documents/"
-path2 <- "C:/Users/Goose and Gander/"
+path <- "/Users/Alex/Desktop/"
+path2 <- "/Users/Alex/"
 
 library(ggplot2)
 library(cowplot)
@@ -54,12 +54,12 @@ chemdata$Lake[grep("SP", chemdata$Sample)] <- "Sparkling"
 chemdata$Lake[grep("TB", chemdata$Sample)] <- "Trout"
 
 # Metagenome data
-# metaG_reads <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", sep = ""), row.names = 1, sep = "\t")
-# colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
-# metaG_key <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = ""), sep = "\t", quote = "")
-# colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
-# lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
-# metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
+metaG_reads <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", sep = ""), row.names = 1, sep = "\t")
+colnames(metaG_reads) <- c("GEODES005", "GEODES006", "GEODES057", "GEODES058", "GEODES117", "GEODES118", "GEODES165", "GEODES166", "GEODES167", "GEODES168")
+metaG_key <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_genekey_2018-03-12.txt", sep = ""), sep = "\t", quote = "")
+colnames(metaG_key) <- c("Gene", "Genome", "Taxonomy", "Product")
+lakekey <- c("Sparkling", "Sparkling", "Trout", "Trout", "Mendota", "Mendota", "Sparkling2009", "Sparkling2009", "Sparkling2009", "Sparkling2009")
+metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
 
 ```
 
@@ -188,7 +188,7 @@ print[1:10,3:4]
 
 ```{r, fig1, eval = T, echo = F, fig.height = 18, fig.width = 18, warning = F, message = F}
 # Process metagenome gene key to include a phylum column. Fix any weird formats.
-# 
+
 # metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
 # metaG_key$Taxonomy <- gsub("Eukaryota;", "", metaG_key$Taxonomy)
 # metaG_key$Phylum <- sapply(strsplit(as.character(metaG_key$Taxonomy),";"), `[`, 1)
@@ -249,8 +249,8 @@ print[1:10,3:4]
 # write.csv(mendota_metaG_phyla, file = paste(path2, "Desktop/geodes/intermediate_plotting_files/mendota_metaG_phyla.csv", sep = ""), quote = F, row.names = F)
 # write.csv(spark_metaG_phyla, file = paste(path2, "Desktop/geodes/intermediate_plotting_files/spark_metaG_phyla.csv", sep = ""), quote = F, row.names = F)
 # write.csv(trout_metaG_phyla, file = paste(path2, "Desktop/geodes/intermediate_plotting_files/trout_metaG_phyla.csv", sep = ""), quote = F, row.names = F)
-
-# Remove some files so I have space in RAM to run the next steps
+# 
+# # Remove some files so I have space in RAM to run the next steps
 # rm(metaG_key)
 # rm(metaG_reads)
 # rm(mendota_metaG)
@@ -297,7 +297,7 @@ mendota_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", mendota_k
 mendota_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", mendota_key$Phylum)
 mendota_key$Phylum[grep("Blank", mendota_key$Phylum)] <- "Unclassified"
 mendota_key$Phylum[which(is.na(mendota_key$Phylum) == T)] <- "Unclassified"
-
+# 
 # # # Remove unclassified genes and the internal standard
 # mendota_key <- mendota_key[grep("Unclassified|internal standard", mendota_key$Phylum, invert = T), ]
 # 
@@ -362,9 +362,9 @@ spark_key$Phylum <- gsub("UnclassifiedIsochrysidales", "Haptophyta", spark_key$P
 spark_key$Phylum <- gsub("Crenarchaeaota", "Crenarchaeota", spark_key$Phylum)
 spark_key$Phylum[grep("Blank", spark_key$Phylum)] <- "Unclassified"
 
-# # Remove unclassified genes and the internal standard
-# spark_key <- spark_key[grep("Unclassified|internal standard", spark_key$Phylum, invert = T), ]
-
+# # # Remove unclassified genes and the internal standard
+# # spark_key <- spark_key[grep("Unclassified|internal standard", spark_key$Phylum, invert = T), ]
+# 
 # # Prep read count table and switch to long format
 # snorm2 <- snorm
 # snorm2$Genes <- rownames(snorm2)
@@ -469,7 +469,7 @@ plot_grid(p1, p2, p3, nrow = 3, labels = c("A", "B", "C"))
 
 
 
-```{r, eval = T, echo = F, fig.height = 5, fig.width = 15, message = F, warning = F}
+```{r, eval = F, echo = F, fig.height = 5, fig.width = 15, message = F, warning = F}
 # # Write a function to calculate CoV within replicates and average by gene
 # within_reps <- function(readcounts){
 #   readcounts2 <- readcounts[which(rowSums(readcounts) > 1000), ]
@@ -686,12 +686,12 @@ sig.res.key <- rbind(sig.res.key, dummy)
 
 # p1 <- ggplot(data = simple.sig.res.key[which(simple.sig.res.key$Category != "None"), ], aes(x = Category, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Mendota", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0))
 
-colorkey <- data.frame(phylum = c("Actinobacteria", "Alphaproteobacteria", "Armatimonadetes", "Bacteroidetes", "Betaproteobacteria", "Cyanobacteria", "Other", "Unclassified", "Verrucomicrobia"), color = c("chocolate1",  "hotpink2", "turquoise3", "goldenrod1", "dodgerblue", "green3", "honeydew4", "honeydew3", "lightslateblue"))
+colorkey <- data.frame(phylum = c("Actinobacteria", "Alphaproteobacteria", "Armatimonadetes", "Bacteroidetes", "Betaproteobacteria", "Cyanobacteria", "Deltaproteobacteria", "Other", "Planctomycetes", "Unclassified", "Verrucomicrobia"), color = c("chocolate1",  "hotpink2", "turquoise3", "goldenrod1", "dodgerblue", "green3", "skyblue", "honeydew4", "lightcoral", "honeydew3", "lightslateblue"))
 
-p1 <- ggplot(data = sig.res.key[which(sig.res.key$Category == "Photosynthesis" | sig.res.key$Category == "RuBisCO" | sig.res.key$Category == "Ribose transport" | sig.res.key$Category == "General sugar transport" | sig.res.key$Category == "Raffinose/stachyose/melibiose transport" | sig.res.key$Category == "Glucose/mannose transport" | sig.res.key$Category == "Rhamnose transport" | sig.res.key$Category == "Xylose transport" | sig.res.key$Category == "Fructose transport" | sig.res.key$Category == "Chitobiose transport" | sig.res.key$Category == "Lactose/arabinose transport"), ], aes(x = Condition, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Lake Mendota", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + facet_wrap(~ Category, scales = "free_y")
+p1 <- ggplot(data = sig.res.key[which(sig.res.key$Category == "Photosynthesis" | sig.res.key$Category == "RuBisCO" | sig.res.key$Category == "Ribose transport" | sig.res.key$Category == "General sugar transport" | sig.res.key$Category == "Raffinose/stachyose/melibiose transport" | sig.res.key$Category == "Glucose/mannose transport" | sig.res.key$Category == "Rhamnose transport" | sig.res.key$Category == "Xylose transport" | sig.res.key$Category == "Fructose transport" | sig.res.key$Category == "Chitobiose transport" | sig.res.key$Category == "Lactose/arabinose transport" | sig.res.key$Category == "ROS" | sig.res.key$Category == "Nitrogenase"), ], aes(x = Condition, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Lake Mendota", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + facet_wrap(~ Category, scales = "free_y")
 
 # Plot taxonomy information as proportional bars
-sig.res.key2 <- sig.res.key[grep("Photosynthesis|RuBisCO|Ribose transport|General sugar transport|Raffinose/stachyose/melibiose transport|Glucose/mannose transport|Rhamnose transport|Xylose transport|Fructose transport|Chitobiose transport|Lactose/arabinose transport", sig.res.key$Category), ]
+sig.res.key2 <- sig.res.key[grep("Photosynthesis|RuBisCO|Ribose transport|General sugar transport|Raffinose/stachyose/melibiose transport|Glucose/mannose transport|Rhamnose transport|Xylose transport|Fructose transport|Chitobiose transport|Lactose/arabinose transport|ROS|Nitrogenase", sig.res.key$Category), ]
 sig.res.key2$Phylum[which(is.na(sig.res.key2$Phylum) == T)] <- "Unclassified"
 # Lump low abundance groups into "other"
 sig.res.key2$Phylum[grep("Chloroflexi|Gammaproteobacteria|Gemmatimonadetes", sig.res.key2$Phylum)] <- "Other"
@@ -839,10 +839,10 @@ sig.res.key <- rbind(sig.res.key, dummy)
 # simple.sig.res.key$totals[which(simple.sig.res.key$totals > 25000000000)] <- 25000000000
 # simple.sig.res.key <- simple.sig.res.key[grep("Photosynthesis|Polyamines|Rhodopsin|ROS|RuBisCO|Sugar degradation|Carboxylate", simple.sig.res.key$Category), ]
 
-p1 <- ggplot(data = sig.res.key[which(sig.res.key$Category == "Photosynthesis" | sig.res.key$Category == "RuBisCO" | sig.res.key$Category == "Ribose transport" | sig.res.key$Category == "General sugar transport" | sig.res.key$Category == "Raffinose/stachyose/melibiose transport" | sig.res.key$Category == "Glucose/mannose transport" | sig.res.key$Category == "Rhamnose transport" | sig.res.key$Category == "Xylose transport" | sig.res.key$Category == "Fructose transport" | sig.res.key$Category == "Chitobiose transport" | sig.res.key$Category == "Lactose/arabinose transport"), ], aes(x = Condition, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Sparkling Lake", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + facet_wrap(~ Category, scales = "free_y")
+p1 <- ggplot(data = sig.res.key[which(sig.res.key$Category == "Photosynthesis" | sig.res.key$Category == "RuBisCO" | sig.res.key$Category == "Ribose transport" | sig.res.key$Category == "General sugar transport" | sig.res.key$Category == "Raffinose/stachyose/melibiose transport" | sig.res.key$Category == "Glucose/mannose transport" | sig.res.key$Category == "Rhamnose transport" | sig.res.key$Category == "Xylose transport" | sig.res.key$Category == "Fructose transport" | sig.res.key$Category == "Chitobiose transport" | sig.res.key$Category == "Lactose/arabinose transport" | sig.res.key$Category == "ROS"), ], aes(x = Condition, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Sparkling Lake", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + facet_wrap(~ Category, scales = "free_y")
 
 # Plot taxonomy information as proportional bars
-sig.res.key2 <- sig.res.key[grep("Photosynthesis|RuBisCO|Ribose transport|General sugar transport|Raffinose/stachyose/melibiose transport|Glucose/mannose transport|Rhamnose transport|Xylose transport|Fructose transport|Chitobiose transport|Lactose/arabinose transport", sig.res.key$Category), ]
+sig.res.key2 <- sig.res.key[grep("Photosynthesis|RuBisCO|Ribose transport|General sugar transport|Raffinose/stachyose/melibiose transport|Glucose/mannose transport|Rhamnose transport|Xylose transport|Fructose transport|Chitobiose transport|Lactose/arabinose transport|ROS", sig.res.key$Category), ]
 sig.res.key2$Phylum[which(is.na(sig.res.key2$Phylum) == T)] <- "Unclassified"
 # Lump low abundance groups into "other"
 sig.res.key2$Phylum[grep("Chloroflexi|Gammaproteobacteria|Gemmatimonadetes", sig.res.key2$Phylum)] <- "Other"
@@ -986,10 +986,10 @@ dummy <- data.frame("Gene" = rep("nogene", 4), "Genome" = rep("nogenome", 4), "T
 sig.res.key <- rbind(sig.res.key, dummy)
 #sig.res.key$Phylum <- trout_key$Phylum[match(sig.res.key$Gene, trout_key$Gene)]
 
-p1 <- ggplot(data = sig.res.key[which(sig.res.key$Category == "Photosynthesis" | sig.res.key$Category == "RuBisCO" | sig.res.key$Category == "Ribose transport" | sig.res.key$Category == "General sugar transport" | sig.res.key$Category == "Raffinose/stachyose/melibiose transport" | sig.res.key$Category == "Glucose/mannose transport" | sig.res.key$Category == "Rhamnose transport" | sig.res.key$Category == "Xylose transport" | sig.res.key$Category == "Fructose transport" | sig.res.key$Category == "Chitobiose transport" | sig.res.key$Category == "Lactose/arabinose transport"), ], aes(x = Condition, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Trout Bog", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + facet_wrap(~ Category, scales = "free_y")
+p1 <- ggplot(data = sig.res.key[which(sig.res.key$Category == "Photosynthesis" | sig.res.key$Category == "RuBisCO" | sig.res.key$Category == "Ribose transport" | sig.res.key$Category == "General sugar transport" | sig.res.key$Category == "Raffinose/stachyose/melibiose transport" | sig.res.key$Category == "Glucose/mannose transport" | sig.res.key$Category == "Rhamnose transport" | sig.res.key$Category == "Xylose transport" | sig.res.key$Category == "Fructose transport" | sig.res.key$Category == "Chitobiose transport" | sig.res.key$Category == "Lactose/arabinose transport" | sig.res.key$Category == "ROS"), ], aes(x = Condition, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Trout Bog", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + facet_wrap(~ Category, scales = "free_y")
 
 # Plot taxonomy information as proportional bars
-sig.res.key2 <- sig.res.key[grep("Photosynthesis|RuBisCO|Ribose transport|General sugar transport|Raffinose/stachyose/melibiose transport|Glucose/mannose transport|Rhamnose transport|Xylose transport|Fructose transport|Chitobiose transport|Lactose/arabinose transport", sig.res.key$Category), ]
+sig.res.key2 <- sig.res.key[grep("Photosynthesis|RuBisCO|Ribose transport|General sugar transport|Raffinose/stachyose/melibiose transport|Glucose/mannose transport|Rhamnose transport|Xylose transport|Fructose transport|Chitobiose transport|Lactose/arabinose transport|ROS", sig.res.key$Category), ]
 sig.res.key2$Phylum[which(is.na(sig.res.key2$Phylum) == T)] <- "Unclassified"
 # Lump low abundance groups into "other"
 sig.res.key2$Phylum[grep("Chloroflexi|Gammaproteobacteria|Gemmatimonadetes|Deinococcus-Thermus|Deltaproteobacteria", sig.res.key2$Phylum)] <- "Other"
