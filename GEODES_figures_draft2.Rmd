@@ -9,9 +9,9 @@ output: html_document
 
 new plan:
 table 1: metadata
-table 2-4: categories by lake
+table 2-4: categories by lake - last column getting cutoff?
 Figure 1: cyclic trends example
-Figure 2: barplots category by lake -> get gene annotations when contig not available
+Figure 2: barplots category by lake 
 
 table 2-4 plan:
 category| % expressed in day (genes/reads) | % expressed in night (genes/reads) | % cyclic
@@ -19,6 +19,14 @@ category| % expressed in day (genes/reads) | % expressed in night (genes/reads) 
 <style>
 body {
 text-align: justify}
+</style>
+
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
 </style>
 
 ```{r, Setup, eval = T, echo = F, message = F, warning = F}
@@ -162,7 +170,7 @@ spark_key <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_genekey_gen
 ```
 
 
-```{r, Metagenomes, echo = T, eval = F}
+```{r, Metagenomes, echo = F, eval = F}
 
 # Metagenome data
 metaG_reads <- read.table(paste(path, "geodes_data_tables/GEODES_metaG_ID90_2018-03-10.readcounts.txt", sep = ""), row.names = 1, sep = "\t")
@@ -310,6 +318,7 @@ reskey <- mendota_key[match(rownames(res), mendota_key$Gene), ]
 # Write a function to report trends in metabolic categories
 pathway.stats <- function(searchterm){
   genes <- reskey$Gene[grep(searchterm, reskey$Product)]
+  numgenes <- length(genes)
   gene_results <- res[match(genes, rownames(res)), ]
   gene_counts <- abun_mnorm[match(genes, rownames(abun_mnorm)),]
   gene_results$Day <- rowSums(gene_counts[which(conditions == "day")])
@@ -335,7 +344,7 @@ pathway.stats <- function(searchterm){
     percent_cyclic_reads = 0
   }
   
-  report <- c(round(percent_genes_day, 2), round(percent_reads_day, 2), round(percent_genes_night, 2), round(percent_reads_night, 2), round(percent_cyclic_genes, 2), round(percent_cyclic_reads, 2), formatC(mean(day_totals), format = "e", digits = 2), formatC(mean(night_totals), format = "e", digits = 2), round(sig$p.value, 2))
+  report <- c(numgenes, round(percent_genes_day, 2), round(percent_reads_day, 2), round(percent_genes_night, 2), round(percent_reads_night, 2), round(percent_cyclic_genes, 2), round(percent_cyclic_reads, 2), formatC(mean(day_totals), format = "e", digits = 2), formatC(mean(night_totals), format = "e", digits = 2), round(sig$p.value, 2))
   names(report) <- c("%DayGenes", "%DayReadsContributed", "%NightGenes", "%NightReadsContributed", "%CyclicGenes", "%CyclicReadsContributed", "DayReads", "NightReads", "t-test")
   return(report)
 }
@@ -368,30 +377,30 @@ lact <- pathway.stats("lactose/L-arabinose transport")
 ```
 
 
-|                         | % Genes more expressed in day      | % Reads in day contributed by those genes                | % Genes more expressed at night   | % Reads at night contributed by those genes | % Cyclic genes (12 hr phase) | % Reads contributed by cyclic genes | Mean reads in day samples | Mean reads in night samples | p-value from t-test of day vs. night read totals |
+|                         | % Number of genes | % Genes more expressed in day      | % Reads in day contributed by those genes                | % Genes more expressed at night   | % Reads at night contributed by those genes | % Cyclic genes (12 hr phase) | % Reads contributed by cyclic genes | Mean reads in day samples | Mean reads in night samples | p-value from t-test of day vs. night read totals |
 | ----------------------- |:-----------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|
-| Photosynthesis | `r photo[1]` | `r photo[2]` | `r photo[3]` | `r photo[4]` | `r photo[5]` | `r photo[6]` | `r photo[7]` | `r photo[8]` | `r photo[9]`
-| Rhodopsins | `r rhodo[1]` | `r rhodo[2]` | `r rhodo[3]` | `r rhodo[4]` | `r rhodo[5]` | `r rhodo[6]` | `r rhodo[7]` | `r rhodo[8]` | `r rhodo[9]`
-| RuBisCO | `r rubisco[1]` | `r rubisco[2]` | `r rubisco[3]` | `r rubisco[4]` | `r rubisco[5]` | `r rubisco[6]` | `r rubisco[7]` | `r rubisco[8]` | `r rubisco[9]` |
-| reductive TCA | `r rTCA[1]` | `r rTCA[2]` | `r rTCA[3]` | `r rTCA[4]` | `r rTCA[5]` | `r rubisco[6]` | `r rTCA[7]` | `r rTCA[8]` | `r rTCA[9]` |
-| Nitrogenase | `r nif[1]` | `r nif[2]` | `r nif[3]` | `r nif[4]` | `r nif[5]` | `r nif[6]` | `r nif[7]` | `r nif[8]` | `r nif[9]` |
-| Polyamines | `r polyamines[1]` | `r polyamines[2]` | `r polyamines[3]` | `r polyamines[4]` | `r polyamines[5]` | `r polyamines[6]` | `r polyamines[7]` | `r polyamines[8]` | `r polyamines[9]` |
-| Chitinase | `r chitinase[1]` | `r chitinase[2]` | `r chitinase[3]` | `r chitinase[4]` | `r chitinase[5]` | `r chitinase[6]` | `r chitinase[7]` | `r chitinase[8]` | `r chitinase[9]` |
-| Alkaline phosphatase | `r ap[1]` | `r ap[2]` | `r ap[3]` | `r ap[4]` | `r ap[5]` | `r ap[6]` | `r ap[7]` | `r ap[8]` | `r ap[9]` |
-| Cellulase | `r cellulase[1]` | `r cellulase[2]` | `r cellulase[3]` | `r cellulase[4]` | `r cellulase[5]` | `r cellulase[6]` | `r cellulase[7]` | `r cellulase[8]` | `r cellulase[9]` |
-| Reactive oxygen species | `r ros[1]` | `r ros[2]` | `r ros[3]` | `r ros[4]` | `r ros[5]` | `r ros[6]` | `r ros[7]` | `r ros[8]` | `r ros[9]` |
-| Nitrite reduction | `r nitrite_reduction[1]` | `r nitrite_reduction[2]` | `r nitrite_reduction[3]` | `r nitrite_reduction[4]` | `r nitrite_reduction[5]` | `r nitrite_reduction[6]` | `r nitrite_reduction[7]` | `r nitrite_reduction[8]` | `r nitrite_reduction[9]` |
-| Protease | `r protease[1]` | `r protease[2]` | `r protease[3]` | `r protease[4]` | `r protease[5]` | `r protease[6]` | `r protease[7]` | `r protease[8]` | `r protease[9]` |
-| Carboxylate transport | `r carbox[1]` | `r carbox[2]` | `r carbox[3]` | `r carbox[4]` | `r carbox[5]` | `r carbox[6]` | `r carbox[7]` | `r carbox[8]` | `r carbox[9]` |
-| Ribose transport | `r ribose[1]` | `r ribose[2]` | `r ribose[3]` | `r ribose[4]` | `r ribose[5]` | `r ribose[6]` | `r ribose[7]` | `r ribose[8]` | `r ribose[9]` |
-| General sugar transport | `r gen.sugars[1]` | `r gen.sugars[2]` | `r gen.sugars[3]` | `r gen.sugars[4]` | `r gen.sugars[5]` | `r gen.sugars[6]` | `r gen.sugars[7]` | `r gen.sugars[8]` | `r gen.sugars[9]` |
+| Photosynthesis | `r photo[1]` | `r photo[2]` | `r photo[3]` | `r photo[4]` | `r photo[5]` | `r photo[6]` | `r photo[7]` | `r photo[8]` | `r photo[9]`| `r photo[10]`|
+| Rhodopsins | `r rhodo[1]` | `r rhodo[2]` | `r rhodo[3]` | `r rhodo[4]` | `r rhodo[5]` | `r rhodo[6]` | `r rhodo[7]` | `r rhodo[8]` | `r rhodo[9]`| `r rhodo[10]`|
+| RuBisCO | `r rubisco[1]` | `r rubisco[2]` | `r rubisco[3]` | `r rubisco[4]` | `r rubisco[5]` | `r rubisco[6]` | `r rubisco[7]` | `r rubisco[8]` | `r rubisco[9]` |`r rubisco[10]` |
+| reductive TCA | `r rTCA[1]` | `r rTCA[2]` | `r rTCA[3]` | `r rTCA[4]` | `r rTCA[5]` | `r rubisco[6]` | `r rTCA[7]` | `r rTCA[8]` | `r rTCA[9]` | `r rTCA[10]` |
+| Nitrogenase | `r nif[1]` | `r nif[2]` | `r nif[3]` | `r nif[4]` | `r nif[5]` | `r nif[6]` | `r nif[7]` | `r nif[8]` | `r nif[9]` | `r nif[10]` |
+| Polyamines | `r polyamines[1]` | `r polyamines[2]` | `r polyamines[3]` | `r polyamines[4]` | `r polyamines[5]` | `r polyamines[6]` | `r polyamines[7]` | `r polyamines[8]` | `r polyamines[9]` |`r polyamines[10]` |
+| Chitinase | `r chitinase[1]` | `r chitinase[2]` | `r chitinase[3]` | `r chitinase[4]` | `r chitinase[5]` | `r chitinase[6]` | `r chitinase[7]` | `r chitinase[8]` | `r chitinase[9]` |`r chitinase[10]` |
+| Alkaline phosphatase | `r ap[1]` | `r ap[2]` | `r ap[3]` | `r ap[4]` | `r ap[5]` | `r ap[6]` | `r ap[7]` | `r ap[8]` | `r ap[9]` || `r ap[10]` |
+| Cellulase | `r cellulase[1]` | `r cellulase[2]` | `r cellulase[3]` | `r cellulase[4]` | `r cellulase[5]` | `r cellulase[6]` | `r cellulase[7]` | `r cellulase[8]` | `r cellulase[9]` |`r cellulase[10]` |
+| Reactive oxygen species | `r ros[1]` | `r ros[2]` | `r ros[3]` | `r ros[4]` | `r ros[5]` | `r ros[6]` | `r ros[7]` | `r ros[8]` | `r ros[9]` | `r ros[10]` |
+| Nitrite reduction | `r nitrite_reduction[1]` | `r nitrite_reduction[2]` | `r nitrite_reduction[3]` | `r nitrite_reduction[4]` | `r nitrite_reduction[5]` | `r nitrite_reduction[6]` | `r nitrite_reduction[7]` | `r nitrite_reduction[8]` | `r nitrite_reduction[9]` |`r nitrite_reduction[10]` |
+| Protease | `r protease[1]` | `r protease[2]` | `r protease[3]` | `r protease[4]` | `r protease[5]` | `r protease[6]` | `r protease[7]` | `r protease[8]` | `r protease[9]` | `r protease[10]` 
+| Carboxylate transport | `r carbox[1]` | `r carbox[2]` | `r carbox[3]` | `r carbox[4]` | `r carbox[5]` | `r carbox[6]` | `r carbox[7]` | `r carbox[8]` | `r carbox[9]` | `r carbox[10]` |
+| Ribose transport | `r ribose[1]` | `r ribose[2]` | `r ribose[3]` | `r ribose[4]` | `r ribose[5]` | `r ribose[6]` | `r ribose[7]` | `r ribose[8]` | `r ribose[9]` | `r ribose[10]` |
+| General sugar transport | `r gen.sugars[1]` | `r gen.sugars[2]` | `r gen.sugars[3]` | `r gen.sugars[4]` | `r gen.sugars[5]` | `r gen.sugars[6]` | `r gen.sugars[7]` | `r gen.sugars[8]` | `r gen.sugars[9]` | `r gen.sugars[10]` |
 | Raffinose/stachyose/melibiose transport | `r raff[1]` | `r raff[2]` | `r raff[3]` | `r raff[4]` | `r raff[5]` | `r raff[6]` | `r raff[7]` | `r raff[8]` | `r raff[9]` |
-| Glucose/mannose transport | `r gluc[1]` | `r gluc[2]` | `r gluc[3]` | `r gluc[4]` | `r gluc[5]` | `r gluc[6]` | `r gluc[7]` | `r gluc[8]` | `r gluc[9]` |
-| Rhamnose transport | `r rham[1]` | `r rham[2]` | `r rham[3]` | `r rham[4]` | `r rham[5]` | `r rham[6]` | `r rham[7]` | `r rham[8]` | `r rham[9]` |
-| Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[3]` | `r xyl[4]` | `r xyl[5]` | `r xyl[6]` | `r xyl[7]` | `r xyl[8]` | `r xyl[9]` |
-| Fructose transport | `r fruct[1]` | `r fruct[2]` | `r fruct[3]` | `r fruct[4]` | `r fruct[5]` | `r fruct[6]` | `r fruct[7]` | `r fruct[8]` | `r fruct[9]` |
-| Chitobiose transport | `r chiti[1]` | `r chiti[2]` | `r chiti[3]` | `r chiti[4]` | `r chiti[5]` | `r chiti[6]` | `r chiti[7]` | `r chiti[8]` | `r chiti[9]` |
-| Lactose/arabinose transport | `r lact[1]` | `r lact[2]` | `r lact[3]` | `r lact[4]` | `r lact[5]` | `r lact[6]` | `r lact[7]` | `r lact[8]` | `r lact[9]` |
+| Glucose/mannose transport | `r gluc[1]` | `r gluc[2]` | `r gluc[3]` | `r gluc[4]` | `r gluc[5]` | `r gluc[6]` | `r gluc[7]` | `r gluc[8]` | `r gluc[9]` | `r gluc[10]` |
+| Rhamnose transport | `r rham[1]` | `r rham[2]` | `r rham[3]` | `r rham[4]` | `r rham[5]` | `r rham[6]` | `r rham[7]` | `r rham[8]` | `r rham[9]` | `r rham[10]` |
+| Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[3]` | `r xyl[4]` | `r xyl[5]` | `r xyl[6]` | `r xyl[7]` | `r xyl[8]` | `r xyl[9]` |`r xyl[10]` |
+| Fructose transport | `r fruct[1]` | `r fruct[2]` | `r fruct[3]` | `r fruct[4]` | `r fruct[5]` | `r fruct[6]` | `r fruct[7]` | `r fruct[8]` | `r fruct[9]` | `r fruct[10]` |
+| Chitobiose transport | `r chiti[1]` | `r chiti[2]` | `r chiti[3]` | `r chiti[4]` | `r chiti[5]` | `r chiti[6]` | `r chiti[7]` | `r chiti[8]` | `r chiti[9]` | `r chiti[10]` |
+| Lactose/arabinose transport | `r lact[1]` | `r lact[2]` | `r lact[3]` | `r lact[4]` | `r lact[5]` | `r lact[6]` | `r lact[7]` | `r lact[8]` | `r lact[9]` | `r lact[10]` |
 
 **Table 3.** Gene diffs in Trout Bog 
 
@@ -429,6 +438,7 @@ reskey <- trout_key[match(rownames(res), trout_key$Gene), ]
 # Write a function to report trends in metabolic categories
 pathway.stats <- function(searchterm){
   genes <- reskey$Gene[grep(searchterm, reskey$Product)]
+  numgenes <- length(genes)
   gene_results <- res[match(genes, rownames(res)), ]
   gene_counts <- abun_tnorm[match(genes, rownames(abun_tnorm)),]
   gene_results$Day <- rowSums(gene_counts[which(conditions == "day")])
@@ -454,7 +464,7 @@ pathway.stats <- function(searchterm){
     percent_cyclic_reads = 0
   }
   
-  report <- c(round(percent_genes_day, 2), round(percent_reads_day, 2), round(percent_genes_night, 2), round(percent_reads_night, 2), round(percent_cyclic_genes, 2), round(percent_cyclic_reads, 2), formatC(mean(day_totals), format = "e", digits = 2), formatC(mean(night_totals), format = "e", digits = 2), round(sig$p.value, 2))
+  report <- c(numgenes, round(percent_genes_day, 2), round(percent_reads_day, 2), round(percent_genes_night, 2), round(percent_reads_night, 2), round(percent_cyclic_genes, 2), round(percent_cyclic_reads, 2), formatC(mean(day_totals), format = "e", digits = 2), formatC(mean(night_totals), format = "e", digits = 2), round(sig$p.value, 2))
   names(report) <- c("%DayGenes", "%DayReadsContributed", "%NightGenes", "%NightReadsContributed", "%CyclicGenes", "%CyclicReadsContributed", "DayReads", "NightReads", "t-test")
   return(report)
 }
@@ -486,30 +496,30 @@ urea <- pathway.stats("urease")
 ```
 
 
-|                         | % Genes more expressed in day      | % Reads in day contributed by those genes                | % Genes more expressed at night   | % Reads at night contributed by those genes | % Cyclic genes (12 hr phase) | % Reads contributed by cyclic genes | Mean reads in day samples | Mean reads in night samples | p-value from t-test of day vs. night read totals |
+|                         | % Number of genes | % Genes more expressed in day      | % Reads in day contributed by those genes                | % Genes more expressed at night   | % Reads at night contributed by those genes | % Cyclic genes (12 hr phase) | % Reads contributed by cyclic genes | Mean reads in day samples | Mean reads in night samples | p-value from t-test of day vs. night read totals |
 | ----------------------- |:-----------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|
-| Photosynthesis | `r photo[1]` | `r photo[2]` | `r photo[3]` | `r photo[4]` | `r photo[5]` | `r photo[6]` | `r photo[7]` | `r photo[8]` | `r photo[9]`
-| Rhodopsins | `r rhodo[1]` | `r rhodo[2]` | `r rhodo[3]` | `r rhodo[4]` | `r rhodo[5]` | `r rhodo[6]` | `r rhodo[7]` | `r rhodo[8]` | `r rhodo[9]`
-| RuBisCO | `r rubisco[1]` | `r rubisco[2]` | `r rubisco[3]` | `r rubisco[4]` | `r rubisco[5]` | `r rubisco[6]` | `r rubisco[7]` | `r rubisco[8]` | `r rubisco[9]` |
-| reductive TCA | `r rTCA[1]` | `r rTCA[2]` | `r rTCA[3]` | `r rTCA[4]` | `r rTCA[5]` | `r rubisco[6]` | `r rTCA[7]` | `r rTCA[8]` | `r rTCA[9]` |
-| Glycoside hydrolases | `r gh[1]` | `r gh[2]` | `r gh[3]` | `r gh[4]` | `r gh[5]` | `r gh[6]` | `r gh[7]` | `r gh[8]` | `r gh[9]` |
-| Polyamines | `r polyamines[1]` | `r polyamines[2]` | `r polyamines[3]` | `r polyamines[4]` | `r polyamines[5]` | `r polyamines[6]` | `r polyamines[7]` | `r polyamines[8]` | `r polyamines[9]` |
-| Chitinase | `r chitinase[1]` | `r chitinase[2]` | `r chitinase[3]` | `r chitinase[4]` | `r chitinase[5]` | `r chitinase[6]` | `r chitinase[7]` | `r chitinase[8]` | `r chitinase[9]` |
-| Alkaline phosphatase | `r ap[1]` | `r ap[2]` | `r ap[3]` | `r ap[4]` | `r ap[5]` | `r ap[6]` | `r ap[7]` | `r ap[8]` | `r ap[9]` |
-| Cellulase | `r cellulase[1]` | `r cellulase[2]` | `r cellulase[3]` | `r cellulase[4]` | `r cellulase[5]` | `r cellulase[6]` | `r cellulase[7]` | `r cellulase[8]` | `r cellulase[9]` |
-| Reactive oxygen species | `r ros[1]` | `r ros[2]` | `r ros[3]` | `r ros[4]` | `r ros[5]` | `r ros[6]` | `r ros[7]` | `r ros[8]` | `r ros[9]` |
-| Nitrite reduction | `r nitrite_reduction[1]` | `r nitrite_reduction[2]` | `r nitrite_reduction[3]` | `r nitrite_reduction[4]` | `r nitrite_reduction[5]` | `r nitrite_reduction[6]` | `r nitrite_reduction[7]` | `r nitrite_reduction[8]` | `r nitrite_reduction[9]` |
-| Protease | `r protease[1]` | `r protease[2]` | `r protease[3]` | `r protease[4]` | `r protease[5]` | `r protease[6]` | `r protease[7]` | `r protease[8]` | `r protease[9]` |
-| Carboxylate transport | `r carbox[1]` | `r carbox[2]` | `r carbox[3]` | `r carbox[4]` | `r carbox[5]` | `r carbox[6]` | `r carbox[7]` | `r carbox[8]` | `r carbox[9]` |
+| Photosynthesis | `r photo[1]` | `r photo[2]` | `r photo[3]` | `r photo[4]` | `r photo[5]` | `r photo[6]` | `r photo[7]` | `r photo[8]` | `r photo[9]` | `r photo[10]` |
+| Rhodopsins | `r rhodo[1]` | `r rhodo[2]` | `r rhodo[3]` | `r rhodo[4]` | `r rhodo[5]` | `r rhodo[6]` | `r rhodo[7]` | `r rhodo[8]` | `r rhodo[9]` | `r rhodo[10]` |
+| RuBisCO | `r rubisco[1]` | `r rubisco[2]` | `r rubisco[3]` | `r rubisco[4]` | `r rubisco[5]` | `r rubisco[6]` | `r rubisco[7]` | `r rubisco[8]` | `r rubisco[9]` | `r rubisco[10]` |
+| reductive TCA | `r rTCA[1]` | `r rTCA[2]` | `r rTCA[3]` | `r rTCA[4]` | `r rTCA[5]` | `r rubisco[6]` | `r rTCA[7]` | `r rTCA[8]` | `r rTCA[9]` | `r rTCA[10]` |
+| Glycoside hydrolases | `r gh[1]` | `r gh[2]` | `r gh[3]` | `r gh[4]` | `r gh[5]` | `r gh[6]` | `r gh[7]` | `r gh[8]` | `r gh[9]` | `r gh[10]` |
+| Polyamines | `r polyamines[1]` | `r polyamines[2]` | `r polyamines[3]` | `r polyamines[4]` | `r polyamines[5]` | `r polyamines[6]` | `r polyamines[7]` | `r polyamines[8]` | `r polyamines[9]` | `r polyamines[10]` |
+| Chitinase | `r chitinase[1]` | `r chitinase[2]` | `r chitinase[3]` | `r chitinase[4]` | `r chitinase[5]` | `r chitinase[6]` | `r chitinase[7]` | `r chitinase[8]` | `r chitinase[9]` | `r chitinase[10]` |
+| Alkaline phosphatase | `r ap[1]` | `r ap[2]` | `r ap[3]` | `r ap[4]` | `r ap[5]` | `r ap[6]` | `r ap[7]` | `r ap[8]` | `r ap[9]` | `r ap[10]` |
+| Cellulase | `r cellulase[1]` | `r cellulase[2]` | `r cellulase[3]` | `r cellulase[4]` | `r cellulase[5]` | `r cellulase[6]` | `r cellulase[7]` | `r cellulase[8]` | `r cellulase[9]` | `r cellulase[10]` |
+| Reactive oxygen species | `r ros[1]` | `r ros[2]` | `r ros[3]` | `r ros[4]` | `r ros[5]` | `r ros[6]` | `r ros[7]` | `r ros[8]` | `r ros[9]` | `r ros[10]` |
+| Nitrite reduction | `r nitrite_reduction[1]` | `r nitrite_reduction[2]` | `r nitrite_reduction[3]` | `r nitrite_reduction[4]` | `r nitrite_reduction[5]` | `r nitrite_reduction[6]` | `r nitrite_reduction[7]` | `r nitrite_reduction[8]` | `r nitrite_reduction[9]` | `r nitrite_reduction[10]` |
+| Protease | `r protease[1]` | `r protease[2]` | `r protease[3]` | `r protease[4]` | `r protease[5]` | `r protease[6]` | `r protease[7]` | `r protease[8]` | `r protease[9]` | `r protease[10]` |
+| Carboxylate transport | `r carbox[1]` | `r carbox[2]` | `r carbox[3]` | `r carbox[4]` | `r carbox[5]` | `r carbox[6]` | `r carbox[7]` | `r carbox[8]` | `r carbox[9]` | `r carbox[10]` |
 | Ribose transport | `r ribose[1]` | `r ribose[2]` | `r ribose[3]` | `r ribose[4]` | `r ribose[5]` | `r ribose[6]` | `r ribose[7]` | `r ribose[8]` | `r ribose[9]` |
-| General sugar transport | `r gen.sugars[1]` | `r gen.sugars[2]` | `r gen.sugars[3]` | `r gen.sugars[4]` | `r gen.sugars[5]` | `r gen.sugars[6]` | `r gen.sugars[7]` | `r gen.sugars[8]` | `r gen.sugars[9]` |
+| General sugar transport | `r gen.sugars[1]` | `r gen.sugars[2]` | `r gen.sugars[3]` | `r gen.sugars[4]` | `r gen.sugars[5]` | `r gen.sugars[6]` | `r gen.sugars[7]` | `r gen.sugars[8]` | `r gen.sugars[9]` | `r gen.sugars[10]` |
 | Raffinose/stachyose/melibiose transport | `r raff[1]` | `r raff[2]` | `r raff[3]` | `r raff[4]` | `r raff[5]` | `r raff[6]` | `r raff[7]` | `r raff[8]` | `r raff[9]` |
-| Glucose/mannose transport | `r gluc[1]` | `r gluc[2]` | `r gluc[3]` | `r gluc[4]` | `r gluc[5]` | `r gluc[6]` | `r gluc[7]` | `r gluc[8]` | `r gluc[9]` |
-| Rhamnose transport | `r rham[1]` | `r rham[2]` | `r rham[3]` | `r rham[4]` | `r rham[5]` | `r rham[6]` | `r rham[7]` | `r rham[8]` | `r rham[9]` |
-| Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[3]` | `r xyl[4]` | `r xyl[5]` | `r xyl[6]` | `r xyl[7]` | `r xyl[8]` | `r xyl[9]` |
-| Fructose transport | `r fruct[1]` | `r fruct[2]` | `r fruct[3]` | `r fruct[4]` | `r fruct[5]` | `r fruct[6]` | `r fruct[7]` | `r fruct[8]` | `r fruct[9]` |
-| Methane/ammonia monooxygenase | `r meth[1]` | `r meth[2]` | `r meth[3]` | `r meth[4]` | `r meth[5]` | `r meth[6]` | `r meth[7]` | `r meth[8]` | `r meth[9]` |
-| Urease | `r urea[1]` | `r urea[2]` | `r urea[3]` | `r urea[4]` | `r urea[5]` | `r urea[6]` | `r urea[7]` | `r urea[8]` | `r urea[9]` |
+| Glucose/mannose transport | `r gluc[1]` | `r gluc[2]` | `r gluc[3]` | `r gluc[4]` | `r gluc[5]` | `r gluc[6]` | `r gluc[7]` | `r gluc[8]` | `r gluc[9]` | `r gluc[10]` |
+| Rhamnose transport | `r rham[1]` | `r rham[2]` | `r rham[3]` | `r rham[4]` | `r rham[5]` | `r rham[6]` | `r rham[7]` | `r rham[8]` | `r rham[9]` | `r rham[10]` |
+| Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[3]` | `r xyl[4]` | `r xyl[5]` | `r xyl[6]` | `r xyl[7]` | `r xyl[8]` | `r xyl[9]` | `r xyl[10]` |
+| Fructose transport | `r fruct[1]` | `r fruct[2]` | `r fruct[3]` | `r fruct[4]` | `r fruct[5]` | `r fruct[6]` | `r fruct[7]` | `r fruct[8]` | `r fruct[9]` | `r fruct[10]` |
+| Methane/ammonia monooxygenase | `r meth[1]` | `r meth[2]` | `r meth[3]` | `r meth[4]` | `r meth[5]` | `r meth[6]` | `r meth[7]` | `r meth[8]` | `r meth[9]` | `r meth[10]` |
+| Urease | `r urea[1]` | `r urea[2]` | `r urea[3]` | `r urea[4]` | `r urea[5]` | `r urea[6]` | `r urea[7]` | `r urea[8]` | `r urea[9]` | `r urea[10]` |
 
 
 **Table 3.** Gene diffs in Sparkling Lake
@@ -548,6 +558,7 @@ reskey <- spark_key[match(rownames(res), spark_key$Gene), ]
 # Write a function to report trends in metabolic categories
 pathway.stats <- function(searchterm){
   genes <- reskey$Gene[grep(searchterm, reskey$Product)]
+  numgenes <- length(genes)
   gene_results <- res[match(genes, rownames(res)), ]
   gene_counts <- abun_snorm[match(genes, rownames(abun_snorm)),]
   gene_results$Day <- rowSums(gene_counts[which(conditions == "day")])
@@ -573,7 +584,7 @@ pathway.stats <- function(searchterm){
     percent_cyclic_reads = 0
   }
   
-  report <- c(round(percent_genes_day, 2), round(percent_reads_day, 2), round(percent_genes_night, 2), round(percent_reads_night, 2), round(percent_cyclic_genes, 2), round(percent_cyclic_reads, 2), formatC(mean(day_totals), format = "e", digits = 2), formatC(mean(night_totals), format = "e", digits = 2), round(sig$p.value, 2))
+  report <- c(numgenes, round(percent_genes_day, 2), round(percent_reads_day, 2), round(percent_genes_night, 2), round(percent_reads_night, 2), round(percent_cyclic_genes, 2), round(percent_cyclic_reads, 2), formatC(mean(day_totals), format = "e", digits = 2), formatC(mean(night_totals), format = "e", digits = 2), round(sig$p.value, 2))
   names(report) <- c("%DayGenes", "%DayReadsContributed", "%NightGenes", "%NightReadsContributed", "%CyclicGenes", "%CyclicReadsContributed", "DayReads", "NightReads", "t-test")
   return(report)
 }
@@ -606,31 +617,31 @@ urea <- pathway.stats("urease")
 ```
 
 
-|                         | % Genes more expressed in day      | % Reads in day contributed by those genes                | % Genes more expressed at night   | % Reads at night contributed by those genes | % Cyclic genes (12 hr phase) | % Reads contributed by cyclic genes | Mean reads in day samples | Mean reads in night samples | p-value from t-test of day vs. night read totals |
+|                         | % Number of genes | % Genes more expressed in day      | % Reads in day contributed by those genes                | % Genes more expressed at night   | % Reads at night contributed by those genes | % Cyclic genes (12 hr phase) | % Reads contributed by cyclic genes | Mean reads in day samples | Mean reads in night samples | p-value from t-test of day vs. night read totals |
 | ----------------------- |:-----------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|
-| Photosynthesis | `r photo[1]` | `r photo[2]` | `r photo[3]` | `r photo[4]` | `r photo[5]` | `r photo[6]` | `r photo[7]` | `r photo[8]` | `r photo[9]`
-| Rhodopsins | `r rhodo[1]` | `r rhodo[2]` | `r rhodo[3]` | `r rhodo[4]` | `r rhodo[5]` | `r rhodo[6]` | `r rhodo[7]` | `r rhodo[8]` | `r rhodo[9]`
-| RuBisCO | `r rubisco[1]` | `r rubisco[2]` | `r rubisco[3]` | `r rubisco[4]` | `r rubisco[5]` | `r rubisco[6]` | `r rubisco[7]` | `r rubisco[8]` | `r rubisco[9]` |
-| reductive TCA | `r rTCA[1]` | `r rTCA[2]` | `r rTCA[3]` | `r rTCA[4]` | `r rTCA[5]` | `r rubisco[6]` | `r rTCA[7]` | `r rTCA[8]` | `r rTCA[9]` |
-| Nitrogenase | `r nif[1]` | `r nif[2]` | `r nif[3]` | `r nif[4]` | `r nif[5]` | `r nif[6]` | `r nif[7]` | `r nif[8]` | `r nif[9]` |
-| Polyamines | `r polyamines[1]` | `r polyamines[2]` | `r polyamines[3]` | `r polyamines[4]` | `r polyamines[5]` | `r polyamines[6]` | `r polyamines[7]` | `r polyamines[8]` | `r polyamines[9]` |
-| Chitinase | `r chitinase[1]` | `r chitinase[2]` | `r chitinase[3]` | `r chitinase[4]` | `r chitinase[5]` | `r chitinase[6]` | `r chitinase[7]` | `r chitinase[8]` | `r chitinase[9]` |
-| Alkaline phosphatase | `r ap[1]` | `r ap[2]` | `r ap[3]` | `r ap[4]` | `r ap[5]` | `r ap[6]` | `r ap[7]` | `r ap[8]` | `r ap[9]` |
-| Cellulase | `r cellulase[1]` | `r cellulase[2]` | `r cellulase[3]` | `r cellulase[4]` | `r cellulase[5]` | `r cellulase[6]` | `r cellulase[7]` | `r cellulase[8]` | `r cellulase[9]` |
-| Reactive oxygen species | `r ros[1]` | `r ros[2]` | `r ros[3]` | `r ros[4]` | `r ros[5]` | `r ros[6]` | `r ros[7]` | `r ros[8]` | `r ros[9]` |
-| Nitrite reduction | `r nitrite_reduction[1]` | `r nitrite_reduction[2]` | `r nitrite_reduction[3]` | `r nitrite_reduction[4]` | `r nitrite_reduction[5]` | `r nitrite_reduction[6]` | `r nitrite_reduction[7]` | `r nitrite_reduction[8]` | `r nitrite_reduction[9]` |
-| Protease | `r protease[1]` | `r protease[2]` | `r protease[3]` | `r protease[4]` | `r protease[5]` | `r protease[6]` | `r protease[7]` | `r protease[8]` | `r protease[9]` |
-| Carboxylate transport | `r carbox[1]` | `r carbox[2]` | `r carbox[3]` | `r carbox[4]` | `r carbox[5]` | `r carbox[6]` | `r carbox[7]` | `r carbox[8]` | `r carbox[9]` |
-| Ribose transport | `r ribose[1]` | `r ribose[2]` | `r ribose[3]` | `r ribose[4]` | `r ribose[5]` | `r ribose[6]` | `r ribose[7]` | `r ribose[8]` | `r ribose[9]` |
-| General sugar transport | `r gen.sugars[1]` | `r gen.sugars[2]` | `r gen.sugars[3]` | `r gen.sugars[4]` | `r gen.sugars[5]` | `r gen.sugars[6]` | `r gen.sugars[7]` | `r gen.sugars[8]` | `r gen.sugars[9]` |
-| Raffinose/stachyose/melibiose transport | `r raff[1]` | `r raff[2]` | `r raff[3]` | `r raff[4]` | `r raff[5]` | `r raff[6]` | `r raff[7]` | `r raff[8]` | `r raff[9]` |
-| Glucose/mannose transport | `r gluc[1]` | `r gluc[2]` | `r gluc[3]` | `r gluc[4]` | `r gluc[5]` | `r gluc[6]` | `r gluc[7]` | `r gluc[8]` | `r gluc[9]` |
-| Rhamnose transport | `r rham[1]` | `r rham[2]` | `r rham[3]` | `r rham[4]` | `r rham[5]` | `r rham[6]` | `r rham[7]` | `r rham[8]` | `r rham[9]` |
-| Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[3]` | `r xyl[4]` | `r xyl[5]` | `r xyl[6]` | `r xyl[7]` | `r xyl[8]` | `r xyl[9]` |
-| Fructose transport | `r fruct[1]` | `r fruct[2]` | `r fruct[3]` | `r fruct[4]` | `r fruct[5]` | `r fruct[6]` | `r fruct[7]` | `r fruct[8]` | `r fruct[9]` |
-| Chitobiose transport | `r chiti[1]` | `r chiti[2]` | `r chiti[3]` | `r chiti[4]` | `r chiti[5]` | `r chiti[6]` | `r chiti[7]` | `r chiti[8]` | `r chiti[9]` |
-| Methane/ammonia monooxygenase | `r meth[1]` | `r meth[2]` | `r meth[3]` | `r meth[4]` | `r meth[5]` | `r meth[6]` | `r meth[7]` | `r meth[8]` | `r meth[9]` |
-| Urease | `r urea[1]` | `r urea[2]` | `r urea[3]` | `r urea[4]` | `r urea[5]` | `r urea[6]` | `r urea[7]` | `r urea[8]` | `r urea[9]` |
+| Photosynthesis | `r photo[1]` | `r photo[2]` | `r photo[3]` | `r photo[4]` | `r photo[5]` | `r photo[6]` | `r photo[7]` | `r photo[8]` | `r photo[9]` | `r photo[10]`|
+| Rhodopsins | `r rhodo[1]` | `r rhodo[2]` | `r rhodo[3]` | `r rhodo[4]` | `r rhodo[5]` | `r rhodo[6]` | `r rhodo[7]` | `r rhodo[8]` | `r rhodo[9]` | `r rhodo[10]`|
+| RuBisCO | `r rubisco[1]` | `r rubisco[2]` | `r rubisco[3]` | `r rubisco[4]` | `r rubisco[5]` | `r rubisco[6]` | `r rubisco[7]` | `r rubisco[8]` | `r rubisco[9]` | `r rubisco[10]` |
+| reductive TCA | `r rTCA[1]` | `r rTCA[2]` | `r rTCA[3]` | `r rTCA[4]` | `r rTCA[5]` | `r rubisco[6]` | `r rTCA[7]` | `r rTCA[8]` | `r rTCA[9]` | `r rTCA[10]` |
+| Nitrogenase | `r nif[1]` | `r nif[2]` | `r nif[3]` | `r nif[4]` | `r nif[5]` | `r nif[6]` | `r nif[7]` | `r nif[8]` | `r nif[9]` | `r nif[10]` |
+| Polyamines | `r polyamines[1]` | `r polyamines[2]` | `r polyamines[3]` | `r polyamines[4]` | `r polyamines[5]` | `r polyamines[6]` | `r polyamines[7]` | `r polyamines[8]` | `r polyamines[9]` | `r polyamines[10]` |
+| Chitinase | `r chitinase[1]` | `r chitinase[2]` | `r chitinase[3]` | `r chitinase[4]` | `r chitinase[5]` | `r chitinase[6]` | `r chitinase[7]` | `r chitinase[8]` | `r chitinase[9]` | `r chitinase[10]` |
+| Alkaline phosphatase | `r ap[1]` | `r ap[2]` | `r ap[3]` | `r ap[4]` | `r ap[5]` | `r ap[6]` | `r ap[7]` | `r ap[8]` | `r ap[9]` | `r ap[10]` |
+| Cellulase | `r cellulase[1]` | `r cellulase[2]` | `r cellulase[3]` | `r cellulase[4]` | `r cellulase[5]` | `r cellulase[6]` | `r cellulase[7]` | `r cellulase[8]` | `r cellulase[9]` | `r cellulase[10]` |
+| Reactive oxygen species | `r ros[1]` | `r ros[2]` | `r ros[3]` | `r ros[4]` | `r ros[5]` | `r ros[6]` | `r ros[7]` | `r ros[8]` | `r ros[9]` | `r ros[10]` |
+| Nitrite reduction | `r nitrite_reduction[1]` | `r nitrite_reduction[2]` | `r nitrite_reduction[3]` | `r nitrite_reduction[4]` | `r nitrite_reduction[5]` | `r nitrite_reduction[6]` | `r nitrite_reduction[7]` | `r nitrite_reduction[8]` | `r nitrite_reduction[9]` | `r nitrite_reduction[10]` |
+| Protease | `r protease[1]` | `r protease[2]` | `r protease[3]` | `r protease[4]` | `r protease[5]` | `r protease[6]` | `r protease[7]` | `r protease[8]` | `r protease[9]` | `r protease[10]` |
+| Carboxylate transport | `r carbox[1]` | `r carbox[2]` | `r carbox[3]` | `r carbox[4]` | `r carbox[5]` | `r carbox[6]` | `r carbox[7]` | `r carbox[8]` | `r carbox[9]` | `r carbox[10]` |
+| Ribose transport | `r ribose[1]` | `r ribose[2]` | `r ribose[3]` | `r ribose[4]` | `r ribose[5]` | `r ribose[6]` | `r ribose[7]` | `r ribose[8]` | `r ribose[9]` | `r ribose[10]` |
+| General sugar transport | `r gen.sugars[1]` | `r gen.sugars[2]` | `r gen.sugars[3]` | `r gen.sugars[4]` | `r gen.sugars[5]` | `r gen.sugars[6]` | `r gen.sugars[7]` | `r gen.sugars[8]` | `r gen.sugars[9]` | `r gen.sugars[10]` |
+| Raffinose/stachyose/melibiose transport | `r raff[1]` | `r raff[2]` | `r raff[3]` | `r raff[4]` | `r raff[5]` | `r raff[6]` | `r raff[7]` | `r raff[8]` | `r raff[9]` | `r raff[10]` |
+| Glucose/mannose transport | `r gluc[1]` | `r gluc[2]` | `r gluc[3]` | `r gluc[4]` | `r gluc[5]` | `r gluc[6]` | `r gluc[7]` | `r gluc[8]` | `r gluc[9]` | `r gluc[10]` |
+| Rhamnose transport | `r rham[1]` | `r rham[2]` | `r rham[3]` | `r rham[4]` | `r rham[5]` | `r rham[6]` | `r rham[7]` | `r rham[8]` | `r rham[9]` | `r rham[10]` |
+| Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[3]` | `r xyl[4]` | `r xyl[5]` | `r xyl[6]` | `r xyl[7]` | `r xyl[8]` | `r xyl[9]` | `r xyl[10]` |
+| Fructose transport | `r fruct[1]` | `r fruct[2]` | `r fruct[3]` | `r fruct[4]` | `r fruct[5]` | `r fruct[6]` | `r fruct[7]` | `r fruct[8]` | `r fruct[9]` | `r fruct[10]` |
+| Chitobiose transport | `r chiti[1]` | `r chiti[2]` | `r chiti[3]` | `r chiti[4]` | `r chiti[5]` | `r chiti[6]` | `r chiti[7]` | `r chiti[8]` | `r chiti[9]` | `r chiti[10]` |
+| Methane/ammonia monooxygenase | `r meth[1]` | `r meth[2]` | `r meth[3]` | `r meth[4]` | `r meth[5]` | `r meth[6]` | `r meth[7]` | `r meth[8]` | `r meth[9]` | `r meth[10]` |
+| Urease | `r urea[1]` | `r urea[2]` | `r urea[3]` | `r urea[4]` | `r urea[5]` | `r urea[6]` | `r urea[7]` | `r urea[8]` | `r urea[9]` | `r urea[10]` |
 
 
 
@@ -736,10 +747,85 @@ cycle3
 ```
 **Figure 1. Cyclic trends in Lake Mendota.** Cyclic trends with a 12 hour phase were detected in Lake Mendota for several functional categories. 
 
-# Make barplots of taxa day vs night by categories of interest
-# Include gene classifications from phylodist when available
 
-```{r, eval = F, warning = F, message = F, echo = F}
+```{r, eval = T, warning = F, message = F, echo = F}
+##### DESeq differential expression testing
+
+abun_mnorm <- mnorm[order(rowSums(mnorm), decreasing = T), ]
+abun_mnorm <- abun_mnorm[1:20000,]
+
+colnames(abun_mnorm) <- gsub(".nonrRNA", "", colnames(abun_mnorm))
+
+input <- as.matrix(abun_mnorm)
+input <- input/100
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_mnorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_mnorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+
+res <- res[which(res$padj < 0.05), ]
+reskey <- mendota_key[match(rownames(res), mendota_key$Gene), ]
+reskey$log2FoldChange <- res$log2FoldChange[match(reskey$Gene, rownames(res))]
+
+# Make column by certain key words 
+reskey$Category <- "None"
+reskey$Category[grep("photo|Photo", reskey$Product)] <- "Photosynthesis"
+reskey$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", reskey$Product)] <- "Rhodopsin"
+#reskey$Category[grep("rbcL|ribulose-bisphosphate carboxylase", reskey$Product)] <- "RuBisCO"
+#reskey$Category[grep("citrate lyase|Citrate lyase", reskey$Product)] <- "rTCA"
+#reskey$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", reskey$Product)] <- "Nitrogenase"
+reskey$Category[grep("peroxidase|peroxide|catalase", reskey$Product)] <- "ROS"
+#reskey$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", reskey$Product)] <- "Nitrite_reduction"
+#reskey$Category[grep("urease", reskey$Product)] <- "Urease"
+reskey$Category[grep("protease", reskey$Product)] <- "Protease"
+reskey$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", reskey$Product)] <- "General sugar transport"
+reskey$Category[grep("raffinose/stachyose/melibiose transport", reskey$Product)] <- "Raffinose/stachyose/melibiose transport"
+reskey$Category[grep("chitobiose transport", reskey$Product)] <- "Chitobiose transport"
+reskey$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", reskey$Product)] <- "Chitinase"
+reskey$Category[grep("ribose transport", reskey$Product)] <- "Ribose transport"
+
+# Add day/night counts
+gene_counts <- abun_mnorm[match(reskey$Gene, rownames(abun_mnorm)),]
+reskey1 <- reskey
+reskey2 <- reskey
+reskey1$Counts <- rowSums(gene_counts[which(conditions == "day")])
+reskey2$Counts <- rowSums(gene_counts[which(conditions == "night")])
+reskey <- rbind(reskey1, reskey2)
+reskey$Time <- c(rep("Day", dim(reskey1)[1]), rep("Night", dim(reskey2)[1]))
+reskey$Counts <- as.numeric(reskey$Counts)
+
+# Visually inspect phyla to keep
+# ggplot(data = reskey, aes(x = Phylum, y = Counts, fill = Time)) + geom_bar(stat = "identity")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Mendota") + facet_wrap(~ Category, nrow = 3, scales="free")
+
+phyla2keep <- c("Actinobacteria", "Bacteroidetes", "Unclassified", "Cyanobacteria", "Betaproteobacteria", "Gammaproteobacteria", "Verrucomicrobia", "Firmicutes", "Deltaproteobacteria", "Planctomycetes")
+reskey <- reskey[which(reskey$Category != "None"), ] 
+`%not in%` <- function (x, table) is.na(match(x, table, nomatch=NA_integer_))
+reskey$Phylum[which(is.na(reskey$Phylum) == T)] <- "Unclassified"
+reskey$Phylum <- as.character(reskey$Phylum)
+reskey$Phylum[which(reskey$Phylum %not in% phyla2keep)] <- "Other"
+
+
+colorkey <- data.frame(phylum = c("Actinobacteria", "Alphaproteobacteria", "Armatimonadetes", "Bacteroidetes", "Betaproteobacteria", "Cyanobacteria", "Deltaproteobacteria", "Firmicutes", "Gammaproteobacteria", "Other", "Planctomycetes", "Unclassified", "Verrucomicrobia"), color = c("chocolate1",  "hotpink2", "turquoise3", "goldenrod1", "dodgerblue", "green3", "skyblue", "orchid3", "palegreen", "honeydew4", "lightcoral", "honeydew3", "lightslateblue"))
+
+ggplot(data = reskey, aes(x = Time, y = Counts, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Mendota") + facet_wrap(~ Category, nrow = 3) + scale_fill_manual(values = as.character(colorkey$color[which(colorkey$phylum %in% unique(reskey$Phylum))]))
+```
+
+
+
+```{r, eval = T, warning = F, message = F, echo = F}
 
 ##### DESeq differential expression testing
 
@@ -767,116 +853,132 @@ cds <- estimateDispersions(cds)
 
 dds <- DESeq(cds)
 res <- results(dds)
-sig.res <- res[which(res$padj < 0.05), ]
-sig.res.day <- sig.res[which(sig.res$log2FoldChange < 0), ]
-sig.res.night <- sig.res[which(sig.res$log2FoldChange > 0), ]
-sig.res.day.key <- trout_key[match(rownames(sig.res.day), trout_key$Gene),]
-sig.res.night.key <- trout_key[match(rownames(sig.res.night), trout_key$Gene),]
-
-# Make plots of this aggreagted by short taxa and groupd products
-
-sig.res.day.key$Taxonomy <- gsub(";;;", "", sig.res.day.key$Taxonomy)
-sig.res.day.key$Taxonomy <- gsub(";;", "", sig.res.day.key$Taxonomy)
-sig.res.day.key$Taxonomy <- gsub(";$", "", sig.res.day.key$Taxonomy)
-spl <- strsplit(as.character(sig.res.day.key$Taxonomy), ";")
-sig.res.day.key$ShortTax <- sapply(lapply(spl, tail, 1), paste, collapse=";")
-
-sig.res.night.key$Taxonomy <- gsub(";;;", "", sig.res.night.key$Taxonomy)
-sig.res.night.key$Taxonomy <- gsub(";;", "", sig.res.night.key$Taxonomy)
-sig.res.night.key$Taxonomy <- gsub(";$", "", sig.res.night.key$Taxonomy)
-spl <- strsplit(as.character(sig.res.night.key$Taxonomy), ";")
-sig.res.night.key$ShortTax <- sapply(lapply(spl, tail, 1), paste, collapse=";")
+res <- res[which(res$padj < 0.05), ]
+reskey <- trout_key[match(rownames(res), trout_key$Gene), ]
+reskey$log2FoldChange <- res$log2FoldChange[match(reskey$Gene, rownames(res))]
 
 # Make column by certain key words 
-sig.res.day.key$Category <- "None"
-sig.res.day.key$Category[grep("photo|Photo", sig.res.day.key$Product)] <- "Photosynthesis"
-sig.res.day.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.day.key$Product)] <- "Rhodopsin"
-# sig.res.day.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.day.key$Product)] <- "Sugar degradation"
-sig.res.day.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.day.key$Product)] <- "RuBisCO"
-sig.res.day.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.day.key$Product)] <- "Polyamines"
-sig.res.day.key$Category[grep("citrate lyase|Citrate lyase", sig.res.day.key$Product)] <- "rTCA"
-sig.res.day.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.day.key$Product)] <- "Nitrogenase"
-sig.res.day.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.day.key$Product)] <- "Chitinase"
-sig.res.day.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.day.key$Product)] <- "Glycoside_Hydrolase"
-sig.res.day.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.day.key$Product)] <- "Alkaline_phosphatase"
-sig.res.day.key$Category[grep("cellulase|cellulose", sig.res.day.key$Product)] <- "Cellulase"
-sig.res.day.key$Category[grep("peroxidase|peroxide|catalase", sig.res.day.key$Product)] <- "ROS"
-sig.res.day.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.day.key$Product)] <- "Methane/Ammonia"
-sig.res.day.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.day.key$Product)] <- "Nitrite_reduction"
-sig.res.day.key$Category[grep("urease", sig.res.day.key$Product)] <- "Urease"
-sig.res.day.key$Category[grep("protease", sig.res.day.key$Product)] <- "Protease"
-sig.res.day.key$Category[grep("carboxylate transport", sig.res.day.key$Product)] <- "Carboxylate transport"
-sig.res.day.key$Category[grep("ribose transport", sig.res.day.key$Product)] <- "Ribose transport"
-sig.res.day.key$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", sig.res.day.key$Product)] <- "General sugar transport"
-sig.res.day.key$Category[grep("raffinose/stachyose/melibiose transport", sig.res.day.key$Product)] <- "Raffinose/stachyose/melibiose transport"
-sig.res.day.key$Category[grep("glucose/mannose transport", sig.res.day.key$Product)] <- "Glucose/mannose transport"
-sig.res.day.key$Category[grep("rhamnose transport", sig.res.day.key$Product)] <- "Rhamnose transport"
-sig.res.day.key$Category[grep("xylose transport", sig.res.day.key$Product)] <- "Xylose transport"
-sig.res.day.key$Category[grep("fructose transport", sig.res.day.key$Product)] <- "Fructose transport"
-sig.res.day.key$Category[grep("chitobiose transport", sig.res.day.key$Product)] <- "Chitobiose transport"
-sig.res.day.key$Category[grep("lactose/L-arabinose transport", sig.res.day.key$Product)] <- "Lactose/arabinose transport"
+reskey$Category <- "None"
+reskey$Category[grep("photo|Photo", reskey$Product)] <- "Photosynthesis"
+#reskey$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", reskey$Product)] <- "Rhodopsin"
+reskey$Category[grep("rbcL|ribulose-bisphosphate carboxylase", reskey$Product)] <- "RuBisCO"
+#reskey$Category[grep("citrate lyase|Citrate lyase", reskey$Product)] <- "rTCA"
+#reskey$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", reskey$Product)] <- "Nitrogenase"
+reskey$Category[grep("peroxidase|peroxide|catalase", reskey$Product)] <- "ROS"
+reskey$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", reskey$Product)] <- "Nitrite_reduction"
+reskey$Category[grep("urease", reskey$Product)] <- "Urease"
+#reskey$Category[grep("protease", reskey$Product)] <- "Protease"
+reskey$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", reskey$Product)] <- "General sugar transport"
+#reskey$Category[grep("raffinose/stachyose/melibiose transport", reskey$Product)] <- "Raffinose/stachyose/melibiose transport"
+#reskey$Category[grep("chitobiose transport", reskey$Product)] <- "Chitobiose transport"
+reskey$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", reskey$Product)] <- "Chitinase"
+reskey$Category[grep("ribose transport", reskey$Product)] <- "Ribose transport"
+reskey$Category[grep("glucose/mannose transport", reskey$Product)] <- "Glucose/mannose transport"
+reskey$Category[grep("rhamnose transport", reskey$Product)] <- "Rhamnose transport"
+reskey$Category[grep("xylose transport", reskey$Product)] <- "Xylose transport"
+reskey$Category[grep("fructose transport", reskey$Product)] <- "Fructose transport"
 
-sig.res.night.key$Category <- "None"
-sig.res.night.key$Category[grep("photo|Photo", sig.res.night.key$Product)] <- "Photosynthesis"
-sig.res.night.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.night.key$Product)] <- "Rhodopsin"
-# sig.res.night.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.night.key$Product)] <- "Sugar degradation"
-sig.res.night.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.night.key$Product)] <- "RuBisCO"
-sig.res.night.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.night.key$Product)] <- "Polyamines"
-sig.res.night.key$Category[grep("citrate lyase|Citrate lyase", sig.res.night.key$Product)] <- "rTCA"
-sig.res.night.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.night.key$Product)] <- "Nitrogenase"
-sig.res.night.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.night.key$Product)] <- "Chitinase"
-sig.res.night.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.night.key$Product)] <- "Glycoside_Hydrolase"
-sig.res.night.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.night.key$Product)] <- "Alkaline_phosphatase"
-sig.res.night.key$Category[grep("cellulase|cellulose", sig.res.night.key$Product)] <- "Cellulase"
-sig.res.night.key$Category[grep("peroxidase|peroxide|catalase", sig.res.night.key$Product)] <- "ROS"
-sig.res.night.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.night.key$Product)] <- "Methane/Ammonia"
-sig.res.night.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.night.key$Product)] <- "Nitrite_reduction"
-sig.res.night.key$Category[grep("urease", sig.res.night.key$Product)] <- "Urease"
-sig.res.night.key$Category[grep("protease", sig.res.night.key$Product)] <- "Protease"
-sig.res.night.key$Category[grep("carboxylate transport", sig.res.night.key$Product)] <- "Carboxylate transport"
-sig.res.night.key$Category[grep("ribose transport", sig.res.night.key$Product)] <- "Ribose transport"
-sig.res.night.key$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", sig.res.night.key$Product)] <- "General sugar transport"
-sig.res.night.key$Category[grep("raffinose/stachyose/melibiose transport", sig.res.night.key$Product)] <- "Raffinose/stachyose/melibiose transport"
-sig.res.night.key$Category[grep("glucose/mannose transport", sig.res.night.key$Product)] <- "Glucose/mannose transport"
-sig.res.night.key$Category[grep("rhamnose transport", sig.res.night.key$Product)] <- "Rhamnose transport"
-sig.res.night.key$Category[grep("xylose transport", sig.res.night.key$Product)] <- "Xylose transport"
-sig.res.night.key$Category[grep("fructose transport", sig.res.night.key$Product)] <- "Fructose transport"
-sig.res.night.key$Category[grep("chitobiose transport", sig.res.night.key$Product)] <- "Chitobiose transport"
-sig.res.night.key$Category[grep("lactose/L-arabinose transport", sig.res.night.key$Product)] <- "Lactose/arabinose transport"
+# Add day/night counts
+gene_counts <- abun_mnorm[match(reskey$Gene, rownames(abun_tnorm)),]
+reskey1 <- reskey
+reskey2 <- reskey
+reskey1$Counts <- rowSums(gene_counts[which(conditions == "day")])
+reskey2$Counts <- rowSums(gene_counts[which(conditions == "night")])
+reskey <- rbind(reskey1, reskey2)
+reskey$Time <- c(rep("Day", dim(reskey1)[1]), rep("Night", dim(reskey2)[1]))
+reskey$Counts <- as.numeric(reskey$Counts)
 
-sig.res.day.key$Condition <- "day"
-sig.res.night.key$Condition <- "night"
+# Visually inspect phyla to keep
+# ggplot(data = reskey, aes(x = Phylum, y = Counts, fill = Time)) + geom_bar(stat = "identity")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Mendota") + facet_wrap(~ Category, nrow = 3, scales="free")
 
-sig.abun_tnorm_day <- abun_tnorm[match(sig.res.day.key$Gene, rownames(abun_tnorm)), which(conditions == "day")]
-sig.res.day.key$totals <- rowSums(sig.abun_tnorm_day)
-sig.abun_tnorm_night <- abun_tnorm[match(sig.res.night.key$Gene, rownames(abun_tnorm)), which(conditions == "night")]
-sig.res.night.key$totals <- rowSums(sig.abun_tnorm_night)
+phyla2keep <- c("Actinobacteria", "Alphaproteobacteria", "Armatimonadetes", "Bacteroidetes", "Unclassified", "Cyanobacteria", "Betaproteobacteria", "Gammaproteobacteria", "Verrucomicrobia", "Deltaproteobacteria", "Eukaryota", "Chlorophyta")
+reskey <- reskey[which(reskey$Category != "None"), ] 
+`%not in%` <- function (x, table) is.na(match(x, table, nomatch=NA_integer_))
+reskey$Phylum[which(is.na(reskey$Phylum) == T)] <- "Unclassified"
+reskey$Phylum <- as.character(reskey$Phylum)
+reskey$Phylum[which(reskey$Phylum %not in% phyla2keep)] <- "Other"
 
-sig.res.key <- rbind(sig.res.day.key, sig.res.night.key)
 
-colorkey <- data.frame(phylum = c("Actinobacteria", "Alphaproteobacteria", "Armatimonadetes", "Bacteroidetes", "Betaproteobacteria", "Cyanobacteria", "Deltaproteobacteria", "Gammaproteobacteria", "Other", "Planctomycetes", "Unclassified", "Verrucomicrobia"), color = c("chocolate1",  "hotpink2", "turquoise3", "goldenrod1", "dodgerblue", "green3", "skyblue", "palegreen", "honeydew4", "lightcoral", "honeydew3", "lightslateblue"))
+colorkey <- data.frame(phylum = c("Actinobacteria", "Alphaproteobacteria", "Armatimonadetes", "Bacteroidetes", "Betaproteobacteria", "Chlorophyta", "Cyanobacteria", "Deltaproteobacteria", "Eukaryota", "Firmicutes", "Gammaproteobacteria", "Other", "Planctomycetes", "Unclassified", "Verrucomicrobia"), color = c("chocolate1",  "hotpink2", "turquoise3", "goldenrod1", "dodgerblue", "palegreen4", "green3", "skyblue", "darkolivegreen3", "orchid3", "palegreen", "honeydew4", "lightcoral", "honeydew3", "lightslateblue"))
 
-p1 <- ggplot(data = sig.res.key[which(sig.res.key$Category == "Photosynthesis" | sig.res.key$Category == "RuBisCO" | sig.res.key$Category == "ROS" | sig.res.key$Category == "Rhodopsin"), ], aes(x = Condition, y = totals, fill = Condition)) + geom_bar(stat = "identity", position = "dodge") + labs(title = "Trout Bog", x = NULL, y = "Transcripts/L") + scale_fill_manual(values = c("darkgoldenrod2", "royalblue4")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + facet_wrap(~ Category, scales = "free_y", nrow = 3)
-
-# Plot taxonomy information as proportional bars
-sig.res.key2 <- sig.res.key[grep("Photosynthesis|RuBisCO|ROS|Rhodopsin", sig.res.key$Category), ]
-sig.res.key2$Phylum[which(is.na(sig.res.key2$Phylum) == T)] <- "Unclassified"
-# Lump low abundance groups into "other"
-sig.res.key2$Phylum[grep("Chloroflexi|Gemmatimonadetes|Deinococcus-Thermus", sig.res.key2$Phylum)] <- "Other"
-
-# I don't want to look at taxonomy for genes and conditons with barely any expression
-# Change these to zero based on composition of the day/night graph
-#sig.res.key2$totals[which(sig.res.key2$Category == "Photosynthesis" & sig.res.key2$Condition == "night")] <- 0
-
-p2 <- ggplot(data = sig.res.key2, aes(x = Condition, y = totals, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Trout Bog") + facet_wrap(~ Category, nrow = 3) + scale_fill_manual(values = as.character(colorkey$color[which((colorkey$phylum %in% unique(sig.res.key2$Phylum)) == T)]))
-
-plot_grid(p1, p2, nrow = 1, labels = c("A", "B"))
-#p1
-#p2
-
-# Normalize sums by number of timepoints
+ggplot(data = reskey, aes(x = Time, y = Counts, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Trout Bog") + facet_wrap(~ Category, nrow = 3) + scale_fill_manual(values = as.character(colorkey$color[which(colorkey$phylum %in% unique(reskey$Phylum))]))
 ```
 
+```{r, eval = T, warning = F, message = F, echo = F}
+##### DESeq differential expression testing
+
+abun_snorm <- snorm[order(rowSums(snorm), decreasing = T), ]
+abun_snorm <- abun_snorm[1:20000,]
+
+colnames(abun_snorm) <- gsub(".nonrRNA", "", colnames(abun_snorm))
+
+input <- as.matrix(abun_snorm)
+input <- input/100
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_snorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_snorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+
+res <- res[which(res$padj < 0.05), ]
+reskey <- spark_key[match(rownames(res), spark_key$Gene), ]
+reskey$log2FoldChange <- res$log2FoldChange[match(reskey$Gene, rownames(res))]
+
+# Make column by certain key words 
+reskey$Category <- "None"
+reskey$Category[grep("photo|Photo", reskey$Product)] <- "Photosynthesis"
+#reskey$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", reskey$Product)] <- "Rhodopsin"
+#reskey$Category[grep("rbcL|ribulose-bisphosphate carboxylase", reskey$Product)] <- "RuBisCO"
+reskey$Category[grep("citrate lyase|Citrate lyase", reskey$Product)] <- "rTCA"
+#reskey$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", reskey$Product)] <- "Nitrogenase"
+#reskey$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", reskey$Product)] <- "Chitinase"
+reskey$Category[grep("peroxidase|peroxide|catalase", reskey$Product)] <- "ROS"
+reskey$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", reskey$Product)] <- "Nitrite_reduction"
+reskey$Category[grep("urease", reskey$Product)] <- "Urease"
+#reskey$Category[grep("protease", reskey$Product)] <- "Protease"
+#reskey$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", reskey$Product)] <- "General sugar transport"
+reskey$Category[grep("raffinose/stachyose/melibiose transport", reskey$Product)] <- "Raffinose/stachyose/melibiose transport"
+#reskey$Category[grep("chitobiose transport", reskey$Product)] <- "Chitobiose transport"
+#reskey$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", reskey$Product)] <- "Chitinase"
+#reskey$Category[grep("ribose transport", reskey$Product)] <- "Ribose transport"
+
+# Add day/night counts
+gene_counts <- abun_snorm[match(reskey$Gene, rownames(abun_snorm)),]
+reskey1 <- reskey
+reskey2 <- reskey
+reskey1$Counts <- rowSums(gene_counts[which(conditions == "day")])
+reskey2$Counts <- rowSums(gene_counts[which(conditions == "night")])
+reskey <- rbind(reskey1, reskey2)
+reskey$Time <- c(rep("Day", dim(reskey1)[1]), rep("Night", dim(reskey2)[1]))
+reskey$Counts <- as.numeric(reskey$Counts)
+
+# Visually inspect phyla to keep
+# ggplot(data = reskey, aes(x = Phylum, y = Counts, fill = Time)) + geom_bar(stat = "identity")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Sparkling") + facet_wrap(~ Category, nrow = 3, scales="free")
+
+phyla2keep <- c("Actinobacteria", "Bacteroidetes", "Unclassified", "Cyanobacteria", "Betaproteobacteria", "Gammaproteobacteria", "Verrucomicrobia", "Firmicutes", "Deltaproteobacteria", "Planctomycetes", "Eukaryota")
+reskey <- reskey[which(reskey$Category != "None"), ] 
+`%not in%` <- function (x, table) is.na(match(x, table, nomatch=NA_integer_))
+reskey$Phylum[which(is.na(reskey$Phylum) == T)] <- "Unclassified"
+reskey$Phylum <- as.character(reskey$Phylum)
+reskey$Phylum[which(reskey$Phylum %not in% phyla2keep)] <- "Other"
+
+
+colorkey <- data.frame(phylum = c("Actinobacteria", "Alphaproteobacteria", "Armatimonadetes", "Bacteroidetes", "Betaproteobacteria", "Chlorophyta", "Cyanobacteria", "Deltaproteobacteria", "Eukaryota", "Firmicutes", "Gammaproteobacteria", "Other", "Planctomycetes", "Unclassified", "Verrucomicrobia"), color = c("chocolate1",  "hotpink2", "turquoise3", "goldenrod1", "dodgerblue", "palegreen4", "green3", "skyblue", "darkolivegreen3", "orchid3", "palegreen", "honeydew4", "lightcoral", "honeydew3", "lightslateblue"))
+
+ggplot(data = reskey, aes(x = Time, y = Counts, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads assigned", title = "Sparkling") + facet_wrap(~ Category, nrow = 3) + scale_fill_manual(values = as.character(colorkey$color[which(colorkey$phylum %in% unique(reskey$Phylum))]))
+```
 
 ```{r, eval = F, warning = F, message = F, echo = F}
 
