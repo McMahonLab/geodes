@@ -265,7 +265,7 @@ pathway.stats <- function(searchterm){
   }
   
   report <- c(numgenes, round(percent_genes_day, 2), round(percent_reads_day, 2), round(percent_genes_night, 2), round(percent_reads_night, 2), round(percent_cyclic_genes, 2), round(percent_cyclic_reads, 2), mean(day_totals), mean(night_totals), round(sig$p.value, 2))
-  names(report) <- c("%DayGenes", "%DayReadsContributed", "%NightGenes", "%NightReadsContributed", "%CyclicGenes", "%CyclicReadsContributed", "DayReads", "NightReads", "t-test")
+  names(report) <- c("NumGenes", "%DayGenes", "%DayReadsContributed", "%NightGenes", "%NightReadsContributed", "%CyclicGenes", "%CyclicReadsContributed", "DayReads", "NightReads", "t-test")
   return(report)
 }
 
@@ -293,6 +293,7 @@ xyl <- pathway.stats("xylose transport")
 fruct <- pathway.stats("fructose transport")
 chiti <- pathway.stats("chitobiose transport")
 lact <- pathway.stats("lactose/L-arabinose transport")
+amino <- pathway.stats("amino acid transport")
 
 ```
 
@@ -312,6 +313,7 @@ lact <- pathway.stats("lactose/L-arabinose transport")
 | Glucose/mannose transport | `r gluc[1]` | `r gluc[2]` | `r gluc[4]` | `r gluc[6]` | `r gluc[10]` | `r round(gluc[8]/gluc[9], 2)` |
 | Rhamnose transport | `r rham[1]` | `r rham[2]` | `r rham[4]` | `r rham[6]` | `r rham[10]` | `r round(rham[8]/rham[9], 2)` |
 | Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[4]` | `r xyl[6]` | `r xyl[10]` | `r round(xyl[8]/xyl[9], 2)` |
+| Amino acid transport | `r amino[1]` | `r amino[2]` | `r amino[4]` | `r amino[6]` | `r amino[10]` | `r round(amino[8]/amino[9], 2)` |
 
 **Table 3.** Gene diffs in Trout Bog 
 
@@ -404,6 +406,7 @@ fruct <- pathway.stats("fructose transport")
 gh <- pathway.stats("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase")
 meth <- pathway.stats("ammonia monooxygenase|methane monoxygenase")
 urea <- pathway.stats("urease")
+amino <- pathway.stats("amino acid transport")
 ```
 
 
@@ -419,7 +422,7 @@ urea <- pathway.stats("urease")
 | General sugar transport | `r gen.sugars[1]` | `r gen.sugars[2]` | `r gen.sugars[4]` | `r gen.sugars[6]` | `r gen.sugars[10]` | `r round(gen.sugars[8]/gen.sugars[9], 2)` |
 | Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[4]` | `r xyl[6]` | `r xyl[10]` | `r round(xyl[8]/xyl[9], 2)` |
 | Methane/ammonia monooxygenase | `r meth[1]` | `r meth[2]` | `r meth[4]` |  `r meth[6]` | `r meth[10]` | `r round(meth[8]/meth[9], 2)` |
-
+| Amino acid transport | `r amino[1]` | `r amino[2]` | `r amino[4]` | `r amino[6]` | `r amino[10]` | `r round(amino[8]/amino[9], 2)` |
 
 **Table 3.** Gene diffs in Sparkling Lake
 
@@ -513,6 +516,7 @@ fruct <- pathway.stats("fructose transport")
 chiti <- pathway.stats("chitobiose transport")
 meth <- pathway.stats("ammonia monooxygenase|methane monoxygenase")
 urea <- pathway.stats("urease")
+amino <- pathway.stats("amino acid transport")
 ```
 
 
@@ -532,7 +536,7 @@ urea <- pathway.stats("urease")
 | Glucose/mannose transport | `r gluc[1]` | `r gluc[2]` | `r gluc[4]` | `r gluc[6]` |  `r gluc[10]` | `r round(gluc[8]/gluc[9], 2)` |
 | Xylose transport | `r xyl[1]` | `r xyl[2]` | `r xyl[4]` | `r xyl[6]` | `r xyl[10]` | `r round(xyl[8]/xyl[9], 2)` |
 | Fructose transport | `r fruct[1]` | `r fruct[2]` | `r fruct[4]` |  `r fruct[6]` | `r fruct[10]` | `r round(fruct[8]/fruct[9], 2)` |
-
+| Amino acid transport | `r amino[1]` | `r amino[2]` | `r amino[4]` | `r amino[6]` | `r amino[10]` | `r round(amino[8]/amino[9], 2)` |
 
 
 ```{r, eval = T, include = F, echo = F}
@@ -911,7 +915,7 @@ p3
 **Supp Figure . Top 10 most expressed annotated heterotrophic genes in each study site.** Coding regions from reference genomes and metagenome assemblies were clustered at 97% sequence similarity, and the longest coding region was chosen as the representative sequence. Metatranscriptomic reads were mapped to these representative sequences. The top 10 most expressed genes from each lake, filtered to exclude photosynthetic genes, phototrophic organisms, hypothetical genes, and unclassified genes, are presented here. Annotations and classifications are derived from the sequence to which each read mapped.    
 
 
-```{r, eval = T, echo = F, fig.height = 18, fig.width = 18, warning = F, message = F}
+```{r, eval = T, echo = F, warning = F, message = F}
 
 mendota_metaG_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_files/mendota_metaG_phyla.csv", sep = ""), header = T, colClasses = c("character", "numeric"))
 spark_metaG_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_files/spark_metaG_phyla.csv", sep = ""), header = T, colClasses = c("character", "numeric"))
