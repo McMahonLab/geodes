@@ -1,0 +1,57 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r, echo = F}
+# Set up environment
+path <- "/Users/Alex/Desktop/"
+path2 <- "/Users/Alex/"
+
+
+# Sample data
+metadata <- read.csv(file = paste(path2, "Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", sep = ""), header = T)
+
+enviro_data <- read.csv(paste(path2, "Desktop/geodes/environmental_data/for_humans/compiled_field_data_for_R.csv", sep = ""), header = T)
+enviro_data_no_sonde <- enviro_data[which(is.na(enviro_data$pH) == F), ]
+
+chemdata <- read.csv(paste(path2, "Desktop/geodes/environmental_data/GEODES_TNTP.csv", sep = ""), header = T)
+chemdata$Lake <- NA
+chemdata$Lake[grep("ME", chemdata$Sample)] <- "Mendota"
+chemdata$Lake[grep("SP", chemdata$Sample)] <- "Sparkling"
+chemdata$Lake[grep("TB", chemdata$Sample)] <- "Trout"
+
+bpa_data <- read.csv(paste(path2, "Desktop/geodes/environmental_data/for_humans/bpa2.csv", sep = ""), header = T)
+
+```
+
+**Table 1. Comparison of Sparkling Lake, Lake Mendota, and Trout Bog.** These three lakes were chosen for comparative metatranscriptomics because of their varying trophic statuses, extensive historical data, and previous microbial sampling. Data on surface area, maximum depth, dissolved organic carbon, and development on shoreline courtesy of NTL-LTER <lter.limnology.wisc.edu>. Temperature, dissolved oxygen, pH, and conductivity were measured using a HydroLab DS5x Sonde and are averaged over all sampling depths and timepoints for each lake. Chlorophyll and phaeophytin concentrations were measured from the integrated epilimnion samples using a methanol extraction protocol and averaged over all timepoints. Secchi depth was measured at the first timepoint for each lake. Bacterial production was quantified via C14-leucine incorporation and averaged over all timepoints. Total and dissolved nitrogen and phosphorus concentrations were measured via colorometric HPLC; concentrations are within the typical ranges of these lakes. Due to thunderstorms the night of July 8th, the final 1AM timepoint in Sparkling Lake was collected on July 9th instead.
+
+
+|                         | Lake Mendota      | Trout Bog                | Sparkling Lake           |
+| ----------------------- |:-----------------:|:------------------------:|:------------------------:|
+| Surface area (km^2)     | 39.600              | 0.001                    | 0.637                    |
+| Maximum depth (m)       | 25.3              | 7.9                      | 20.0                       |
+| Trophic status          | Eutrophic         | Humic                    | Oligotrophic             |
+| Location                | Madison, WI USA   | Boulder Junction, WI USA | Boulder Junction, WI USA |
+| GPS Coordinates         | 43.1113, -89.4255 | 46.0412, -89.6861        | 46.0091, -89.6695        |
+| Shoreline development   | High              | Low                      | Moderate                 |
+| Epilimnion sampling depth| 0-7m             | 0-1.5m                   | 0-4m                     |
+| Temperature (C)         | `r round(mean(enviro_data$Temperature[which(enviro_data$Lake == "Mendota" & enviro_data$Depth <= 7)]), 2)` | `r round(mean(enviro_data_no_sonde$Temperature[which(enviro_data_no_sonde$Lake == "TroutBog" & enviro_data_no_sonde$Depth <= 1.5)]), 2)` | `r round(mean(enviro_data_no_sonde$Temperature[which(enviro_data_no_sonde$Lake == "Sparkling" & enviro_data_no_sonde$Depth <= 4)]), 2)` |
+|Dissolved oxygen (mg/L)  | `r round(mean(enviro_data$DO[which(enviro_data$Lake == "Mendota" & enviro_data$Depth <= 7)]), 2)` | `r round(mean(enviro_data_no_sonde$DO[which(enviro_data_no_sonde$Lake == "TroutBog" & enviro_data_no_sonde$Depth <= 1.5)]), 2)` | `r round(mean(enviro_data_no_sonde$DO[which(enviro_data_no_sonde$Lake == "Sparkling" & enviro_data_no_sonde$Depth <= 4)]), 2)` |
+| pH                      | `r round(mean(enviro_data$pH[which(enviro_data$Lake == "Mendota" & enviro_data$Depth <= 7)]), 2)` | `r round(mean(enviro_data_no_sonde$pH[which(enviro_data_no_sonde$Lake == "TroutBog" & enviro_data_no_sonde$Depth <= 1.5)]), 2)` | `r round(mean(enviro_data_no_sonde$pH[which(enviro_data_no_sonde$Lake == "Sparkling" & enviro_data_no_sonde$Depth <= 4)]), 2)` |
+| Conductivity (uS/cm)    | `r round(mean(enviro_data$Conductivity[which(enviro_data$Lake == "Mendota" & enviro_data$Depth <= 7)]), 2)` | `r round(mean(enviro_data_no_sonde$Conductivity[which(enviro_data_no_sonde$Lake == "TroutBog" & enviro_data_no_sonde$Depth <= 1.5)]), 2)` | `r round(mean(enviro_data_no_sonde$Conductivity[which(enviro_data_no_sonde$Lake == "Sparkling" & enviro_data_no_sonde$Depth <= 4)]), 2)` |
+| Total phosphorus (ug/L) | `r round(mean(chemdata$TP[which(chemdata$Lake == "Mendota")]), 2)` | `r round(mean(chemdata$TP[which(chemdata$Lake == "Trout")]), 2)` | `r round(mean(chemdata$TP[which(chemdata$Lake == "Sparkling")]), 2)` |
+| Total nitrogen (ug/L)   | `r round(mean(chemdata$TN[which(chemdata$Lake == "Mendota")]), 2)` | `r round(mean(chemdata$TN[which(chemdata$Lake == "Trout")]), 2)` | `r round(mean(chemdata$TN[which(chemdata$Lake == "Sparkling")]), 2)` |
+| Total dissolved phosphorus (ug/L) | `r round(mean(chemdata$TDP[which(chemdata$Lake == "Mendota")]), 2)` | `r round(mean(chemdata$TDP[which(chemdata$Lake == "Trout")]), 2)` | `r round(mean(chemdata$TDP[which(chemdata$Lake == "Sparkling")]), 2)` |
+| Total dissolved nitrogen (ug/L)   | `r round(mean(chemdata$TDN[which(chemdata$Lake == "Mendota")]), 2)` | `r round(mean(chemdata$TDN[which(chemdata$Lake == "Trout")]), 2)` | `r round(mean(chemdata$TDN[which(chemdata$Lake == "Sparkling")]), 2)` |
+| Chlorophyll (ug/L)      | `r round(mean(enviro_data$Chlorophyll[which(enviro_data$Lake == "Mendota" & enviro_data$Depth <= 7 & enviro_data$Timepoint != 40 & enviro_data$Timepoint != 44)]), 2)` | `r round(mean(enviro_data$Chlorophyll[which(enviro_data$Lake == "TroutBog" & enviro_data$Depth <= 1.5 & enviro_data$Timepoint != 20)]), 2)` | `r round(mean(enviro_data$Chlorophyll[which(enviro_data$Lake == "Sparkling" & enviro_data$Depth <= 4)]), 2)`|
+| Phaeophytin (ug/L)      | `r round(mean(enviro_data$Phycocyanin[which(enviro_data$Lake == "Mendota" & enviro_data$Depth <= 7 & enviro_data$Timepoint != 40 & enviro_data$Timepoint != 44)]), 2)` | `r round(mean(enviro_data$Phycocyanin[which(enviro_data$Lake == "TroutBog" & enviro_data$Depth <= 1.5 & enviro_data$Timepoint != 20)]), 2)` | `r round(mean(enviro_data$Production[which(enviro_data$Lake == "Sparkling" & enviro_data$Depth <= 4)]), 2)`|
+| Bacterial production (cpm)    | `r round(mean(bpa_data$ug.protein[which(bpa_data$Lake == "Mendota" & bpa_data$Type == "Experimental")]), 2)` | `r round(mean(bpa_data$ug.protein[which(bpa_data$Lake == "Trout Bog" & bpa_data$Type == "Experimental")]), 2)` | `r round(mean(bpa_data$ug.protein[which(bpa_data$Lake == "Sparkling" & bpa_data$Type == "Experimental")]), 2)`|
+| Dissolved organic carbon* (mg/L) | 4.87 | 20.01 | 3.31
+| Secchi depth (m)        | 4.8               | 1.1                      | 6.2                      |
+| Sampling dates (2016)   | July 14-16        | July 8-10                | July 6-9                 |
+| Sunrise/sunset time     | 5:32/20:35        | 5:18/20:49               | 5:17/20:50               |
+
+* Dissolved organic carbon was measured by the North Temperate Lakes = Long-Term Ecological Research project and is available at lter.wisc.edu. The measurement closest to the date of sampling is reported here; this was July 5, 2016 for Lake Mendota, Jul. 19, 2016 for Trout Bog Lake, and Jul. 21, 2016

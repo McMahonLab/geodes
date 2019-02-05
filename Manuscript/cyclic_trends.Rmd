@@ -1,0 +1,133 @@
+```{r, Setup, eval = T, echo = F, message = F, warning = F}
+# Set up environment
+path <- "/Users/Alex/Desktop/"
+path2 <- "/Users/Alex/"
+
+library(ggplot2)
+library(cowplot)
+library(reshape2)
+library(ggrepel)
+library(raster)
+library(DESeq2)
+library(rain)
+
+zscore <- function(counts){
+  z <- (counts - mean(counts)) / sd(counts)
+  return(z)
+}
+
+# Sample data
+metadata <- read.csv(file = paste(path2, "Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", sep = ""), header = T)
+
+```
+
+```{r, Mendota, echo = F, eval = T}
+
+mnorm <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+mnorm <- mnorm[, which(colnames(mnorm) != "GEODES158.nonrRNA")]
+colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
+mendota_key <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_genekey_geneclassifications_2018-11-28.csv", sep = ""), header = T)
+
+
+```
+
+```{r, eval = T, include = F, echo = F}
+abun_mnorm <- mnorm[order(rowSums(mnorm), decreasing = T), ]
+abun_mnorm <- abun_mnorm[1:20000,]
+
+colnames(abun_mnorm) <- gsub(".nonrRNA", "", colnames(abun_mnorm))
+
+input <- as.matrix(abun_mnorm)
+input <- input/100
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_mnorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_mnorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+
+reskey <- mendota_key[match(rownames(res), mendota_key$Gene), ]
+sig.res.key <- reskey[which(res$padj < 0.05),]
+
+# Make column by certain key words 
+sig.res.key$Category <- "None"
+sig.res.key$Category[grep("photo|Photo", sig.res.key$Product)] <- "Photosynthesis"
+sig.res.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.key$Product)] <- "Rhodopsin"
+# sig.res.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.key$Product)] <- "Sugar degradation"
+sig.res.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.key$Product)] <- "RuBisCO"
+sig.res.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.key$Product)] <- "Polyamines"
+sig.res.key$Category[grep("citrate lyase|Citrate lyase", sig.res.key$Product)] <- "rTCA"
+sig.res.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.key$Product)] <- "Nitrogenase"
+sig.res.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.key$Product)] <- "Chitinase"
+sig.res.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.key$Product)] <- "Alkaline_phosphatase"
+sig.res.key$Category[grep("cellulase|cellulose", sig.res.key$Product)] <- "Cellulase"
+sig.res.key$Category[grep("peroxidase|peroxide|catalase", sig.res.key$Product)] <- "ROS"
+sig.res.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.key$Product)] <- "Methane/Ammonia"
+sig.res.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.key$Product)] <- "Nitrite_reduction"
+sig.res.key$Category[grep("urease", sig.res.key$Product)] <- "Urease"
+sig.res.key$Category[grep("protease", sig.res.key$Product)] <- "Protease"
+sig.res.key$Category[grep("carboxylate transport", sig.res.key$Product)] <- "Carboxylate transport"
+sig.res.key$Category[grep("ribose transport", sig.res.key$Product)] <- "Ribose transport"
+sig.res.key$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", sig.res.key$Product)] <- "General sugar transport"
+sig.res.key$Category[grep("raffinose/stachyose/melibiose transport", sig.res.key$Product)] <- "Raffinose/stachyose/melibiose transport"
+sig.res.key$Category[grep("glucose/mannose transport", sig.res.key$Product)] <- "Glucose/mannose transport"
+sig.res.key$Category[grep("rhamnose transport", sig.res.key$Product)] <- "Rhamnose transport"
+sig.res.key$Category[grep("xylose transport", sig.res.key$Product)] <- "Xylose transport"
+sig.res.key$Category[grep("fructose transport", sig.res.key$Product)] <- "Fructose transport"
+sig.res.key$Category[grep("chitobiose transport", sig.res.key$Product)] <- "Chitobiose transport"
+sig.res.key$Category[grep("lactose/L-arabinose transport", sig.res.key$Product)] <- "Lactose/arabinose transport"
+
+
+# Write a function to plot a given category
+cycle_plot <- function(type, lake) {
+  if(lake == "Mendota") {
+    abuntable <- abun_mnorm
+  }else if(lake == "Trout"){
+    abuntable <- abun_tnorm
+  }else if (lake == "Sparkling"){
+    abuntable <- abun_snorm
+  }
+  p.genes <- as.character(sig.res.key$Gene[which(sig.res.key$Category == type)])
+  p.table <- abuntable[match(p.genes, rownames(abuntable)),]
+  p.results <- rain(t(p.table), deltat = 4, period = 24, measure.sequence = table(metadata$Timepoint[match(colnames(p.table), metadata$Sample)]), verbose = T, adjp.method = "Bonferroni")
+ # sig.p.table <- p.table[which(p.results$pVal < 0.05 & p.results$phase == 12), ]
+  sig.p.table <- p.table[which(p.results$pVal < 0.05), ]
+  sig.p.table <- as.data.frame(t(apply(sig.p.table, 1, zscore)))
+  sig.p.table$Genes <- rownames(sig.p.table)
+  melt.sig.p.table <- melt(sig.p.table)
+  melt.sig.p.table$Timepoint <- metadata$Timepoint[match(melt.sig.p.table$variable, metadata$Sample)]
+  ave.sig.p.table <- aggregate(value ~ Genes + Timepoint, melt.sig.p.table, mean)
+  ave.sig.p.table$phase <- p.results$phase[match(ave.sig.p.table$Genes, rownames(p.results))]
+  ave.sig.p.table$phase <- factor(ave.sig.p.table$phase, levels = c("4", "8", "12", "16", "20", "24"))
+  day.night.boxes <- data.frame(x1 = c(0, 0.53, 15.35, 24.53, 39.35), x2 = c(0.53, 15.53, 24.53, 39.53, 44), y1 = rep(min(ave.sig.p.table$value), 5), y2 = rep(max(ave.sig.p.table$value), 5), labels = c("", "Sunrise", "Sunset", "Sunrise", "Sunset"))
+  #p <- ggplot()  + geom_rect(data = day.night.boxes, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = c("lightsteelblue", "lemonchiffon", "lightsteelblue", "lemonchiffon", "lightsteelblue"), alpha = 0.5) + geom_text(data = day.night.boxes, inherit.aes = FALSE, aes(x = x1 + 2, y = y2 - 0.25, label = labels)) + geom_line(data = ave.sig.p.table, inherit.aes = F, aes(x = Timepoint, y = value, group = Genes), color = "grey") + stat_summary(data = ave.sig.p.table, inherit.aes = F, aes(x = Timepoint, y = value), fun.y=mean, geom="line", colour="red") + scale_x_continuous(breaks = seq(0,44, by = 4)) + labs(x = "Hours into Time Series", y = "Z-score normalized reads", title = paste(lake, type)) + background_grid(major = "xy", minor = "none")
+  
+colors <- c("#4575b4", "#d73027", "#fc8d59", "#fee090", "#e0f3f8", "#91bfdb")
+phases <- c("4", "8", "12", "16", "20", "24")
+  p <- ggplot()  + geom_rect(data = day.night.boxes, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = c("lightsteelblue", "lemonchiffon", "lightsteelblue", "lemonchiffon", "lightsteelblue"), alpha = 0.5) + geom_text(data = day.night.boxes, inherit.aes = FALSE, aes(x = x1 + 2, y = y2 - 0.25, label = labels)) + geom_line(data = ave.sig.p.table, inherit.aes = F, aes(x = Timepoint, y = value, group = Genes, color = phase)) + scale_x_continuous(breaks = seq(0,44, by = 4)) + labs(x = "Hours into Time Series", y = "Z-score normalized reads", title = paste(lake, type)) + background_grid(major = "xy", minor = "none") + scale_color_manual(values = colors[which(phases %in% unique(ave.sig.p.table$phase))], name = "Peak", labels = c("4" = "5:00", "8" = "9:00", "12" = "13:00", "16" = "17:00", "20" = "21:00", "24" = "1:00"))
+  return(p)
+}
+
+cycle1 <- cycle_plot("Photosynthesis", "Mendota")
+#cycle2 <- cycle_plot("ROS", "Mendota")
+#cycle3 <- cycle_plot("Rhodopsin", "Mendota")
+
+save_plot(paste(path,"geodes/Manuscript/figures_and_tables/cyclic_trends.pdf", sep = ""),  cycle1, base_aspect_ratio = 2, base_height = 4)
+```
+
+
+
+
+**Figure 1. Cyclic trends in Lake Mendota.** Cyclic trends with a 12 hour phase were detected in the top 20,000 most expressed genes in each lake using RAIN. Here, we present an example of these cyclic trends in genes related to photosynthesis in Lake Mendota. The percentage of genes in each functional category with significant cyclic trends is reported in Tables 2-4. Read counts were z-score normalized for the purpose of visualization. The phase indicates the peak of maximum expression in the cycle.
