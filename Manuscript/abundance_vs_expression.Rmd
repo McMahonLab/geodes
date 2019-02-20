@@ -248,6 +248,66 @@ trout_phyla <- trout_phyla[which(is.na(trout_phyla$metaG) == F),]
 
 p3 <- ggplot(trout_phyla, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_abline(intercept = 0, slope = max(trout_phyla$value)/max(trout_phyla$metaG), linetype = 3) + geom_text_repel(aes(label = Taxonomy), force = 10, size = 3, color = "black") + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_phyla$metaG))) + background_grid(major = "xy", minor = "none")
 
+
+```
+
+Add a 2nd set of plots of freshwater favorites
+```{r}
+# Reduce my various gene keys into just genes with tribe classifications
+metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
+metaG_key$Clade <- sapply(strsplit(as.character(metaG_key$Taxonomy),";"), `[`, 5)
+
+# Aggregate the metagenomic reads
+
+metaG_key2 <- metaG_key[which(is.na(metaG_key$Clade) == FALSE),]
+
+# Split metagenome read count tables by lake and prep for melting
+metaG_reads$Genes <- rownames(metaG_reads)
+metaG_reads <- metaG_reads[match(metaG_reads$Genes, metaG_key2$Gene),]
+spark_metaG <- metaG_reads[,c(1,2, 11)]
+trout_metaG <- metaG_reads[,c(3,4, 11)]
+mendota_metaG <- metaG_reads[,c(5,6, 11)]
+
+# Use melt to switch from wide to long format
+spark_metaG <- melt(spark_metaG)
+trout_metaG <- melt(trout_metaG)
+mendota_metaG <- melt(mendota_metaG)
+
+# Add phylum column to each melted lake table
+mendota_metaG$Clade <- metaG_key2$Clade[match(mendota_metaG$Genes, metaG_key2$Gene)]
+trout_metaG$Clade <- metaG_key2$Clade[match(trout_metaG$Genes, metaG_key2$Gene)]
+spark_metaG$Clade <- metaG_key2$Clade[match(spark_metaG$Genes, metaG_key2$Gene)]
+
+# Aggregate counts by Clade
+mendota_metaG_Clade <- aggregate(value ~ Clade, data = mendota_metaG, mean)
+spark_metaG_Clade <- aggregate(value ~ Clade, data = spark_metaG, mean)
+trout_metaG_Clade <- aggregate(value ~ Clade, data = trout_metaG, mean)
+
+#Now to add in the gene expression
+mendota_key$Taxonomy <- gsub("Bacteria;", "", mendota_key$Taxonomy)
+mendota_key$Clade <- sapply(strsplit(as.character(mendota_key$Taxonomy),";"), `[`, 5)
+
+mnorm2 <- mnorm
+mnorm2$Genes <- rownames(mnorm2)
+mnorm2 <- mnorm2[which(mnorm2$Genes %in% mendota_key$Gene), ]
+colnames(mnorm2) <- gsub(".nonrRNA", "", colnames(mnorm2))
+mnorm2 <- melt(mnorm2)
+# Add columns of timepoint and phylum
+mnorm2$Timepoint <- metadata$Timepoint[match(mnorm2$variable, metadata$Sample)]
+mnorm2$Taxonomy <- mendota_key$Clade[match(mnorm2$Genes, mendota_key$Gene)]
+
+# Aggregate by phylum
+mendota_phyla <- aggregate(value ~ Taxonomy, data = mnorm2, mean)
+mendota_total <- sum(colSums(mnorm))
+mendota_phyla$value <- mendota_phyla$value/mendota_total
+
+
+
+```
+
+
+```{r}
+
 to_plot <- plot_grid(p1, p2, p3, nrow = 2, labels = c("A", "B", "C"))
 
 save_plot(paste(path,"geodes/Manuscript/figures_and_tables/abundance_vs_expression.pdf", sep = ""), to_plot, base_height = 8, base_aspect_ratio = 1.5)
