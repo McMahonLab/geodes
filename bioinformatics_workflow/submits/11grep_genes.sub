@@ -1,0 +1,30 @@
+# 11grep_genes.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 11grep_genes_$(Cluster).log
+error = 11grep_genes_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/11grep_genes.sh
+output = 11grep_genes_$(Cluster).out
+arguments = $(filepart)
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = http://proxy.chtc.wisc.edu/SQUID/amlinz/CDS_regions_genekey.txt.gz,split_genes/$(filepart)
+transfer_output_files = $(filepart).gene.info.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 12GB
+request_disk = 8GB
+#
+queue filepart from split_genes.txt

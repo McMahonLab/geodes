@@ -1,0 +1,141 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r, Setup, eval = T, echo = F, message = F, warning = F}
+# Set up environment
+path <- "/Users/Alex/Desktop/"
+path2 <- "/Users/Alex/"
+
+library(reshape2)
+library(DESeq2)
+library(rain)
+
+# Sample data
+metadata <- read.csv(file = paste(path2, "Desktop/geodes/bioinformatics_workflow/R_processing/sample_metadata.csv", sep = ""), header = T)
+
+```
+
+```{r, Mendota, echo = F, eval = T}
+
+mnorm <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+mnorm <- mnorm[, which(colnames(mnorm) != "GEODES158.nonrRNA")]
+colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
+mendota_key <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_genekey_geneclassifications_2018-11-28.csv", sep = ""), header = T)
+
+
+```
+
+**Table 2. Gene expression in day vs. night by functional categories in Lake Mendota. ** We aggregated timepoints by day (9AM, 1PM, 5PM) and night (9PM, 1AM, 5AM) to compare differential gene expression. This analysis includes the top 20,000 most expressed genes. Functional categories were determined based on gene annotations. Genes with cyclic trends were detected using RAIN (Thaben and Westermark, 2014), while p-values of day vs. night read totals per sample were calculated using a two-tailed t-test. The day/night ratio is the sum of reads assigned to that category in day divided by the sum at night. A ratio greater than one indicates higher expression in day, while a ratio less than one indicates higher expression at night.
+
+```{r, Mendota_table, eval = T, include = F}
+
+##### DESeq differential expression testing
+
+abun_mnorm <- mnorm[order(rowSums(mnorm), decreasing = T), ]
+abun_mnorm <- abun_mnorm[1:20000,]
+
+colnames(abun_mnorm) <- gsub(".nonrRNA", "", colnames(abun_mnorm))
+
+input <- as.matrix(abun_mnorm)
+input <- input/100
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_mnorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_mnorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+
+reskey <- mendota_key[match(rownames(res), mendota_key$Gene), ]
+
+# Write a function to report trends in metabolic categories
+pathway.stats <- function(searchterm){
+  genes <- reskey$Gene[grep(searchterm, reskey$Product)]
+  numgenes <- length(genes)
+  gene_results <- res[match(genes, rownames(res)), ]
+  gene_counts <- abun_mnorm[match(genes, rownames(abun_mnorm)),]
+  gene_results$Day <- rowSums(gene_counts[which(conditions == "day")])
+  gene_results$Night <- rowSums(gene_counts[which(conditions == "night")])
+  gene_results$Leaning <- gene_results$Day > gene_results$Night
+  percent_genes_day <- length(which(gene_results$padj < 0.05 & gene_results$Leaning == TRUE))/length(genes) * 100
+  percent_genes_night <- length(which(gene_results$padj < 0.05 & gene_results$Leaning == FALSE))/length(genes) * 100
+  percent_reads_day <- sum(gene_results$Day[which(gene_results$padj < 0.05 & gene_results$Leaning == TRUE)])/sum(gene_results$Day) * 100
+  percent_reads_night <- sum(gene_results$Night[which(gene_results$padj < 0.05 & gene_results$Leaning == FALSE)])/sum(gene_results$Night) * 100
+  day_totals <- colSums(gene_counts[, which(conditions == "day")])
+  night_totals <- colSums(gene_counts[which(conditions == "night")])
+  sig <- t.test(day_totals, night_totals, alternative = "two.sided")
+  
+  p.genes <- rownames(gene_results)[which(gene_results$padj < 0.05)]
+  if(length(p.genes) > 0){
+    p.table <- abun_mnorm[match(p.genes, rownames(abun_mnorm)),]
+    p.results <- rain(t(p.table), deltat = 4, period = 24, measure.sequence = table(metadata$Timepoint[match(colnames(p.table), metadata$Sample)]), verbose = T, adjp.method = "Bonferroni")
+    percent_cyclic_genes <- length(which(p.results$pVal < 0.05 & p.results$phase == 12))/length(genes) * 100
+    gene_results$TotalReads <- apply(gene_results[ ,7:8], 1, sum)
+    percent_cyclic_reads <- sum(gene_results$TotalReads[match(p.genes, rownames(gene_results))])/sum(gene_results$TotalReads) * 100
+  }else{
+    percent_cyclic_genes = 0
+    percent_cyclic_reads = 0
+  }
+  
+  report <- c(numgenes, round(percent_genes_day, 2), round(percent_reads_day, 2), round(percent_genes_night, 2), round(percent_reads_night, 2), round(percent_cyclic_genes, 2), round(percent_cyclic_reads, 2), mean(day_totals), mean(night_totals), round(sig$p.value, 2))
+  names(report) <- c("NumGenes", "%DayGenes", "%DayReadsContributed", "%NightGenes", "%NightReadsContributed", "%CyclicGenes", "%CyclicReadsContributed", "DayReads", "NightReads", "t-test")
+  return(report)
+}
+
+# Run the function
+
+photo <- pathway.stats("photo|Photo")
+rhodo <- pathway.stats("opsin|Opsin")
+rubisco <- pathway.stats("rbcL|ribulose-bisphosphate carboxylase")
+polyamines <- pathway.stats("putrescine|Putrescine|spermidine|Spermidine")
+rTCA <- pathway.stats("citrate lyase|Citrate lyase")
+nif <- pathway.stats("nitrogenase|Nitrogenase|NifH|NifD|NifK")
+chitinase <- pathway.stats("Chitobiase|chitobiase|chitinase|Chitinase")
+ap <- pathway.stats("alkaline phosphatase|Alkaline phosphatase")
+cellulase <- pathway.stats("cellulase|cellulose")
+ros <- pathway.stats("peroxidase|peroxide|catalase")
+nitrite_reduction <- pathway.stats("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase")
+protease <- pathway.stats("protease")
+carbox <- pathway.stats("carboxylate transport")
+ribose <- pathway.stats("ribose transport")
+gen.sugars <- pathway.stats("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin")
+raff <- pathway.stats("raffinose/stachyose/melibiose transport")
+gluc <- pathway.stats("glucose/mannose transport")
+rham <- pathway.stats("rhamnose transport")
+xyl <- pathway.stats("xylose transport")
+fruct <- pathway.stats("fructose transport")
+chiti <- pathway.stats("chitobiose transport")
+lact <- pathway.stats("lactose/L-arabinose transport")
+amino <- pathway.stats("amino acid transport")
+
+```
+
+
+|                         | Number of genes | % Genes more expressed in day      | % Genes more expressed at night   | % Cyclic genes (12 hr phase)  | p-value from t-test of day vs. night read totals | Day/night ratio |
+| -----------------------|:-----------------:|:------------------------:|:------------------------:|:------------------------:|:------------------------:|:---:|
+| Photosynthesis | `r round(photo[1], 3)` | `r round(photo[2], 3)` | `r round(photo[4], 3)` | `r round(photo[6], 3)` |`r round(photo[10], 3)`| `r round(photo[8]/photo[9], 2)` |
+| Opsins | `r round(rhodo[1], 3)` | `r round(rhodo[2], 3)` | `r round(rhodo[4], 3)` | `r round(rhodo[6], 3)` | `r round(rhodo[10], 3)`|`r round(rhodo[8]/rhodo[9], 2)` |
+| RuBisCO | `r round(rubisco[1], 3)` | `r round(rubisco[2], 3)` | `r round(rubisco[4], 3)` | `r round(rubisco[6], 3)` |`r round(rubisco[10], 3)` |`r round(rubisco[8]/rubisco[9], 2)` |
+| reductive TCA | `r round(rTCA[1], 3)` | `r round(rTCA[2], 3)` | `r round(rTCA[4], 3)` | `r round(rubisco[6], 3)` | `r round(rTCA[10], 3)` | `r round(rTCA[8]/rTCA[9], 2)` |
+| Polyamines | `r round(polyamines[1], 3)` | `r round(polyamines[2], 3)` |  `r round(polyamines[4], 3)` |  `r round(polyamines[6], 3)` | `r round(polyamines[10], 3)` | `r round(polyamines[8]/polyamines[9], 3)` |
+| Reactive oxygen species | `r round(ros[1], 3)` | `r round(ros[2], 3)` | `r round(ros[4], 3)` | `r round(ros[6], 3)` | `r round(ros[10], 3)` |`r round(ros[8]/ros[9], 2)` |
+| Protease | `r round(protease[1], 3)` | `r round(protease[2], 3)` | `r round(protease[4], 3)` | `r round(protease[6], 3)` | `r round(protease[10], 3)` | `r round(protease[8]/protease[9], 2)` |
+| Ribose transport | `r round(ribose[1], 3)` | `r round(ribose[2], 3)` | `r round(ribose[4], 3)` | `r round(ribose[6], 3)` |  `r round(ribose[10], 3)` | `r round(ribose[8]/ribose[9], 2)` |
+| General sugar transport | `r round(gen.sugars[1], 3)` | `r round(gen.sugars[2], 3)` | `r round(gen.sugars[4], 3)` | `r round(gen.sugars[6], 3)` | `r round(gen.sugars[10], 3)` | `r round(gen.sugars[8]/gen.sugars[9], 2)` |
+| Raffinose/stachyose/melibiose transport | `r round(raff[1], 3)` | `r round(raff[2], 3)` | `r round(raff[4], 3)` | `r round(raff[6], 3)` | `r round(raff[10], 3)` | `r round(raff[8]/raff[9], 2)` |
+| Glucose/mannose transport | `r round(gluc[1], 3)` | `r round(gluc[2], 3)` | `r round(gluc[4], 3)` | `r round(gluc[6], 3)` | `r round(gluc[10], 3)` | `r round(gluc[8]/gluc[9], 2)` |
+| Rhamnose transport | `r round(rham[1], 3)` | `r round(rham[2], 3)` | `r round(rham[4], 3)` | `r round(rham[6], 3)` | `r round(rham[10], 3)` | `r round(rham[8]/rham[9], 2)` |
+| Xylose transport | `r round(xyl[1], 3)` | `r round(xyl[2], 3)` | `r round(xyl[4], 3)` | `r round(xyl[6], 3)` | `r round(xyl[10], 3)` | `r round(xyl[8]/xyl[9], 2)` |
+| Amino acid transport | `r round(amino[1], 3)` | `r round(amino[2], 3)` | `r round(amino[4], 3)` | `r round(amino[6], 3)` | `r round(amino[10], 3)` | `r round(amino[8]/amino[9], 2)` |

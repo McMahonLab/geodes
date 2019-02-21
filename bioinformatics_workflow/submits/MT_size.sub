@@ -1,0 +1,33 @@
+# MT_size.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log =  MT_size_$(Cluster).log
+error =  MT_size_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/scripts/MT_size.sh
+output =  MT_size_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+#transfer_input_files = 
+transfer_output_files = MT_size.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 12GB
+request_disk = 2GB
+#
+# run one instance
+queue
+
+

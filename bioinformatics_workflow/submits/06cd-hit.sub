@@ -1,0 +1,32 @@
+# 06cd-hit.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 06cd-hit_$(Cluster).log
+error = 06cd-hit_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/06cd-hit.sh
+#arguments = $(samplename)
+output = 06cd-hit_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/cd-hit.tar.gz
+#transfer_output_files = 
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 24
+request_memory = 28GB
+request_disk = 20GB
+#
+# run one instance
+queue

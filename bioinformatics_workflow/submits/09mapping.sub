@@ -1,0 +1,31 @@
+# 09mapping.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 09mapping_$(Cluster).log
+error = 09mapping_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/09mapping.sh
+arguments = $(samplename)
+output = 09mapping_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files = 
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+request_cpus = 1
+request_memory =36GB
+request_disk = 20GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from path2mappingfastqs.txt
+

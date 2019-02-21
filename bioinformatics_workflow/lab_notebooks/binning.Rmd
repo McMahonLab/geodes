@@ -1,0 +1,788 @@
+---
+title: "GEODES MAGs"
+author: "Alex Linz"
+date: "January 11, 2018"
+output: html_document
+---
+
+### 2018-01-11
+We've decided that I need to bin the GEODES metaG assemblies to make some MAGs. I wouldn't be analyzing these, just counting up the reads mapped. But first I need to install a binning program. I've selected MaxBin because there are 2 papers showing it works well for high-complexity data (the other 2 good ones being MetaBAT and  MetaWatt) and it looks easiest to install. My goal for today is to make an install package for CHTC. I've downloaded version 2.2.4 from https://downloads.jbei.org/data/microbial_communities/MaxBin/MaxBin.html
+
+I'm following the installation instructions here: https://downloads.jbei.org/data/microbial_communities/MaxBin/README.txt
+
+In an interactive session:
+```{bash, eval = F}
+tar xvzf MaxBin-2.2.4.tar.gz
+cd MaxBin-2.2.4
+cd src
+make
+cd ..
+./autobuild_auxiliary
+
+```
+
+Looks good!
+
+### 2018-01-14
+
+This is a long shot, but I'm going to try running a single metagenome to start. This way, I can also test if MaxBin runs properly, and maybe if I'm lucky it will finish in 3 days.
+
+13map_metaGs.sub
+```{bash, eval = F}
+# 13map_metaGs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 13map_metaGs_$(Cluster).log
+error = 13map_metaGs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/13map_metaGs.sh
+arguments = $(metaG)
+output = 13map_metaGs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,zipped/samtools.tar.gz
+#transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory =72GB
+request_disk = 48GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue metaG from path2metaGfastqs.txt
+
+```
+
+13map_metaGs.sh
+```{bash, eval = F}
+#!/bin/bash
+#Map metagenomic reads to my pre-indexed database of reference genomes
+#Transfer metaG from gluster
+#Not splitting the metaTs anymore
+cp /mnt/gluster/amlinz/GEODES_metagenomes/$1 .
+cp /mnt/gluster/amlinz/ref.tar.gz .
+
+#Unzip program and database
+tar -xvzf BBMap_36.99.tar.gz
+tar -xvf samtools.tar.gz
+tar -xvzf ref.tar.gz
+gzip -d $1
+name=$(basename $1 | cut -d'.' -f1)
+sed -i '/^$/d' $name.fastq
+
+#Run the mapping step
+bbmap/bbmap.sh in=$name.fastq out=$name.90.mapped.sam minid=0.90 trd=T sam=1.3 threads=1 build=1 mappedonly=T -Xmx64g
+
+# I want to store the output as bam. Use samtools to convert.
+./samtools/bin/samtools view -b -S -o $name.90.mapped.bam $name.90.mapped.sam
+
+#Copy bam file back to gluster
+cp $name.90.mapped.bam /mnt/gluster/amlinz/GEODES_metaG_mapping/
+
+#Clean up
+rm -r bbmap
+rm -r ref
+rm *.bam
+rm *.sam
+rm *.fastq
+rm *.gz
+
+```
+
+### 2018-01-17
+
+THREE DAYS LATER
+
+Unless the 13map_metaG job finishes in the next 30 minutes, I'll need to split up my metagenomic reads. Talked to Sarah and this should still count as a competitive mapping, because I'm not splitting up the database. I'll need to use featurecounts (which means I'll need a gff file), and then sum each metagenomic read part by sample. Then I can use this input for a) binning (need featurecounts by contig) and b) comparison to metaTs (need featurecounts by CDS). I'll look for a gff file on IMG. Meanwhile, I'll start writing a series of scripts to split the mapping. None of it should be new concepts!
+
+1. Split fastq files into smaller (1GBish) bits (borrow from 00split_fastq)
+2. Count up mapped reads in each split part (borrow from 10featurecounts)
+3. Sum up counted reads (borrow from make_table - zero rows removal?)
+
+For all scripts, I'm testing using GEODES005 for now.
+
+get_metaGs.sh
+```{bash, eval = F}
+#!/bin/bash
+mkdir /mnt/gluster/amlinz/split_metagenomes/
+for file in /mnt/gluster/amlinz/GEODES_metagenomes/*; do sample=$(basename $file |cut -d'.' -f1); echo $sample;done > metaG_samples.txt
+head -1 metaG_samples.txt > test_metaG_samples.txt; mv test_metaG_samples.txt metaG_samples.txt
+
+```
+
+
+13split_metagenomes.sub
+```{bash, eval = F}
+# 13split_metagenomes.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 13split_metagenomes_$(Cluster).log
+error = 13split_metagenomes_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/13split_metagenomes.sh
+arguments = $(sample)
+output = 13split_metagenomes_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 12 GB
+request_disk = 40 GB
+#
+# Submit jobs
+queue sample from metaG_samples.txt
+
+```
+
+13split_metagenomes.sh
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_metagenomes/$1.fastq.gz .
+gzip -d $1.fastq.gz
+
+sed -i '/^$/d' $1.fastq
+
+maxreads=$((`wc -l < $1.fastq` / 8 - 1))
+startpoints=$(seq 0 1000000 $maxreads)
+
+for num in $startpoints;
+  do endpoint=$(($num + 999999));
+  bbmap/getreads.sh in=$1.fastq id=$num-$endpoint out=$1-$endpoint.fastq overwrite=T;
+  done
+
+rm $1.fastq
+mkdir $1-splitfiles
+mv $1*.fastq $1-splitfiles
+tar cvzf $1-splitfiles.tar.gz $1-splitfiles
+mv $1-splitfiles /mnt/gluster/amlinz/split_metagenomes/
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+
+```
+
+Testing in interactive mode first - need to figure out things like how many reads per filepart.
+
+### 2017-01-18
+
+I'm officially declaring the metagenome files unworkable as is. It took an hour to copy to the interactive session, another 2 hours to unzip it, and then I couldn't get any of the following, fairly simple commands (wc to get max reads and sed to remove blank lines) to run, despite leaving it going all afternoon. So as a last ditch effort, I tried bbmap's reformat.sh to downsample to 10% of the metagenomic reads. This ran in 1-2 hours and I now have a much smaller version of the metagenome! I'm hoping I can feed it directly into MaxBin instead of mapping, counting reads, and summing parts.
+
+Side note, I also want to use BBmap's reformat.sh to remove small contigs before binning.
+
+So I need to rework my scripts. My new tasks are:
+1. Downsample metagenomes
+2. Remove small contigs from the assembly fasta
+3. Bin
+
+13downsample.sub:
+```{bash, eval = F}
+# 13downsample.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 13downsample_$(Cluster).log
+error = 13downsample_$(Cluster)_$(Process).err
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/13downsample.sh
+arguments = $(sample)
+output = 13downsample_$(Cluster).out
+#
+# No files to transfer, since it's going to interact with Gluster instead of the submit node
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz
+transfer_output_files =
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 64 GB
+request_disk = 100 GB
+#
+# Submit jobs
+queue sample from metaG_samples.txt
+```
+
+13downsample.sh:
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+cp /mnt/gluster/amlinz/GEODES_metagenomes/$1.fastq.gz .
+gzip -d $1.fastq.gz
+
+./bbmap/reformat.sh in=$1.fastq out=$1-sampled.fastq samplerate=0.1
+
+gzip $1-sampled.fastq
+rm $1.fastq
+mv $1-sampled.fastq.gz /mnt/gluster/amlinz/downsampled_metagenomes/
+rm BBMap_36.99.tar.gz
+rm -r bbmap
+
+```
+
+14contig_filter.sub:
+```{bash, eval = F}
+# 14contig_filter.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 14contig_filter_$(Cluster).log
+error = 14contig_filter_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/14contig_filter.sh
+arguments = $(samplename)
+output = 14contig_filter_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/BBMap_36.99.tar.gz,http://proxy.chtc.wisc.edu/SQUID/amlinz/GEODES005.datafiles2.tar.gz
+
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 16GB
+request_disk = 8GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from contigs.txt
+
+```
+
+14contig_filter.sh:
+```{bash, eval = F}
+#!/bin/bash
+tar -xvzf BBMap_36.99.tar.gz
+
+tar -xvzf $1.datafiles2.tar.gz
+gzip -d $1.assembled.fna.gz
+
+./bbmap/reformat.sh in=$1.assembled.fna out=$1-filtered.assembled.fna minlength=1000
+
+gzip $1-filtered.assembled.fna
+
+cp $1-filtered.assembled.fna.gz /mnt/gluster/amlinz/filtered_assemblies/
+
+rm *gz
+rm *fna
+rm *txt
+rm *product_names
+rm -r bbmap
+
+```
+
+Now modify the mapping to use the smaller assembly and metagenome files.
+
+15binning.sh:
+```{bash, eval = F}
+#!/bin/bash
+
+tar xvzf MaxBin.tar.gz
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/FragGeneScan1.30:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/bowtie2-2.2.3:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/hmmer-3.1b1/src:$PATH
+export PATH=$(pwd)/MaxBin-2.2.4/auxiliary/idba-1.1.1/bin:$PATH
+
+
+cp /mnt/gluster/amlinz/filtered_assemblies/GEODES005-filtered.assembled.fna.gz .
+cp /mnt/gluster/amlinz/downsampled_metagenomes/GEODES005-sampled.fastq.gz .
+
+gzip -d GEODES005-filtered.assembled.fna.gz
+gzip -d GEODES005-sampled.fastq.gz
+
+./MaxBin-2.2.4/run_MaxBin.pl -contig GEODES005-filtered.assembled.fna -out GEODES005-binned -reads GEODES005-filtered.assembled.fna
+
+mkdir GEODES005-binning
+mv GEODES005-binned* GEODES005-binning/
+tar cvzf GEODES005-binning.tar.gz GEODES005-binning/
+
+rm *assembled.fna
+rm *fastq
+rm MaxBin-2.2.4.tar.gz
+rm -rf MaxBin-2.2.4
+```
+
+####2018-01-29
+
+That worked! All 10  metagenome bins in gluster. I opened up GEODES005-binned and it looks like there are about 200 fna files, a summary file, an abundance file, a log file, and a couple on marker genes. I still need to run this in CheckM to get classifications - Sarah was super awesome and made a docker image for me! So fingers crossed, all I have to do is throw an fna file at the docker image and it'll return classification and completeness estimates. While I'm at it, I'll want to extract the names of contigs from the fna files, since that's what I actually want the classifications for.
+
+1st, put all the fna files from all the metagenomes in a single folder. If there are about 200/metagenome, I'll end up with 2000 jobs. Solid.
+
+####2018-01-31
+
+Good news everyone! After some troubleshooting, Sarah's docker works great! Things I need to keep in mind are to specify that I want to use the most recent docker image using ":latest", and to change my file extensions from .fasta to .fna. 
+
+Checkm produces a lot output, but I don't necessarily need all of it. I need a file that says what contigs are in what bin (and maybe the classification of the bin, so I can easily assign that to each contig), and a file that contains quality and taxonomy info about all the bins generated. I can get the contig lists from my bin input fasta file, and the checkm result summaries appear to be in a file at output/storage/bin_stats_ext.tsv. This file appears to be a python dictionary - can I read it as such?
+
+```{python, eval = F}
+def readDict(filename, sep):
+    with open(filename, "r") as f:
+        dict = {}
+        for line in f:
+            values = line.split(sep)
+            dict[values[0]] = {values[1:len(values)]}
+        return(dict)
+        
+        
+```
+
+Apparently reading python dictionaries from files is not as straightforward as I thought it should be. Trying awk instead.
+
+```{bash, eval = F}
+tax=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /marker lineage/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+length=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Genome size/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+complete=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Completeness/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+contamination=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Contamination/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+
+echo $tax $length $complete $contamination > results.txt
+
+```
+
+Looks good! I'll add this to my checkm scripts. Modify the submit script to send back less, too.
+
+16checkm.sh:
+```{bash, eval = F}
+
+#!/bin/bash
+
+mkdir input
+mv $1.fna input/
+
+checkm lineage_wf input output
+
+grep ">" input/$1.fna > contigs.txt
+sed -i 's/>//g' contigs.txt
+
+tax=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /marker lineage/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+length=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Genome size/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+complete=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Completeness/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+contamination=$(awk -F', ' '{for(i=1;i<=NF;i++){if ($i ~ /Contamination/){print $i}}}' output/storage/bin_stats_ext.tsv | awk -F': ' '{print $2}')
+
+echo $1 $tax $length $complete $contamination > $1-checkm.txt
+numcontigs=$(wc -l $1-contigs.txt | awk '{print $1}')
+yes $tax | head -n $numcontigs > taxcolumn.txt
+yes $1 | head -n $numcontigs > binid.txt
+paste -d "\t" contigs.txt binid.txt > cat1.txt
+paste -d "\t" cat1.txt taxcolumn.txt > $1-contigs.txt
+
+
+rm -r input/
+rm -r output/
+rm taxcolumn.txt
+rm contigs.txt
+rm binid.txt
+rm cat1.txt
+
+```
+
+16checkm.sub:
+```{bash, eval = F}
+# 16checkm.sub
+#
+#
+# Specify the HTCondor Universe
+universe = docker
+docker_image = sstevens/checkm:latest
+
+log = 16checkm_$(Cluster).log
+error = 16checkm_$(Cluster)_$(Process).err
+requirements = (OpSysMajorVer == 7)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = executables/16checkm.sh
+arguments = $(bin)
+output = 16checkm_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = metaG_bins/$(bin).fna
+transfer_output_files = $(bin)-contigs.txt,$(bin)-checkm.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 40GB
+request_disk = 12GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue bin from testbins_to_classify.txt
+
+```
+
+Redo the command to build bins_to_classify.txt to not include file extensions
+
+move_bins.sh
+```{bash, eval = F}
+#!/bin/bash
+
+while read line; do tar xvzf /mnt/gluster/amlinz/$line-binning.tar.gz;
+       for file in $line-binning/*fasta; do
+               name=$(basename "$file" .fasta);
+               mv $file metaG_bins/$name.fna;
+               done;
+       rm -r $line-binning;
+       done < metaG_samples.txt
+
+for file in metaG_bins/*; do
+        name=$(basename "$file" .fna);
+        echo $name;
+        done > bins_to_classify.txt
+
+head -3 bins_to_classify.txt > testbins_to_classify.txt
+
+```
+
+####2018-02-06
+
+Well, Docker was down for awhile - something about the sandbox not connecting on certain execute nodes. They fixed it last night and we are back in business. Before I run the whole list of bins, I'll write the post-processing script.
+
+checkm_results.sh
+```{bash, eval = F}
+#!/bin/bash
+
+cat *-contigs.txt > GEODES_binned_contigs.txt
+echo -e "bin\ttaxonomy\tsize\tcompleteness\tcontamination" | cat - *-checkm.txt > GEODES_checkm_results.txt
+
+```
+
+Everything looks great! Starting the full run and updating the bioinformatics instructions.
+
+Got the results back and there are a lot of unclassifieds - Sarah suggests using her phylodist python script to reclassify (and I suspect Trina would say the same thing). It's a little complex, but Sarah already wrote the scripts. I just have to run them. I made a tar archive containing the files I'll need for each metagenome assembly and uploaded it to squid.
+
+The steps in the process are:
+- assembly.gff + bin.contig.list > bin.gff
+- bin.gff + assembly.phylodist > bin.phylodist
+- bin.gff + assembly.COG > bin.COG
+- bin.COG + bin.phylodist > bin.markerCOG.phylodist
+- bin.markerCOG.phylodist > classification
+
+It's in a series of python and bash scripts, so it should work with my python install. I've made the following submit script and will test in interactive mode.
+
+17classify_bins.sub
+```{bash, eval = F}
+# 17classify_bins.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 17classify_bins_$(Cluster).log
+error = 17classify_bins_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX")
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/17classify_bins.sh
+arguments = $(bin)
+output = 17classify_bins_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz
+transfer_output_files = $(contigs).contig.classification.perc70.minhit3.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+
+request_cpus = 1
+request_memory = 16GB
+request_disk = 16GB
+#
+# run from list
+queue bin from testbins_to_classify.txt
+
+```
+
+17classify_bins.sh
+```{bash, eval = F}
+#!/bin/bash
+
+tar xvzf python.tar.gz
+#Update the path variable
+mkdir home
+export PATH=$(pwd)/python/bin:$(pwd)/samtools/bin:$(pwd)/bwa:$PATH
+export HOME=$(pwd)/home
+
+# Unzip assembly data files
+tar xvzf for_bin_classification.tar.gz
+
+# Make all scripts executable
+chmod +x *.sh
+chmod +x *.py
+
+# Make list of contigs
+grep '>' $1.fna > $1.contigs
+
+# Make gff file
+./makeBinGFF.sh $1.contigs for_bin_classification/
+
+# Make phylodist file
+python makeBinPhylodist.py $1.gff for_bin_classification
+
+# Make COG file
+python makeBinCOGS.py $1.gff for_bin_classification
+
+# Filter COGs to include only phylogeny marker genes
+python filterPhyloCOGs.py $1.cog.txt
+
+# Get the consensus phylogeny
+python classifyWphylodistWcutoffs.py $1.phylodist.subphylocog.txt
+
+# Simplify output name
+mv *classonly.txt $1.perc70.minhit3.classonly.txt
+
+# Clean up
+rm *.tar.gz
+rm *.py
+rm *.sh
+rm *.tsv
+rm *.gff
+rm *.fna
+rm *.fna.contigs
+rm *cog.txt
+rm *phylodist.txt
+rm *minhit3.txt
+rm -r for_bin_classification/
+rm -rf python/
+rm -r home/
+```
+
+makeBinGFF.sh
+```{bash, eval = F}
+#!/bin/bash
+
+# This program makes a gff file for the individual bin from the assembly gff
+# Usage: makeBinGFF contiglistFile path2assemblies
+
+# Read in filename
+filename=$1
+# Get path to assemblies
+assemPath=$2
+# Put together name for assembly gff file
+gffFilename=`echo "$filename" | cut -f1 -d- `
+#gffFilename=${gffFilename##*/}
+# Make bin GFF file name
+gffOut="${filename%.contigs}".gff
+
+# Grep each line of the filename (minus first character) from the gff file 
+#    into new bin gff file
+while read line
+do
+grep "${line:1:${#line}}" $assemPath/$gffFilename.assembled.gff >> $gffOut
+done < $filename
+```
+
+makeBinPhylodist.py
+```{python, eval=F}
+# coding: utf-8
+
+"""makeBinPhylodist.py : make phyldist file for each bin"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: makeBinPhylodist.py  gffFile path2assemblies")
+
+if len(sys.argv) != 3:
+	usage()
+	sys.exit(2)
+
+gffname=sys.argv[1]
+assemName=gffname.split('-')[0]
+path2assem=sys.argv[2]
+phylodistname=path2assem+'/'+assemName+'.assembled.phylodist'
+
+gff=pd.read_table(gffname, header=None, names=['seqname','source','features','start','end','score','strand','frame','attribute'])
+#pulling out the locus tag to its own column
+gff['locus_tag']=gff['attribute'].str.split('locus_tag=').str.get(1).str.slice(start=0,stop=-1)
+phylodist=pd.read_table(phylodistname, header=None, names=['seq_id','homolog_gene_oid','homolog_taxon_oid','percent_identity','lineage'])
+## Merging and writing out to file, did inner instead of left since some of the genes don't have a hit in the phylodist file
+gff[['locus_tag']].merge(phylodist, how='inner', left_on='locus_tag', right_on='seq_id').to_csv(gffname.split('.gff')[0]+'.phylodist.txt',sep='\t', index=False)
+```
+
+makeBinCOGS.py
+```{python, eval = F}
+# coding: utf-8
+
+"""makeBinPhylodist.py : make cog file for each bin"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: makeBinCOGs.py  gffFile path2assemblies")
+
+if len(sys.argv) != 3:
+	usage()
+	sys.exit(2)
+
+gffname=sys.argv[1]
+assemName=gffname.split('-')[0]
+path2assem=sys.argv[2]
+cogname=path2assem+'/'+assemName+'.assembled.COG'
+
+gff=pd.read_table(gffname, header=None, names=['seqname','source','features','start','end','score','strand','frame','attribute'])
+#pulling out the locus tag to its own column
+gff['locus_tag']=gff['attribute'].str.split('locus_tag=').str.get(1).str.slice(start=0,stop=-1)
+cog=pd.read_table(cogname, header=None, names=['gene_id','cog_id','percent_identity','align_length','query_start','query_end','subj_start','subj_end','evalue','bit_score'])
+## Merging and writing out to file, did inner instead of left since some of the genes don't have a hit in the cog file
+gff[['locus_tag']].merge(cog, how='inner', left_on='locus_tag', right_on='gene_id').to_csv(gffname.split('.gff')[0]+'.cog.txt',sep='\t', index=False)
+```
+
+filterPhyloCOGs.py
+```{python, eval = F}
+"""makeBinPhylodist.py : make cog file for each bin, requires matching names for COG file and phylodist files, preferably made with makeBinXXX.py scripts"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+import pandas as pd, sys
+
+def usage():
+	print("Usage: filterPhyloCOGs.py  COGsFile")
+
+if len(sys.argv) != 2:
+	usage()
+	sys.exit(2)
+
+cogname=sys.argv[1]
+prefix=cogname.split('.cog.txt')[0]
+phyloname=prefix+'.phylodist.txt'
+
+matchup=pd.read_table('Phylosift2COGs.tsv',header=0) # hard coded in path2file, add as argument?
+
+
+cogs=pd.read_table(cogname,header=0)
+phylodist=pd.read_table(phyloname,header=0)
+phylocogs=cogs[cogs.cog_id.isin(matchup.COG_num)]
+phylocogs.to_csv(prefix+'.phylocog.txt',sep='\t', index=False)
+
+phylodist[phylodist.locus_tag.isin(phylocogs.locus_tag)].to_csv(prefix+'.phylodist.subphylocog.txt',sep='\t', index=False)
+
+```
+
+classifyWphylodistWcutoffs.py
+```{python, eval = F}
+import pandas as pd, sys, os
+
+"""classifyWPhylodist.py  for each taxonomic level takes the classificaiton with the most hits,
+	removes any not matching hits for the next leve, also returns the number and avg pid for those hits"""
+
+__author__ = "Sarah Stevens"
+__email__ = "sstevens2@wisc.edu"
+
+def usage():
+	print("Usage: classifyWPhylodistWcutoffs.py  phylodistFile")
+
+if len(sys.argv) != 2:
+	usage()
+	sys.exit(2)
+
+# Read in args
+inname=sys.argv[1]
+phylodist = pd.read_table(inname)
+perc_co = .70
+hit_min = 3
+	
+
+# Setting up output
+outname=os.path.splitext(inname)[0]+'.perc70.minhit3.txt'
+outname2=os.path.splitext(inname)[0]+'.perc70.minhit3.classonly.txt' # output file without the numbers in it
+output=open(outname,'w')
+output2=open(outname2,'w')
+output.write(inname+'\t')
+output2.write(inname+'\t')
+if phylodist.empty: # if there are no hits in phylodist file
+	print('Phylodist empty!  This maybe because it was subsetted into phylocogs and there were none.')
+	output.write('NO CLASSIFICATION BASED ON GIVEN PHYLODIST\n')
+	output2.write('NO CLASSIFICATION BASED ON GIVEN PHYLODIST\n')
+	sys.exit(0)
+
+phylodist['contig']=phylodist['locus_tag'].str[:17]
+taxon_ranks=['Kingdom','Phylum','Class','Order','Family','Genus','Species','Taxon_name']
+phylodist[taxon_ranks]=phylodist['lineage'].apply(lambda x: pd.Series(x.split(';')))
+totGenes=len(phylodist)
+genome_classification=list()
+
+
+for rank in taxon_ranks:
+	# Getting taxon, at that level, hit the most and the number of hits
+	counts=phylodist.groupby(rank).size()
+	max_ct_value=counts.max()
+	perc=phylodist.groupby(rank).size()/float(totGenes) # percent of times each classification (added float for python2)
+	max_pc_value=perc.max() # number of percentage the classification with the most hits had
+	max_pc_taxon=perc.idxmax(axis=1) # classificaiton hit the most at this rank
+	averages=phylodist.groupby(rank).mean().reset_index()[[rank,'percent_identity']] #getting average pid for best classifcation
+	max_pc_avg=averages.loc[averages[rank]==max_pc_taxon, 'percent_identity'].iloc[0]
+	result=(max_pc_taxon, round(max_pc_value, 2), round(max_pc_avg, 2), max_ct_value)
+	genome_classification.append(result)
+	rank_co_dict = {'Kingdom':.20,'Phylum':.45,'Class':.49,'Order':.53,'Family':.61,'Genus':.70,'Species':.90,'Taxon_name':.97}
+	rank_co = rank_co_dict[rank]
+	if (result[0]>.70 and result[3]>hit_min and result[1]>rank_co):
+		output.write('{}({},{},{});'.format(result[0],result[1],result[2],result[3]))
+		output2.write(result[0]+';')
+	else:
+		if rank == 'Kingdom':
+			if result[3]<=hit_min:
+				output.write('NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST')
+				output2.write('NO CLASSIFICATION DUE TO FEW HITS IN PHYLODIST')
+			else: 
+				output.write('NO CLASSIFICATION DUE TO LOW PERCENT MATCHING')
+				output2.write('NO CLASSIFICATION DUE TO LOW PERCENT MATCHING')
+		output.write('\n')
+		output2.write('\n')
+		output.close()
+		output2.close()
+		sys.exit(0)
+	phylodist=phylodist[phylodist[rank]==max_pc_taxon] # removing any hits which don't match the classification at this level
+
+output.write('\n')
+output.close()
+output2.write('\n')
+output2.close()
+
+```

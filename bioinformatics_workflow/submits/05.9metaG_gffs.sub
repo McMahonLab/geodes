@@ -1,0 +1,32 @@
+# 05metaG_gffs.sub
+#
+#
+# Specify the HTCondor Universe
+universe = vanilla
+log = 05metaG_gffs_$(Cluster).log
+error = 05metaG_gffs_$(Cluster)_$(Process).err
+requirements = (OpSys == "LINUX") && (Arch == "X86_64") && (Target.HasGluster == true)
+#
+# Specify your executable, arguments, and a file for HTCondor to store standard
+#  output.
+executable = /home/amlinz/executables/05metaG_gffs.sh
+arguments = $(samplename)
+output = 05metaG_gffs_$(Cluster).out
+#
+# Specify that HTCondor should transfer files to and from the
+#  computer where each job runs.
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = zipped/python.tar.gz,zipped/genometools.tar.gz,scripts/metaG_parsing.py,metaG_gffs/$(samplename),http://proxy.chtc.wisc.edu/SQUID/amlinz/GEODES167.datafiles2.tar.gz
+
+transfer_output_files = CDS.$(samplename).fna,$(samplename).table.txt
+#
+# Tell HTCondor what amount of compute resources
+#  each job will need on the computer where it runs.
+# Requirements = (Target.HasGluster == true)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+#
+# Tell HTCondor to run every fastq file in the provided list:
+queue samplename from 167metaG_gffs.txt
