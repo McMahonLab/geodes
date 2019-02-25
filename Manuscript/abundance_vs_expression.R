@@ -46,9 +46,10 @@ metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
 
 # Add phylum info to keys
 # Process metagenome gene key to include a phylum column. Fix any weird formats.
-# 
+
 # metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
 # metaG_key$Taxonomy <- gsub("Eukaryota;", "", metaG_key$Taxonomy)
+# metaG_key$Taxonomy <- gsub("Proteobacteria;", "", metaG_key$Taxonomy)
 # metaG_key$Phylum <- sapply(strsplit(as.character(metaG_key$Taxonomy),";"), `[`, 1)
 # 
 # metaG_key$Phylum <- gsub("Cryptophyta,Cryptophyceae,Pyrenomonadales,Geminigeraceae,Guillardia,theta", "Cryptophyta", metaG_key$Phylum)
@@ -122,7 +123,7 @@ trout_metaG_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting
 # # 
 # # # Include a key for colorcoding phyla by broader classification
 # # 
-type_key <- data.frame(phylum = c("Actinobacteria", "Bacteroidetes", "Chloroflexi", "Crenarchaeota", "Cryptophyta", "Cyanobacteria", "Gemmatimonadetes", "Heterokonta", "Ignavibacteria", "Planctomycetes", "Proteobacteria", "Verrucomicrobia", "Viruses", "Armatimonadetes", "Firmicutes", "Ciliophora", "Acidobacteria", "Tenericutes", "Arthropoda", "Chlorobi", "Candidatus Saccharibacteria", "Chlorophyta", "Deinococcus-Thermus", "Elusimicrobia", "Haptophyta", "Spirochaetes", "Phaeophyceae", "Streptophyta"), type = c("Bacteria", "Bacteria", "Bacteria", "Archaea", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses", "Bacteria", "Bacteria", "Protist", "Bacteria", "Bacteria", "Animal", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Algae", "Algae"))
+#type_key <- data.frame(phylum = c("Actinobacteria", "Bacteroidetes", "Chloroflexi", "Crenarchaeota", "Cryptophyta", "Cyanobacteria", "Gemmatimonadetes", "Heterokonta", "Ignavibacteria", "Planctomycetes", "Proteobacteria", "Verrucomicrobia", "Viruses", "Armatimonadetes", "Firmicutes", "Ciliophora", "Acidobacteria", "Tenericutes", "Arthropoda", "Chlorobi", "Candidatus Saccharibacteria", "Chlorophyta", "Deinococcus-Thermus", "Elusimicrobia", "Haptophyta", "Spirochaetes", "Phaeophyceae", "Streptophyta"), type = c("Bacteria", "Bacteria", "Bacteria", "Archaea", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses", "Bacteria", "Bacteria", "Protist", "Bacteria", "Bacteria", "Animal", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Algae", "Algae"))
 # 
 # 
 # #Process Mendota expression data
@@ -155,13 +156,13 @@ mendota_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_fil
 # keep_phyla <- c(mendota_metaG_phyla$Phylum[which(mendota_metaG_phyla$value > quantile(mendota_metaG_phyla$value)[3])], mendota_phyla$Taxonomy[which(mendota_phyla$value > quantile(mendota_phyla$value)[3])])
 # mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy %in% keep_phyla),]
 mendota_phyla$metaG <- mendota_metaG_phyla$value[match(mendota_phyla$Taxonomy, mendota_metaG_phyla$Phylum)]
-mendota_phyla$type <- type_key$type[match(mendota_phyla$Taxonomy, type_key$phylum)]
+#mendota_phyla$type <- type_key$type[match(mendota_phyla$Taxonomy, type_key$phylum)]
 mendota_phyla <- mendota_phyla[which(is.na(mendota_phyla$metaG) == F),]
 
 
 
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p1 <- ggplot(mendota_phyla[which(mendota_phyla$Taxonomy != "Chloroflexi"), ], aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_abline(intercept = 0, slope = max(mendota_phyla$value)/max(mendota_phyla$metaG), linetype = 3) + geom_text_repel(aes(label = Taxonomy), force = 10, size = 3, color = "black") + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "A. Lake Mendota") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(mendota_phyla$metaG))) + background_grid(major = "xy", minor = "xy")
+p1 <- ggplot(mendota_phyla[which(mendota_phyla$Taxonomy != "Chloroflexi"), ], aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "A. Lake Mendota") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(mendota_phyla$metaG))) + background_grid(major = "xy", minor = "xy")
 
 
 #Process Sparkling expression data
@@ -194,10 +195,10 @@ spark_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_files
 # keep_phyla <- c(spark_metaG_phyla$Phylum[which(spark_metaG_phyla$value > quantile(spark_metaG_phyla$value)[3])], spark_phyla$Taxonomy[which(spark_phyla$value > quantile(spark_phyla$value)[3])])
 # spark_phyla <- spark_phyla[which(spark_phyla$Taxonomy %in% keep_phyla),]
 spark_phyla$metaG <- spark_metaG_phyla$value[match(spark_phyla$Taxonomy, spark_metaG_phyla$Phylum)]
-spark_phyla$type <- type_key$type[match(spark_phyla$Taxonomy, type_key$phylum)]
+#spark_phyla$type <- type_key$type[match(spark_phyla$Taxonomy, type_key$phylum)]
 spark_phyla <- spark_phyla[which(is.na(spark_phyla$metaG) == F),]
 
-p2 <- ggplot(spark_phyla, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_abline(intercept = 0, slope = max(spark_phyla$value)/max(spark_phyla$metaG), linetype = 3) + geom_text_repel(aes(label = Taxonomy), force = 10, size = 3, color = "black") + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "B. Sparkling Lake") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(spark_phyla$metaG))) + background_grid(major = "xy", minor = "none")
+p2 <- ggplot(spark_phyla, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "B. Sparkling Lake") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(spark_phyla$metaG))) + background_grid(major = "xy", minor = "none")
 #Process Trout expression data
 
 # # # Remove unclassified genes and the internal standard
@@ -227,26 +228,41 @@ trout_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_files
 # keep_phyla <- c(trout_metaG_phyla$Phylum[which(trout_metaG_phyla$value > quantile(trout_metaG_phyla$value)[3])], trout_phyla$Taxonomy[which(trout_phyla$value > quantile(trout_phyla$value)[3])])
 # trout_phyla <- trout_phyla[which(trout_phyla$Taxonomy %in% keep_phyla),]
 trout_phyla$metaG <- trout_metaG_phyla$value[match(trout_phyla$Taxonomy, trout_metaG_phyla$Phylum)]
-trout_phyla$type <- type_key$type[match(trout_phyla$Taxonomy, type_key$phylum)]
+#trout_phyla$type <- type_key$type[match(trout_phyla$Taxonomy, type_key$phylum)]
 trout_phyla <- trout_phyla[which(is.na(trout_phyla$metaG) == F),]
 
-p3 <- ggplot(trout_phyla, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_abline(intercept = 0, slope = max(trout_phyla$value)/max(trout_phyla$metaG), linetype = 3) + geom_text_repel(aes(label = Taxonomy), force = 10, size = 3, color = "black") + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "C. Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_phyla$metaG))) + background_grid(major = "xy", minor = "none")
+p3 <- ggplot(trout_phyla, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "C. Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_phyla$metaG))) + background_grid(major = "xy", minor = "none")
 
 #e my various gene keys into just genes with tribe classifications
 metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
 metaG_key$Clade <- sapply(strsplit(as.character(metaG_key$Taxonomy),";"), `[`, 5)
-metaG_key$Clade[which(metaG_key$Clade == "Candidatus Methylopumilus")] <- "LD28"
+metaG_key$Clade[which(metaG_key$Clade == "Candidatus Methylopumilus")] <- "betIV-A"
+metaG_key$Clade[which(metaG_key$Clade == "Polynucleobacter")] <- "Pnec"
+metaG_key$Clade[which(metaG_key$Clade == "Algoriphagus")] <- "bacIII-B"
+metaG_key$Clade[which(metaG_key$Clade == "Anabaena")] <- "AnaI-A"
+metaG_key$Clade[which(metaG_key$Clade == "Aquiluna")] <- "LunaI-A"
+metaG_key$Clade[which(metaG_key$Clade == "Curvibacter")] <- "Lhab-A"
+metaG_key$Clade[which(metaG_key$Clade == "Haliscomenobacter")] <- "bacIV-A"
+metaG_key$Clade[which(metaG_key$Clade == "Herbaspirillum")] <- "betVII-B"
+metaG_key$Clade[which(metaG_key$Clade == "Limnohabitans")] <- "Lhab-A"
+metaG_key$Clade[which(metaG_key$Clade == "Mycobacterium")] <- "acTH2-A"
+metaG_key$Clade[which(metaG_key$Clade == "Novosphingobium")] <- "alfIV-A"
+metaG_key$Clade[which(metaG_key$Clade == "Pedobacter")] <- "bacVI-B"
+metaG_key$Clade[which(metaG_key$Clade == "Rhodoluna")] <- "LunaI-A"
+metaG_key$Clade[which(metaG_key$Clade == "Sphingopyxis")] <- "alfIV-B"
+metaG_key$Clade[which(metaG_key$Clade == "LD28")] <- "betIV-A"
 
 # Aggregate the metagenomic reads
 
 metaG_key2 <- metaG_key[which(is.na(metaG_key$Clade) == FALSE),]
+metaG_reads2 <- metaG_reads
 
 # Split metagenome read count tables by lake and prep for melting
-metaG_reads$Genes <- rownames(metaG_reads)
-metaG_reads <- metaG_reads[match(metaG_reads$Genes, metaG_key2$Gene),]
-spark_metaG <- metaG_reads[,c(1,2, 11)]
-trout_metaG <- metaG_reads[,c(3,4, 11)]
-mendota_metaG <- metaG_reads[,c(5,6, 11)]
+metaG_reads2$Genes <- rownames(metaG_reads2)
+metaG_reads2 <- metaG_reads2[match(metaG_reads2$Genes, metaG_key2$Gene),]
+spark_metaG <- metaG_reads2[,c(1,2, 11)]
+trout_metaG <- metaG_reads2[,c(3,4, 11)]
+mendota_metaG <- metaG_reads2[,c(5,6, 11)]
 
 # Use melt to switch from wide to long format
 spark_metaG <- melt(spark_metaG)
@@ -277,10 +293,23 @@ mnorm2 <- melt(mnorm2)
 mnorm2$Taxonomy <- mendota_key$Clade[match(mnorm2$Genes, mendota_key$Gene)]
 
 # Make some modifications to names before aggregating
-mnorm2$Taxonomy[which(mnorm2$Taxonomy == "PnecC" | mnorm2$Taxonomy == "Polynucleobacter necessarius")] <- "Polynucleobacter"
-mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Candidatus Methylopumilus planktonicus" | mnorm2$Taxonomy == "Candidatus Methylopumilus turicensis")] <- "LD28"
-mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Lhab-A1" | mnorm2$Taxonomy == "Limnohabitans sp. Rim28")] <- "Limnohabitans"
-mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Novosphingobium sp. AAP93")] <- "Novosphingobium"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "PnecC" | mnorm2$Taxonomy == "Polynucleobacter necessarius")] <- "Pnec"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Candidatus Methylopumilus planktonicus" | mnorm2$Taxonomy == "Candidatus Methylopumilus turicensis")] <- "betIV-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Lhab-A1" | mnorm2$Taxonomy == "Limnohabitans sp. Rim28")] <- "Lhab-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Novosphingobium sp. AAP93")] <- "alfIV-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Algoriphagus")] <- "bacIII-B"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Anabaena")] <- "AnaI-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Aquiluna")] <- "LunaI-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Curvibacter pauculus" | mnorm2$Taxonomy == "Curvibacter gracilis" | mnorm2$Taxonomy == "Curvibacter lanceolatus" | mnorm2$Taxonomy == "Curvibacter sp. PAE-UM")] <- "Lhab-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Haliscomenobacter")] <- "bacIV-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Herbaspirillum frisingense" | mnorm2$Taxonomy == "Herbaspirillum huttiense" | mnorm2$Taxonomy == "Herbaspirillum sp. B39")] <- "betVII-B"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Mycobacterium")] <- "acTH2-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Novosphingobium")] <- "alfIV-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Pedobacter")] <- "bacVI-B"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Rhodoluna")] <- "LunaI-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Sphingopyxis")] <- "alfIV-B"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "LD28")] <- "betIV-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "LD12")] <- "alfV-A"
 
 # Aggregate by phylum
 mendota_clade <- aggregate(value ~ Taxonomy, data = mnorm2, mean)
@@ -293,10 +322,10 @@ mendota_clade <- mendota_clade[grep("unclassified", mendota_clade$Taxonomy, inve
 
 mendota_clade$metaG <- mendota_metaG_Clade$value[match(mendota_clade$Taxonomy, mendota_metaG_Clade$Clade)]
 mendota_clade <- mendota_clade[which(is.na(mendota_clade$metaG) == F),]
-mendota_clade <- mendota_clade[grep("-", mendota_clade$Taxonomy), ]
+mendota_clade <- mendota_clade[grep("-|Pnec", mendota_clade$Taxonomy), ]
 
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p4 <- ggplot(mendota_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_abline(intercept = 0, slope = max(mendota_clade$value)/max(mendota_clade$metaG), linetype = 3) + geom_text_repel(aes(label = Taxonomy), force = 10, size = 3, color = "black") + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "D. Lake Mendota") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(mendota_clade$metaG))) + background_grid(major = "xy", minor = "xy")
+p4 <- ggplot(mendota_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "D. Lake Mendota") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(mendota_clade$metaG))) + background_grid(major = "xy", minor = "xy")
 
 # Repeat with Trout
 
@@ -313,10 +342,23 @@ tnorm2 <- melt(tnorm2)
 tnorm2$Taxonomy <- trout_key$Clade[match(tnorm2$Genes, trout_key$Gene)]
 
 # Make some modifications to names before aggregating
-tnorm2$Taxonomy[which(tnorm2$Taxonomy == "PnecC" | tnorm2$Taxonomy == "Polynucleobacter necessarius")] <- "Polynucleobacter"
-tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Candidatus Methylopumilus planktonicus" | tnorm2$Taxonomy == "Candidatus Methylopumilus turicensis")] <- "LD28"
-tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Lhab-A1" | tnorm2$Taxonomy == "Limnohabitans sp. Rim28")] <- "Limnohabitans"
-tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Novosphingobium sp. AAP93")] <- "Novosphingobium"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "PnecC" | tnorm2$Taxonomy == "Polynucleobacter necessarius")] <- "Pnec"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Candidatus Methylopumilus planktonicus" | tnorm2$Taxonomy == "Candidatus Methylopumilus turicensis")] <- "betIV-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Lhab-A1" | tnorm2$Taxonomy == "Limnohabitans sp. Rim28")] <- "Lhab-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Novosphingobium sp. AAP93")] <- "alfIV-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Algoriphagus")] <- "bacIII-B"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Anabaena")] <- "AnaI-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Aquiluna")] <- "LunaI-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Curvibacter pauculus" | tnorm2$Taxonomy == "Curvibacter gracilis" | tnorm2$Taxonomy == "Curvibacter lanceolatus" | tnorm2$Taxonomy == "Curvibacter sp. PAE-UM")] <- "Lhab-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Haliscomenobacter")] <- "bacIV-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Herbaspirillum frisingense" | tnorm2$Taxonomy == "Herbaspirillum huttiense" | tnorm2$Taxonomy == "Herbaspirillum sp. B39")] <- "betVII-B"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Mycobacterium")] <- "acTH2-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Novosphingobium")] <- "alfIV-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Pedobacter")] <- "bacVI-B"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Rhodoluna")] <- "LunaI-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "Sphingopyxis")] <- "alfIV-B"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "LD28")] <- "betIV-A"
+tnorm2$Taxonomy[which(tnorm2$Taxonomy == "LD12")] <- "alfV-A"
 
 # Aggregate by phylum
 trout_clade <- aggregate(value ~ Taxonomy, data = tnorm2, mean)
@@ -329,10 +371,10 @@ trout_clade <- trout_clade[grep("unclassified", trout_clade$Taxonomy, invert = T
 
 trout_clade$metaG <- trout_metaG_Clade$value[match(trout_clade$Taxonomy, trout_metaG_Clade$Clade)]
 trout_clade <- trout_clade[which(is.na(trout_clade$metaG) == F),]
-trout_clade <- trout_clade[grep("-", trout_clade$Taxonomy), ]
+trout_clade <- trout_clade[grep("-|Pnec", trout_clade$Taxonomy), ]
 
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p5 <- ggplot(trout_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_abline(intercept = 0, slope = max(trout_clade$value)/max(trout_clade$metaG), linetype = 3) + geom_text_repel(aes(label = Taxonomy), force = 10, size = 3, color = "black") + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "F. Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_clade$metaG))) + background_grid(major = "xy", minor = "xy")
+p5 <- ggplot(trout_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "F. Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_clade$metaG))) + background_grid(major = "xy", minor = "xy")
 
 # Repeat with Sparkling
 spark_key$Taxonomy <- gsub("Bacteria;", "", spark_key$Taxonomy)
@@ -348,10 +390,24 @@ snorm2 <- melt(snorm2)
 snorm2$Taxonomy <- spark_key$Clade[match(snorm2$Genes, spark_key$Gene)]
 
 # Make some modifications to names before aggregating
-snorm2$Taxonomy[which(snorm2$Taxonomy == "PnecC" | snorm2$Taxonomy == "Polynucleobacter necessarius")] <- "Polynucleobacter"
-snorm2$Taxonomy[which(snorm2$Taxonomy == "Candidatus Methylopumilus planktonicus" | snorm2$Taxonomy == "Candidatus Methylopumilus turicensis")] <- "LD28"
-snorm2$Taxonomy[which(snorm2$Taxonomy == "Lhab-A1" | snorm2$Taxonomy == "Limnohabitans sp. Rim28")] <- "Limnohabitans"
-snorm2$Taxonomy[which(snorm2$Taxonomy == "Novosphingobium sp. AAP93")] <- "Novosphingobium"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "PnecC" | snorm2$Taxonomy == "Polynucleobacter necessarius")] <- "Pnec"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Candidatus Methylopumilus planktonicus" | snorm2$Taxonomy == "Candidatus Methylopumilus turicensis")] <- "betIV-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Lhab-A1" | snorm2$Taxonomy == "Limnohabitans sp. Rim28")] <- "Lhab-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Novosphingobium sp. AAP93")] <- "alfIV-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Algoriphagus")] <- "bacIII-B"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Anabaena")] <- "AnaI-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Aquiluna")] <- "LunaI-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Curvibacter pauculus" | snorm2$Taxonomy == "Curvibacter gracilis" | snorm2$Taxonomy == "Curvibacter lanceolatus" | snorm2$Taxonomy == "Curvibacter sp. PAE-UM")] <- "Lhab-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Haliscomenobacter")] <- "bacIV-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Herbaspirillum frisingense" | snorm2$Taxonomy == "Herbaspirillum huttiense" | snorm2$Taxonomy == "Herbaspirillum sp. B39")] <- "betVII-B"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Mycobacterium")] <- "acTH2-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Novosphingobium")] <- "alfIV-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Pedobacter")] <- "bacVI-B"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Rhodoluna")] <- "LunaI-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Sphingopyxis")] <- "alfIV-B"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "LD28")] <- "betIV-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "LD12")] <- "alfV-A"
+
 
 # Aggregate by phylum
 spark_clade <- aggregate(value ~ Taxonomy, data = snorm2, mean)
@@ -364,10 +420,10 @@ spark_clade <- spark_clade[grep("unclassified", spark_clade$Taxonomy, invert = T
 
 spark_clade$metaG <- spark_metaG_Clade$value[match(spark_clade$Taxonomy, spark_metaG_Clade$Clade)]
 spark_clade <- spark_clade[which(is.na(spark_clade$metaG) == F),]
-spark_clade <- spark_clade[grep("-", spark_clade$Taxonomy), ]
+spark_clade <- spark_clade[grep("-|Pnec", spark_clade$Taxonomy), ]
 
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p6 <- ggplot(spark_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_abline(intercept = 0, slope = max(spark_clade$value)/max(spark_clade$metaG), linetype = 3) + geom_text_repel(aes(label = Taxonomy), force = 10, size = 3, color = "black") + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "E. Sparkling Lake") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(spark_clade$metaG))) + background_grid(major = "xy", minor = "xy")
+p6 <- ggplot(spark_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "E. Sparkling Lake") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(spark_clade$metaG))) + background_grid(major = "xy", minor = "xy")
 
 to_plot <- plot_grid(p1, p2, p3, p4, p6, p5,  nrow = 2)
 

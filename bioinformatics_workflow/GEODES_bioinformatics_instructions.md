@@ -101,9 +101,6 @@ transcripts_per_liter.R
 add_bin_classifications.R
 # Calculate summary stats of the metagenomes and metatranscriptomes
 summary_stats.R
-# Identify genes with diel trends in gene expression
-fourier_and_wgcna.R
-# Plot results of the last script
-process_WGCNA_results.R
+
 ```
 
