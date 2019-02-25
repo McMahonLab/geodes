@@ -24,7 +24,7 @@ Are you in the McMahon Lab or one of our collaborators?
 Not in the lab but curious about our data?
 
 - Download our raw sequencing data from http://genome.jgi.doe.gov/Diecycetabolisms/Diecycetabolisms.info.html . Most metatranscriptomes became public on Aug 1, 2017, but some samples are earlier and others later.
-- Go to our GEODES folder on the OSF https://osf.io/9gr62/) - our large processed files are here.
+- Go to our GEODES folder on the Open Science Framework (https://osf.io/9gr62/) - our large processed files are there.
 - Shoot us an email! trina.mcmahon@wisc.edu or amlinz@wisc.edu
 
 __BE WARNED__ We're not making the raw data or intermediate files available on Github because it would far exceed our space limit. The quality filtered, compressed metatranscriptome files total 185GB! Download at your own risk.
@@ -40,7 +40,7 @@ __Repo Structure__
 		- Excel files that are easily interpreted by people
 - bioinformatics_workflow
 - *Note: we ran our workflow in massive parallel through UW-Madison's Center for High Throughput Computing. The workflow is set up to run on a Condor system. The actual processing code is located in executables/.
-  - executable
+  - executables
     - Bash scripts that actually process the data
   - lab_notebooks
     - My notes from writing the CHTC workflow. May contain sass.
@@ -48,13 +48,13 @@ __Repo Structure__
     - Pre-built tarballs of the programs used for use on CHTC (only ones that meet GitHub's size limit included)
   - R_processing
     - Table formatting and exploratory analyses once the data was small enough to load into R
-  - submit_files
+  - submits
     - Tells CHTC how to run your jobs
   - scripts
     - Minor tasks to run on the submit node itself that need to run between parallel tasks - like making a list of files to queue or moving files around - or Python scripts, etc. to be shipped out with the executable
-    - Full_GEODES_Workflow.Rmd/.html
+    - Full_GEODES_Workflow.md
       - Detailed instructions on how to run the bioinformatics workflow, including rational and installation instructions
-    - GEODES_bioinformatics_instructions.Rmd
+    - GEODES_bioinformatics_instructions.md
       - A shortened version of the workflow instructions with little explanation for each command
 - sample_data
     - Metadata about our samples, such as which were sequenced and how many metatranscriptomic reads were in each
