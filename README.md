@@ -39,22 +39,23 @@ __Repo Structure__
 	- for_humans
 		- Excel files that are easily interpreted by people
 - bioinformatics_workflow
-  - executable_files
+- *Note: we ran our workflow in massive parallel through UW-Madison's Center for High Throughput Computing. The workflow is set up to run on a Condor system. The actual processing code is located in executables/.
+  - executable
     - Bash scripts that actually process the data
   - lab_notebooks
     - My notes from writing the CHTC workflow. May contain sass.
   - programs
-    - Pre-built tarballs of the programs used for use on CHTC
+    - Pre-built tarballs of the programs used for use on CHTC (only ones that meet GitHub's size limit included)
   - R_processing
-    - Table formatting once the data was small enough to load into R
+    - Table formatting and exploratory analyses once the data was small enough to load into R
   - submit_files
     - Tells CHTC how to run your jobs
-  - submit_node_scripts
-    - Extremely minor tasks to run on the submit node itself that need to run between parallel tasks - like making a list of files to queue or moving files around
+  - scripts
+    - Minor tasks to run on the submit node itself that need to run between parallel tasks - like making a list of files to queue or moving files around - or Python scripts, etc. to be shipped out with the executable
     - Full_GEODES_Workflow.Rmd/.html
-      - 1st attempt at workflow. Now out of date but has some useful info on why I chose to do things the way I did. Will be updated on 2nd interation of workflow
+      - Detailed instructions on how to run the bioinformatics workflow, including rational and installation instructions
     - GEODES_bioinformatics_instructions.Rmd
-      - How to run the current workflow on CHTC
+      - A shortened version of the workflow instructions with little explanation for each command
 - sample_data
     - Metadata about our samples, such as which were sequenced and how many metatranscriptomic reads were in each
 - Manuscript
