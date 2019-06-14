@@ -10,7 +10,7 @@ library(ggrepel)
 library(raster)
 
 zscore <- function(counts){
-  z <- (counts - mean(counts)) / sd(counts)
+  z <- (counts - sum(counts)) / sd(counts)
   return(z)
 }
 
@@ -100,9 +100,9 @@ metaG_reads <- sweep(metaG_reads, 2, colSums(metaG_reads), "/")
 # spark_metaG$Phylum <- metaG_key$Phylum[match(spark_metaG$Genes, metaG_key$Gene)]
 # 
 # # Aggregate counts by phylum
-# mendota_metaG_phyla <- aggregate(value ~ Phylum, data = mendota_metaG, mean)
-# spark_metaG_phyla <- aggregate(value ~ Phylum, data = spark_metaG, mean)
-# trout_metaG_phyla <- aggregate(value ~ Phylum, data = trout_metaG, mean)
+# mendota_metaG_phyla <- aggregate(value ~ Phylum, data = mendota_metaG, sum)
+# spark_metaG_phyla <- aggregate(value ~ Phylum, data = spark_metaG, sum)
+# trout_metaG_phyla <- aggregate(value ~ Phylum, data = trout_metaG, sum)
 # 
 # # Write these datasets to file so that I can load them instead of rerunning all of the above when I need to make plot modifications
 # write.csv(mendota_metaG_phyla, file = paste(path2, "Desktop/intermediate_plotting_files/mendota_metaG_phyla.csv", sep = ""), quote = F, row.names = F)
@@ -123,7 +123,7 @@ trout_metaG_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting
 # # 
 # # # Include a key for colorcoding phyla by broader classification
 # # 
-#type_key <- data.frame(phylum = c("Actinobacteria", "Bacteroidetes", "Chloroflexi", "Crenarchaeota", "Cryptophyta", "Cyanobacteria", "Gemmatimonadetes", "Heterokonta", "Ignavibacteria", "Planctomycetes", "Proteobacteria", "Verrucomicrobia", "Viruses", "Armatimonadetes", "Firmicutes", "Ciliophora", "Acidobacteria", "Tenericutes", "Arthropoda", "Chlorobi", "Candidatus Saccharibacteria", "Chlorophyta", "Deinococcus-Thermus", "Elusimicrobia", "Haptophyta", "Spirochaetes", "Phaeophyceae", "Streptophyta"), type = c("Bacteria", "Bacteria", "Bacteria", "Archaea", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses", "Bacteria", "Bacteria", "Protist", "Bacteria", "Bacteria", "Animal", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Algae", "Algae"))
+type_key <- data.frame(phylum = c("Actinobacteria", "Bacteroidetes", "Chloroflexi", "Crenarchaeota", "Cryptophyta", "Cyanobacteria", "Gemmatimonadetes", "Heterokonta", "Ignavibacteria", "Planctomycetes", "Alphaproteobacteria", "Verrucomicrobia", "Viruses", "Armatimonadetes", "Firmicutes", "Ciliophora", "Acidobacteria", "Tenericutes", "Arthropoda", "Chlorobi", "Candidatus Saccharibacteria", "Chlorophyta", "Deinococcus-Thermus", "Elusimicrobia", "Haptophyta", "Spirochaetes", "Phaeophyceae", "Streptophyta", "Betaproteobacteria", "Deltaproteobacteria", "Gammaproteobacteria", "Epsilonproteobacteria", "Fibrobacteres", "Marinimicrobia", "Oligoflexia"), type = c("Bacteria", "Bacteria", "Bacteria", "Archaea", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Viruses", "Bacteria", "Bacteria", "Protist", "Bacteria", "Bacteria", "Animal", "Bacteria", "Bacteria", "Algae", "Bacteria", "Bacteria", "Algae", "Bacteria", "Algae", "Algae", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria", "Bacteria"))
 # 
 # 
 # #Process Mendota expression data
@@ -143,11 +143,11 @@ trout_metaG_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting
 # mnorm2$Taxonomy <- mendota_key$Phylum[match(mnorm2$Genes, mendota_key$Gene)]
 # 
 # # Aggregate by phylum
-# mendota_phyla <- aggregate(value ~ Taxonomy, data = mnorm2, mean)
+# mendota_phyla <- aggregate(value ~ Taxonomy, data = mnorm2, sum)
 # mendota_total <- sum(colSums(mnorm))
 # mendota_phyla$value <- mendota_phyla$value/mendota_total
-
-# Save an intermediate file of Mendota data
+# 
+# # Save an intermediate file of Mendota data
 # write.csv(mendota_phyla, file = paste(path2, "Desktop/intermediate_plotting_files/mendota_metaT_phyla.csv", sep = ""), quote = F, row.names = F)
 # Read back in
 mendota_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_files/mendota_metaT_phyla.csv", sep = ""), header = T, colClasses = c("character", "numeric"))
@@ -156,20 +156,20 @@ mendota_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_fil
 # keep_phyla <- c(mendota_metaG_phyla$Phylum[which(mendota_metaG_phyla$value > quantile(mendota_metaG_phyla$value)[3])], mendota_phyla$Taxonomy[which(mendota_phyla$value > quantile(mendota_phyla$value)[3])])
 # mendota_phyla <- mendota_phyla[which(mendota_phyla$Taxonomy %in% keep_phyla),]
 mendota_phyla$metaG <- mendota_metaG_phyla$value[match(mendota_phyla$Taxonomy, mendota_metaG_phyla$Phylum)]
-#mendota_phyla$type <- type_key$type[match(mendota_phyla$Taxonomy, type_key$phylum)]
+mendota_phyla$type <- type_key$type[match(mendota_phyla$Taxonomy, type_key$phylum)]
 mendota_phyla <- mendota_phyla[which(is.na(mendota_phyla$metaG) == F),]
 
 
 
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p1 <- ggplot(mendota_phyla[which(mendota_phyla$Taxonomy != "Chloroflexi"), ], aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "A. Lake Mendota") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(mendota_phyla$metaG))) + background_grid(major = "xy", minor = "xy")
+p1 <- ggplot(mendota_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5, alpha = 0.5) + geom_text_repel(aes(label = Taxonomy), force = 10, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5, point.padding = 0.5, data = subset(mendota_phyla, metaG > 0.0000007 | value > 0.025), nudge_y = 0.0015, ylim = c(0.025, NA)) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "A. Lake Mendota") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(mendota_phyla$metaG)), labels = scales::scientific) + background_grid(major = "xy", minor = "xy") + scale_y_continuous(labels = scales::scientific) + scale_color_manual(values = c("limegreen",  "royalblue", "goldenrod"))
 
 
 #Process Sparkling expression data
 
-# # Remove unclassified genes and the internal standard
-#  spark_key <- spark_key[grep("Unclassified|internal standard", spark_key$Phylum, invert = T), ]
-# 
+# Remove unclassified genes and the internal standard
+ spark_key <- spark_key[grep("Unclassified|internal standard", spark_key$Phylum, invert = T), ]
+
 # # Prep read count table and switch to long format
 # snorm2 <- snorm
 # snorm2$Genes <- rownames(snorm2)
@@ -181,7 +181,7 @@ p1 <- ggplot(mendota_phyla[which(mendota_phyla$Taxonomy != "Chloroflexi"), ], ae
 # snorm2$Taxonomy <- spark_key$Phylum[match(snorm2$Genes, spark_key$Gene)]
 # 
 # #Aggregate by phylum
-# spark_phyla <- aggregate(value ~ Taxonomy, data = snorm2, mean)
+# spark_phyla <- aggregate(value ~ Taxonomy, data = snorm2, sum)
 # spark_total <- sum(colSums(snorm))
 # spark_phyla$value <- spark_phyla$value/spark_total
 # 
@@ -195,15 +195,15 @@ spark_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_files
 # keep_phyla <- c(spark_metaG_phyla$Phylum[which(spark_metaG_phyla$value > quantile(spark_metaG_phyla$value)[3])], spark_phyla$Taxonomy[which(spark_phyla$value > quantile(spark_phyla$value)[3])])
 # spark_phyla <- spark_phyla[which(spark_phyla$Taxonomy %in% keep_phyla),]
 spark_phyla$metaG <- spark_metaG_phyla$value[match(spark_phyla$Taxonomy, spark_metaG_phyla$Phylum)]
-#spark_phyla$type <- type_key$type[match(spark_phyla$Taxonomy, type_key$phylum)]
+spark_phyla$type <- type_key$type[match(spark_phyla$Taxonomy, type_key$phylum)]
 spark_phyla <- spark_phyla[which(is.na(spark_phyla$metaG) == F),]
 
-p2 <- ggplot(spark_phyla, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "B. Sparkling Lake") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(spark_phyla$metaG))) + background_grid(major = "xy", minor = "none")
+p2 <- ggplot(spark_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5, alpha = 0.5) + geom_text_repel(aes(label = Taxonomy), force = 18, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5,  data = subset(spark_phyla, metaG > 0.00000002 | value > 0.02), nudge_x = 0.0000001) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "B. Sparkling Lake") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(spark_phyla$metaG)), labels = scales::scientific) + background_grid(major = "xy", minor = "none") + scale_y_continuous(labels = scales::scientific) + scale_color_manual(values = c("lightcoral", "limegreen", "royalblue", "goldenrod"))
 #Process Trout expression data
 
-# # # Remove unclassified genes and the internal standard
-# trout_key <- trout_key[grep("Unclassified|internal standard", trout_key$Phylum, invert = T), ]
-# 
+# # Remove unclassified genes and the internal standard
+trout_key <- trout_key[grep("Unclassified|internal standard", trout_key$Phylum, invert = T), ]
+
 # #Prep read count table and switch to long format
 # tnorm2 <- tnorm
 # tnorm2$Genes <- rownames(tnorm2)
@@ -215,23 +215,23 @@ p2 <- ggplot(spark_phyla, aes(x = metaG, y = value)) + geom_point(size = 2.5) + 
 # tnorm2$Taxonomy <- trout_key$Phylum[match(tnorm2$Genes, trout_key$Gene)]
 # 
 # # Aggregate by phylum
-# trout_phyla <- aggregate(value ~ Taxonomy, data = tnorm2, mean)
+# trout_phyla <- aggregate(value ~ Taxonomy, data = tnorm2, sum)
 # trout_total <- sum(colSums(tnorm))
 # trout_phyla$value <- trout_phyla$value/trout_total
 # 
 # # Save an intermediate file of Mendota data
 # write.csv(trout_phyla, file = paste(path2, "Desktop/intermediate_plotting_files/trout_metaT_phyla.csv", sep = ""), quote = F, row.names = F)
-# Read back in
+#Read back in
 trout_phyla <- read.csv(file = paste(path2, "Desktop/intermediate_plotting_files/trout_metaT_phyla.csv", sep = ""), header = T, colClasses = c("character", "numeric"))
 
 # Keep the top half of both expressed and abundant phyla for plotting
 # keep_phyla <- c(trout_metaG_phyla$Phylum[which(trout_metaG_phyla$value > quantile(trout_metaG_phyla$value)[3])], trout_phyla$Taxonomy[which(trout_phyla$value > quantile(trout_phyla$value)[3])])
 # trout_phyla <- trout_phyla[which(trout_phyla$Taxonomy %in% keep_phyla),]
 trout_phyla$metaG <- trout_metaG_phyla$value[match(trout_phyla$Taxonomy, trout_metaG_phyla$Phylum)]
-#trout_phyla$type <- type_key$type[match(trout_phyla$Taxonomy, type_key$phylum)]
+trout_phyla$type <- type_key$type[match(trout_phyla$Taxonomy, type_key$phylum)]
 trout_phyla <- trout_phyla[which(is.na(trout_phyla$metaG) == F),]
 
-p3 <- ggplot(trout_phyla, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "C. Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_phyla$metaG))) + background_grid(major = "xy", minor = "none")
+p3 <- ggplot(trout_phyla, aes(x = metaG, y = value, color = type)) + geom_point(size = 2.5, alpha = 0.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5, data = subset(trout_phyla, metaG > 0.00000000015 | value > 0.01)) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "C. Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_phyla$metaG)), labels = scales::scientific) + background_grid(major = "xy", minor = "none") + scale_y_continuous(labels = scales::scientific) + scale_color_manual(values = c("lightcoral", "limegreen", "royalblue", "goldenrod"))
 
 #e my various gene keys into just genes with tribe classifications
 metaG_key$Taxonomy <- gsub("Bacteria;", "", metaG_key$Taxonomy)
@@ -275,9 +275,9 @@ trout_metaG$Clade <- metaG_key2$Clade[match(trout_metaG$Genes, metaG_key2$Gene)]
 spark_metaG$Clade <- metaG_key2$Clade[match(spark_metaG$Genes, metaG_key2$Gene)]
 
 # Aggregate counts by Clade
-mendota_metaG_Clade <- aggregate(value ~ Clade, data = mendota_metaG, mean)
-spark_metaG_Clade <- aggregate(value ~ Clade, data = spark_metaG, mean)
-trout_metaG_Clade <- aggregate(value ~ Clade, data = trout_metaG, mean)
+mendota_metaG_Clade <- aggregate(value ~ Clade, data = mendota_metaG, sum)
+spark_metaG_Clade <- aggregate(value ~ Clade, data = spark_metaG, sum)
+trout_metaG_Clade <- aggregate(value ~ Clade, data = trout_metaG, sum)
 
 #Now to add in the gene expression
 mendota_key$Taxonomy <- gsub("Bacteria;", "", mendota_key$Taxonomy)
@@ -307,12 +307,13 @@ mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Mycobacterium")] <- "acTH2-A"
 mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Novosphingobium")] <- "alfIV-A"
 mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Pedobacter")] <- "bacVI-B"
 mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Rhodoluna")] <- "LunaI-A"
+mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Luna1-A")] <- "LunaI-A"
 mnorm2$Taxonomy[which(mnorm2$Taxonomy == "Sphingopyxis")] <- "alfIV-B"
 mnorm2$Taxonomy[which(mnorm2$Taxonomy == "LD28")] <- "betIV-A"
 mnorm2$Taxonomy[which(mnorm2$Taxonomy == "LD12")] <- "alfV-A"
 
 # Aggregate by phylum
-mendota_clade <- aggregate(value ~ Taxonomy, data = mnorm2, mean)
+mendota_clade <- aggregate(value ~ Taxonomy, data = mnorm2, sum)
 mendota_total <- sum(colSums(mnorm))
 mendota_clade$value <- mendota_clade$value/mendota_total
 mendota_clade <- mendota_clade[which(mendota_clade$Taxonomy != ""), ]
@@ -324,8 +325,17 @@ mendota_clade$metaG <- mendota_metaG_Clade$value[match(mendota_clade$Taxonomy, m
 mendota_clade <- mendota_clade[which(is.na(mendota_clade$metaG) == F),]
 mendota_clade <- mendota_clade[grep("-|Pnec", mendota_clade$Taxonomy), ]
 
+phyla <- rep("Other", dim(mendota_clade)[1])
+phyla[which(mendota_clade$Taxonomy == "acI-A" | mendota_clade$Taxonomy == "acI-B" | mendota_clade$Taxonomy == "acTH2-A" | mendota_clade$Taxonomy == "acIV-A"| mendota_clade$Taxonomy == "acIV-B" | mendota_clade$Taxonomy == "acSTL-A" | mendota_clade$Taxonomy == "acTH1-A" | mendota_clade$Taxonomy == "LunaI-A")] <- "Actinobacteria"
+phyla[which(mendota_clade$Taxonomy == "betIV-A" | mendota_clade$Taxonomy == "betVII-B" | mendota_clade$Taxonomy == "betIV-A" | mendota_clade$Taxonomy == "Lhab-A" | mendota_clade$Taxonomy == "Pnec")] <- "Betaproteobacteria"
+phyla[which(mendota_clade$Taxonomy == "alfV-A" | mendota_clade$Taxonomy == "alfIV-A")] <- "Alphaproteobacteria"
+phyla[which(mendota_clade$Taxonomy == "bacIII-B" | mendota_clade$Taxonomy == "bacI-A" | mendota_clade$Taxonomy == "bacII-A" | mendota_clade$Taxonomy == "bacIV-A" | mendota_clade$Taxonomy == "bacVI-B")] <- "Bacteroides"
+phyla[which(mendota_clade$Taxonomy == "AnaI-A")] <- "Cyanobacteria"
+phyla[which(mendota_clade$Taxonomy == "verI-B")] <- "Verrucomicrobia"
+mendota_clade$phyla <- phyla
+
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p4 <- ggplot(mendota_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "D. Lake Mendota") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(mendota_clade$metaG))) + background_grid(major = "xy", minor = "xy")
+p4 <- ggplot(mendota_clade, aes(x = metaG, y = value, color = phyla)) + geom_point(size = 2.5, alpha = 0.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5, data = subset(mendota_clade, metaG > 0.005 | value > 0.001)) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "D. Lake Mendota") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(mendota_clade$metaG)), labels = scales::scientific) + background_grid(major = "xy", minor = "xy") + scale_y_continuous(labels = scales::scientific)  + scale_color_manual(values = c("firebrick2", "skyblue2", "goldenrod", "dodgerblue", "green", "purple"))
 
 # Repeat with Trout
 
@@ -361,7 +371,7 @@ tnorm2$Taxonomy[which(tnorm2$Taxonomy == "LD28")] <- "betIV-A"
 tnorm2$Taxonomy[which(tnorm2$Taxonomy == "LD12")] <- "alfV-A"
 
 # Aggregate by phylum
-trout_clade <- aggregate(value ~ Taxonomy, data = tnorm2, mean)
+trout_clade <- aggregate(value ~ Taxonomy, data = tnorm2, sum)
 trout_total <- sum(colSums(tnorm))
 trout_clade$value <- trout_clade$value/trout_total
 trout_clade <- trout_clade[which(trout_clade$Taxonomy != ""), ]
@@ -373,8 +383,17 @@ trout_clade$metaG <- trout_metaG_Clade$value[match(trout_clade$Taxonomy, trout_m
 trout_clade <- trout_clade[which(is.na(trout_clade$metaG) == F),]
 trout_clade <- trout_clade[grep("-|Pnec", trout_clade$Taxonomy), ]
 
+phyla <- rep("Other", dim(trout_clade)[1])
+phyla[which(trout_clade$Taxonomy == "acI-A" | trout_clade$Taxonomy == "acI-B" | trout_clade$Taxonomy == "acTH2-A" | trout_clade$Taxonomy == "acIV-A"| trout_clade$Taxonomy == "acIV-B" | trout_clade$Taxonomy == "acSTL-A" | trout_clade$Taxonomy == "acTH1-A" | trout_clade$Taxonomy == "LunaI-A")] <- "Actinobacteria"
+phyla[which(trout_clade$Taxonomy == "betIV-A" | trout_clade$Taxonomy == "betVII-B" | trout_clade$Taxonomy == "betIV-A" | trout_clade$Taxonomy == "Lhab-A" | trout_clade$Taxonomy == "Pnec")] <- "Betaproteobacteria"
+phyla[which(trout_clade$Taxonomy == "alfV-A" | trout_clade$Taxonomy == "alfIV-A")] <- "Alphaproteobacteria"
+phyla[which(trout_clade$Taxonomy == "bacIII-B" | trout_clade$Taxonomy == "bacI-A" | trout_clade$Taxonomy == "bacII-A" | trout_clade$Taxonomy == "bacIV-A" | trout_clade$Taxonomy == "bacVI-B")] <- "Bacteroides"
+phyla[which(trout_clade$Taxonomy == "AnaI-A")] <- "Cyanobacteria"
+phyla[which(trout_clade$Taxonomy == "verI-B")] <- "Verrucomicrobia"
+trout_clade$phyla <- phyla
+
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p5 <- ggplot(trout_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "F. Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_clade$metaG))) + background_grid(major = "xy", minor = "xy")
+p5 <- ggplot(trout_clade[which(trout_clade$Taxonomy != "acI-B"),], aes(x = metaG, y = value, color = phyla)) + geom_point(size = 2.5, alpha = 0.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5, data = subset(trout_clade[which(trout_clade$Taxonomy != "acI-B"),], value > 0.001 | metaG > 0.000003)) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "F. Trout Bog") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(trout_clade$metaG)), labels = scales::scientific) + background_grid(major = "xy", minor = "xy") + scale_y_continuous(labels = scales::scientific) + scale_color_manual(values = c("firebrick2", "skyblue", "goldenrod", "dodgerblue", "green"))
 
 # Repeat with Sparkling
 spark_key$Taxonomy <- gsub("Bacteria;", "", spark_key$Taxonomy)
@@ -404,13 +423,14 @@ snorm2$Taxonomy[which(snorm2$Taxonomy == "Mycobacterium")] <- "acTH2-A"
 snorm2$Taxonomy[which(snorm2$Taxonomy == "Novosphingobium")] <- "alfIV-A"
 snorm2$Taxonomy[which(snorm2$Taxonomy == "Pedobacter")] <- "bacVI-B"
 snorm2$Taxonomy[which(snorm2$Taxonomy == "Rhodoluna")] <- "LunaI-A"
+snorm2$Taxonomy[which(snorm2$Taxonomy == "Luna1-A")] <- "LunaI-A"
 snorm2$Taxonomy[which(snorm2$Taxonomy == "Sphingopyxis")] <- "alfIV-B"
 snorm2$Taxonomy[which(snorm2$Taxonomy == "LD28")] <- "betIV-A"
 snorm2$Taxonomy[which(snorm2$Taxonomy == "LD12")] <- "alfV-A"
 
 
 # Aggregate by phylum
-spark_clade <- aggregate(value ~ Taxonomy, data = snorm2, mean)
+spark_clade <- aggregate(value ~ Taxonomy, data = snorm2, sum)
 spark_total <- sum(colSums(snorm))
 spark_clade$value <- spark_clade$value/spark_total
 spark_clade <- spark_clade[which(spark_clade$Taxonomy != ""), ]
@@ -422,8 +442,17 @@ spark_clade$metaG <- spark_metaG_Clade$value[match(spark_clade$Taxonomy, spark_m
 spark_clade <- spark_clade[which(is.na(spark_clade$metaG) == F),]
 spark_clade <- spark_clade[grep("-|Pnec", spark_clade$Taxonomy), ]
 
+phyla <- rep("Other", dim(spark_clade)[1])
+phyla[which(spark_clade$Taxonomy == "acI-A" | spark_clade$Taxonomy == "acI-B" | spark_clade$Taxonomy == "acTH2-A" | spark_clade$Taxonomy == "acIV-A"| spark_clade$Taxonomy == "acIV-B" | spark_clade$Taxonomy == "acSTL-A" | spark_clade$Taxonomy == "acTH1-A" | spark_clade$Taxonomy == "LunaI-A")] <- "Actinobacteria"
+phyla[which(spark_clade$Taxonomy == "betIV-A" | spark_clade$Taxonomy == "betVII-B" | spark_clade$Taxonomy == "betIV-A" | spark_clade$Taxonomy == "Lhab-A" | spark_clade$Taxonomy == "Pnec")] <- "Betaproteobacteria"
+phyla[which(spark_clade$Taxonomy == "alfV-A" | spark_clade$Taxonomy == "alfIV-A")] <- "Alphaproteobacteria"
+phyla[which(spark_clade$Taxonomy == "bacIII-B" | spark_clade$Taxonomy == "bacI-A" | spark_clade$Taxonomy == "bacII-A" | spark_clade$Taxonomy == "bacIV-A" | spark_clade$Taxonomy == "bacVI-B")] <- "Bacteroides"
+phyla[which(spark_clade$Taxonomy == "AnaI-A")] <- "Cyanobacteria"
+phyla[which(spark_clade$Taxonomy == "verI-B")] <- "Verrucomicrobia"
+spark_clade$phyla <- phyla
+
 # Color key: c("limegreen", "lavenderblush4", "royalblue", "goldenrod")) == algae, archaea, bacteria, viruses
-p6 <- ggplot(spark_clade, aes(x = metaG, y = value)) + geom_point(size = 2.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "E. Sparkling Lake") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(spark_clade$metaG))) + background_grid(major = "xy", minor = "xy")
+p6 <- ggplot(spark_clade, aes(x = metaG, y = value, color = phyla)) + geom_point(size = 2.5, alpha = 0.5) + geom_text_repel(aes(label = Taxonomy), force = 15, size = 3, color = "black", segment.alpha = 0.25, box.padding = 0.5, data = subset(spark_clade, metaG > 0.001 | value > 0.0005), nudge_x = 0.001) + labs(x = "Metagenomic reads", y = "Metatranscriptomic reads", title = "E. Sparkling Lake") + theme(legend.position = "none") + scale_x_continuous(limits = c(0, max(spark_clade$metaG)), labels = scales::scientific) + background_grid(major = "xy", minor = "xy") + scale_y_continuous(labels = scales::scientific) + scale_color_manual(values = c("firebrick2", "skyblue2", "goldenrod", "dodgerblue", "green", "purple"))
 
 to_plot <- plot_grid(p1, p2, p3, p4, p6, p5,  nrow = 2)
 
