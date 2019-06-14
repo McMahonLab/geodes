@@ -112,7 +112,7 @@ reskey$Phylum[which(reskey$Phylum %not in% phyla2keep)] <- "Other"
 
 colorkey <- data.frame(phylum = c("Actinobacteria", "Alphaproteobacteria", "Armatimonadetes", "Bacteroidetes", "Betaproteobacteria", "Chlorophyta", "Cyanobacteria", "Deltaproteobacteria", "Eukaryota", "Firmicutes", "Gammaproteobacteria", "Other", "Planctomycetes", "Unclassified", "Verrucomicrobia"), color = c("chocolate1",  "hotpink2", "turquoise3", "goldenrod1", "dodgerblue", "palegreen4", "green3", "skyblue", "darkolivegreen3", "orchid3", "palegreen", "honeydew4", "lightcoral", "honeydew3", "lightslateblue"))
 
-p1 <- ggplot(data = reskey, aes(x = Time, y = Counts, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads", title = "A. Mendota") + facet_wrap(~ Category, ncol = 3) + scale_fill_manual(values = as.character(colorkey$color[which(colorkey$phylum %in% unique(reskey$Phylum))])) + theme(legend.position = "none")
+p1 <- ggplot(data = reskey, aes(x = Time, y = Counts, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads", title = "A. Lake Mendota") + facet_wrap(~ Category, ncol = 3) + scale_fill_manual(values = as.character(colorkey$color[which(colorkey$phylum %in% unique(reskey$Phylum))])) + theme(legend.position = "none")
 #save the mendota reskey to make the legend
 MEreskey <- reskey
 
@@ -294,7 +294,7 @@ reskey$Phylum[which(is.na(reskey$Phylum) == T)] <- "Unclassified"
 reskey$Phylum <- as.character(reskey$Phylum)
 reskey$Phylum[which(reskey$Phylum %not in% phyla2keep)] <- "Other"
 
-p3 <- ggplot(data = reskey, aes(x = Time, y = Counts, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads", title = "C. Sparkling") + facet_wrap(~ Category, ncol = 3) + scale_fill_manual(values = as.character(colorkey$color[which(colorkey$phylum %in% unique(reskey$Phylum))])) + theme(legend.position = "none")
+p3 <- ggplot(data = reskey, aes(x = Time, y = Counts, fill = Phylum)) + geom_bar(stat = "identity", position = "fill")  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_y_continuous(expand = c(0, 0)) + labs(x = NULL, y = "Proportion of reads", title = "C. Sparkling Lake") + facet_wrap(~ Category, ncol = 3) + scale_fill_manual(values = as.character(colorkey$color[which(colorkey$phylum %in% unique(reskey$Phylum))])) + theme(legend.position = "none")
 SPreskey <- reskey
 
 legend_reskey <- rbind(MEreskey, TBreskey, SPreskey)

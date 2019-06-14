@@ -28,13 +28,21 @@ mnorm <- mnorm[, which(colnames(mnorm) != "GEODES158.nonrRNA")]
 colnames(mnorm) <- gsub(".nonrRNA", "", colnames(mnorm))
 mendota_key <- read.csv(paste(path, "geodes_data_tables/Mendota_ID90_genekey_geneclassifications_2018-11-28.csv", sep = ""), header = T)
 
+tnorm <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+tnorm <- tnorm[, which(colnames(tnorm) != "GEODES065.nonrRNA")]
+colnames(tnorm) <- gsub(".nonrRNA", "", colnames(tnorm))
+trout_key <- read.csv(paste(path, "geodes_data_tables/Trout_ID90_genekey_geneclassifications_2018-11-28.csv", sep = ""), header = T)
+
+snorm <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_normalized_readcounts.csv", sep = ""), header = T, row.names = 1)
+snorm <- snorm[, which(colnames(snorm) != "GEODES014.nonrRNA" & colnames(snorm) != "GEODES033.nonrRNA")]
+colnames(snorm) <- gsub(".nonrRNA", "", colnames(snorm))
+spark_key <- read.csv(paste(path, "geodes_data_tables/Sparkling_ID90_genekey_geneclassifications_2018-11-28.csv", sep = ""), header = T)
 
 ```
 
 ```{r, eval = T, include = F, echo = F}
 abun_mnorm <- mnorm[order(rowSums(mnorm), decreasing = T), ]
 abun_mnorm <- abun_mnorm[1:20000,]
-
 colnames(abun_mnorm) <- gsub(".nonrRNA", "", colnames(abun_mnorm))
 
 input <- as.matrix(abun_mnorm)
@@ -58,6 +66,64 @@ dds <- DESeq(cds)
 res <- results(dds)
 
 reskey <- mendota_key[match(rownames(res), mendota_key$Gene), ]
+sig.res.key <- reskey[which(res$padj < 0.05),]
+
+# Make column by certain key words 
+sig.res.key$Category <- "None"
+sig.res.key$Category[grep("photosystem|Photosystem|photosynth|Photosynth", sig.res.key$Product)] <- "Photosynthesis"
+sig.res.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.key$Product)] <- "Rhodopsin"
+# sig.res.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.key$Product)] <- "Sugar degradation"
+sig.res.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.key$Product)] <- "RuBisCO"
+sig.res.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.key$Product)] <- "Polyamines"
+sig.res.key$Category[grep("citrate lyase|Citrate lyase", sig.res.key$Product)] <- "rTCA"
+sig.res.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.key$Product)] <- "Nitrogenase"
+sig.res.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.key$Product)] <- "Chitinase"
+sig.res.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.key$Product)] <- "Alkaline_phosphatase"
+sig.res.key$Category[grep("cellulase|cellulose", sig.res.key$Product)] <- "Cellulase"
+sig.res.key$Category[grep("peroxidase|peroxide|catalase", sig.res.key$Product)] <- "ROS"
+sig.res.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.key$Product)] <- "Methane/Ammonia"
+sig.res.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.key$Product)] <- "Nitrite_reduction"
+sig.res.key$Category[grep("urease", sig.res.key$Product)] <- "Urease"
+sig.res.key$Category[grep("protease", sig.res.key$Product)] <- "Protease"
+sig.res.key$Category[grep("carboxylate transport", sig.res.key$Product)] <- "Carboxylate transport"
+sig.res.key$Category[grep("ribose transport", sig.res.key$Product)] <- "Ribose transport"
+sig.res.key$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", sig.res.key$Product)] <- "General sugar transport"
+sig.res.key$Category[grep("raffinose/stachyose/melibiose transport", sig.res.key$Product)] <- "Raffinose/stachyose/melibiose transport"
+sig.res.key$Category[grep("glucose/mannose transport", sig.res.key$Product)] <- "Glucose/mannose transport"
+sig.res.key$Category[grep("rhamnose transport", sig.res.key$Product)] <- "Rhamnose transport"
+sig.res.key$Category[grep("xylose transport", sig.res.key$Product)] <- "Xylose transport"
+sig.res.key$Category[grep("fructose transport", sig.res.key$Product)] <- "Fructose transport"
+sig.res.key$Category[grep("chitobiose transport", sig.res.key$Product)] <- "Chitobiose transport"
+sig.res.key$Category[grep("lactose/L-arabinose transport", sig.res.key$Product)] <- "Lactose/arabinose transport"
+mendota.sig.res.key <- sig.res.key
+
+
+abun_snorm <- snorm[order(rowSums(snorm), decreasing = T), ]
+abun_snorm <- abun_snorm[1:20000,]
+colnames(abun_snorm) <- gsub(".nonrRNA", "", colnames(abun_snorm))
+
+input <- as.matrix(abun_snorm)
+input <- input/100
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_snorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_snorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+
+reskey <- spark_key[match(rownames(res), spark_key$Gene), ]
 sig.res.key <- reskey[which(res$padj < 0.05),]
 
 # Make column by certain key words 
@@ -88,18 +154,176 @@ sig.res.key$Category[grep("xylose transport", sig.res.key$Product)] <- "Xylose t
 sig.res.key$Category[grep("fructose transport", sig.res.key$Product)] <- "Fructose transport"
 sig.res.key$Category[grep("chitobiose transport", sig.res.key$Product)] <- "Chitobiose transport"
 sig.res.key$Category[grep("lactose/L-arabinose transport", sig.res.key$Product)] <- "Lactose/arabinose transport"
+spark.sig.res.key <- sig.res.key
 
+abun_tnorm <- tnorm[order(rowSums(tnorm), decreasing = T), ]
+abun_tnorm <- abun_tnorm[1:20000,]
+colnames(abun_tnorm) <- gsub(".nonrRNA", "", colnames(abun_tnorm))
+abun_tnorm <- abun_tnorm[,which(colnames(abun_tnorm) %in% metadata$Sample[which(metadata$Lake == "Trout" & metadata$Timepoint <= 24)])]
+
+input <- as.matrix(abun_tnorm)
+input <- input/500
+input <- round(input, digits = 0)
+
+conditions <- metadata$Time[match(colnames(abun_tnorm), metadata$Sample)]
+conditions[which(conditions == 9 | conditions == 13 | conditions == 17)] <- "day"
+conditions[which(conditions == 5 | conditions == 21 | conditions == 1)] <- "night"
+coldata <- data.frame(samples = colnames(abun_tnorm), conditions)
+
+cds <- DESeqDataSetFromMatrix(countData = input,
+                              colData = coldata,
+                              design = ~ conditions)
+
+cds <- estimateSizeFactors(cds) 
+cds <- estimateDispersions(cds) 
+
+
+dds <- DESeq(cds)
+res <- results(dds)
+
+reskey <- trout_key[match(rownames(res), trout_key$Gene), ]
+sig.res.key <- reskey[which(res$padj < 0.05),]
+
+# Make column by certain key words 
+sig.res.key$Category <- "None"
+sig.res.key$Category[grep("photo|Photo", sig.res.key$Product)] <- "Photosynthesis"
+sig.res.key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", sig.res.key$Product)] <- "Rhodopsin"
+# sig.res.key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", sig.res.key$Product)] <- "Sugar degradation"
+sig.res.key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", sig.res.key$Product)] <- "RuBisCO"
+sig.res.key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", sig.res.key$Product)] <- "Polyamines"
+sig.res.key$Category[grep("citrate lyase|Citrate lyase", sig.res.key$Product)] <- "rTCA"
+sig.res.key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", sig.res.key$Product)] <- "Nitrogenase"
+sig.res.key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", sig.res.key$Product)] <- "Chitinase"
+sig.res.key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", sig.res.key$Product)] <- "Glycoside_Hydrolase"
+sig.res.key$Category[grep("alkaline phosphatase|Alkaline phosphatase", sig.res.key$Product)] <- "Alkaline_phosphatase"
+sig.res.key$Category[grep("cellulase|cellulose", sig.res.key$Product)] <- "Cellulase"
+sig.res.key$Category[grep("peroxidase|peroxide|catalase", sig.res.key$Product)] <- "ROS"
+sig.res.key$Category[grep("ammonia monooxygenase|methane monoxygenase", sig.res.key$Product)] <- "Methane/Ammonia"
+sig.res.key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", sig.res.key$Product)] <- "Nitrite_reduction"
+sig.res.key$Category[grep("urease", sig.res.key$Product)] <- "Urease"
+sig.res.key$Category[grep("protease", sig.res.key$Product)] <- "Protease"
+sig.res.key$Category[grep("carboxylate transport", sig.res.key$Product)] <- "Carboxylate transport"
+sig.res.key$Category[grep("ribose transport", sig.res.key$Product)] <- "Ribose transport"
+sig.res.key$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", sig.res.key$Product)] <- "General sugar transport"
+sig.res.key$Category[grep("raffinose/stachyose/melibiose transport", sig.res.key$Product)] <- "Raffinose/stachyose/melibiose transport"
+sig.res.key$Category[grep("glucose/mannose transport", sig.res.key$Product)] <- "Glucose/mannose transport"
+sig.res.key$Category[grep("rhamnose transport", sig.res.key$Product)] <- "Rhamnose transport"
+sig.res.key$Category[grep("xylose transport", sig.res.key$Product)] <- "Xylose transport"
+sig.res.key$Category[grep("fructose transport", sig.res.key$Product)] <- "Fructose transport"
+sig.res.key$Category[grep("chitobiose transport", sig.res.key$Product)] <- "Chitobiose transport"
+sig.res.key$Category[grep("lactose/L-arabinose transport", sig.res.key$Product)] <- "Lactose/arabinose transport"
+trout.sig.res.key <- sig.res.key
+
+# Add categories to the overall key files
+# Make column by certain key words 
+mendota_key$Category <- "None"
+mendota_key$Category[grep("photo|Photo", mendota_key$Product)] <- "Photosynthesis"
+mendota_key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", mendota_key$Product)] <- "Rhodopsin"
+# mendota_key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", mendota_key$Product)] <- "Sugar degradation"
+mendota_key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", mendota_key$Product)] <- "RuBisCO"
+mendota_key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", mendota_key$Product)] <- "Polyamines"
+mendota_key$Category[grep("citrate lyase|Citrate lyase", mendota_key$Product)] <- "rTCA"
+mendota_key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", mendota_key$Product)] <- "Nitrogenase"
+mendota_key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", mendota_key$Product)] <- "Chitinase"
+mendota_key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", mendota_key$Product)] <- "Glycoside_Hydrolase"
+mendota_key$Category[grep("alkaline phosphatase|Alkaline phosphatase", mendota_key$Product)] <- "Alkaline_phosphatase"
+mendota_key$Category[grep("cellulase|cellulose", mendota_key$Product)] <- "Cellulase"
+mendota_key$Category[grep("peroxidase|peroxide|catalase", mendota_key$Product)] <- "ROS"
+mendota_key$Category[grep("ammonia monooxygenase|methane monoxygenase", mendota_key$Product)] <- "Methane/Ammonia"
+mendota_key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", mendota_key$Product)] <- "Nitrite_reduction"
+mendota_key$Category[grep("urease", mendota_key$Product)] <- "Urease"
+mendota_key$Category[grep("protease", mendota_key$Product)] <- "Protease"
+mendota_key$Category[grep("carboxylate transport", mendota_key$Product)] <- "Carboxylate transport"
+mendota_key$Category[grep("ribose transport", mendota_key$Product)] <- "Ribose transport"
+mendota_key$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", mendota_key$Product)] <- "General sugar transport"
+mendota_key$Category[grep("raffinose/stachyose/melibiose transport", mendota_key$Product)] <- "Raffinose/stachyose/melibiose transport"
+mendota_key$Category[grep("glucose/mannose transport", mendota_key$Product)] <- "Glucose/mannose transport"
+mendota_key$Category[grep("rhamnose transport", mendota_key$Product)] <- "Rhamnose transport"
+mendota_key$Category[grep("xylose transport", mendota_key$Product)] <- "Xylose transport"
+mendota_key$Category[grep("fructose transport", mendota_key$Product)] <- "Fructose transport"
+mendota_key$Category[grep("chitobiose transport", mendota_key$Product)] <- "Chitobiose transport"
+mendota_key$Category[grep("lactose/L-arabinose transport", mendota_key$Product)] <- "Lactose/arabinose transport"
+#mendota.mendota_key <- mendota_key
+
+trout_key$Category <- "None"
+trout_key$Category[grep("photo|Photo", trout_key$Product)] <- "Photosynthesis"
+trout_key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", trout_key$Product)] <- "Rhodopsin"
+# trout_key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", trout_key$Product)] <- "Sugar degradation"
+trout_key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", trout_key$Product)] <- "RuBisCO"
+trout_key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", trout_key$Product)] <- "Polyamines"
+trout_key$Category[grep("citrate lyase|Citrate lyase", trout_key$Product)] <- "rTCA"
+trout_key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", trout_key$Product)] <- "Nitrogenase"
+trout_key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", trout_key$Product)] <- "Chitinase"
+trout_key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", trout_key$Product)] <- "Glycoside_Hydrolase"
+trout_key$Category[grep("alkaline phosphatase|Alkaline phosphatase", trout_key$Product)] <- "Alkaline_phosphatase"
+trout_key$Category[grep("cellulase|cellulose", trout_key$Product)] <- "Cellulase"
+trout_key$Category[grep("peroxidase|peroxide|catalase", trout_key$Product)] <- "ROS"
+trout_key$Category[grep("ammonia monooxygenase|methane monoxygenase", trout_key$Product)] <- "Methane/Ammonia"
+trout_key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", trout_key$Product)] <- "Nitrite_reduction"
+trout_key$Category[grep("urease", trout_key$Product)] <- "Urease"
+trout_key$Category[grep("protease", trout_key$Product)] <- "Protease"
+trout_key$Category[grep("carboxylate transport", trout_key$Product)] <- "Carboxylate transport"
+trout_key$Category[grep("ribose transport", trout_key$Product)] <- "Ribose transport"
+trout_key$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", trout_key$Product)] <- "General sugar transport"
+trout_key$Category[grep("raffinose/stachyose/melibiose transport", trout_key$Product)] <- "Raffinose/stachyose/melibiose transport"
+trout_key$Category[grep("glucose/mannose transport", trout_key$Product)] <- "Glucose/mannose transport"
+trout_key$Category[grep("rhamnose transport", trout_key$Product)] <- "Rhamnose transport"
+trout_key$Category[grep("xylose transport", trout_key$Product)] <- "Xylose transport"
+trout_key$Category[grep("fructose transport", trout_key$Product)] <- "Fructose transport"
+trout_key$Category[grep("chitobiose transport", trout_key$Product)] <- "Chitobiose transport"
+trout_key$Category[grep("lactose/L-arabinose transport", trout_key$Product)] <- "Lactose/arabinose transport"
+
+spark_key$Category <- "None"
+spark_key$Category[grep("photo|Photo", spark_key$Product)] <- "Photosynthesis"
+spark_key$Category[grep("rhodopsin|Rhodopsin|phytoene|lycopene|carotene|Phytoene|Lycopene|Carotene", spark_key$Product)] <- "Rhodopsin"
+# spark_key$Category[grep("sugar|Sugar|ribose|Ribose|hexose|maltose|carbohydrate|Carbohydrate|ose transport", spark_key$Product)] <- "Sugar degradation"
+spark_key$Category[grep("rbcL|ribulose-bisphosphate carboxylase", spark_key$Product)] <- "RuBisCO"
+spark_key$Category[grep("putrescine|Putrescine|spermidine|Spermidine", spark_key$Product)] <- "Polyamines"
+spark_key$Category[grep("citrate lyase|Citrate lyase", spark_key$Product)] <- "rTCA"
+spark_key$Category[grep("nitrogenase|Nitrogenase|NifH|NifD|NifK", spark_key$Product)] <- "Nitrogenase"
+spark_key$Category[grep("Chitobiase|chitobiase|chitinase|Chitinase", spark_key$Product)] <- "Chitinase"
+spark_key$Category[grep("glycoside hydrolase|Glycoside hydrolase|glycosyl hydrolase", spark_key$Product)] <- "Glycoside_Hydrolase"
+spark_key$Category[grep("alkaline phosphatase|Alkaline phosphatase", spark_key$Product)] <- "Alkaline_phosphatase"
+spark_key$Category[grep("cellulase|cellulose", spark_key$Product)] <- "Cellulase"
+spark_key$Category[grep("peroxidase|peroxide|catalase", spark_key$Product)] <- "ROS"
+spark_key$Category[grep("ammonia monooxygenase|methane monoxygenase", spark_key$Product)] <- "Methane/Ammonia"
+spark_key$Category[grep("nitrite reductase|Nitrite reductase|nitrite oxidoreductase|Nitrite oxidoreductase", spark_key$Product)] <- "Nitrite_reduction"
+spark_key$Category[grep("urease", spark_key$Product)] <- "Urease"
+spark_key$Category[grep("protease", spark_key$Product)] <- "Protease"
+spark_key$Category[grep("carboxylate transport", spark_key$Product)] <- "Carboxylate transport"
+spark_key$Category[grep("ribose transport", spark_key$Product)] <- "Ribose transport"
+spark_key$Category[grep("sugar transport|carbohydrate ABC transport|Carbohydrate-selective porin", spark_key$Product)] <- "General sugar transport"
+spark_key$Category[grep("raffinose/stachyose/melibiose transport", spark_key$Product)] <- "Raffinose/stachyose/melibiose transport"
+spark_key$Category[grep("glucose/mannose transport", spark_key$Product)] <- "Glucose/mannose transport"
+spark_key$Category[grep("rhamnose transport", spark_key$Product)] <- "Rhamnose transport"
+spark_key$Category[grep("xylose transport", spark_key$Product)] <- "Xylose transport"
+spark_key$Category[grep("fructose transport", spark_key$Product)] <- "Fructose transport"
+spark_key$Category[grep("chitobiose transport", spark_key$Product)] <- "Chitobiose transport"
+spark_key$Category[grep("lactose/L-arabinose transport", spark_key$Product)] <- "Lactose/arabinose transport"
 
 # Write a function to plot a given category
 cycle_plot <- function(type, lake) {
   if(lake == "Mendota") {
     abuntable <- abun_mnorm
+    sig.res.key <- mendota_key
   }else if(lake == "Trout"){
     abuntable <- abun_tnorm
+    sig.res.key <- trout_key
   }else if (lake == "Sparkling"){
     abuntable <- abun_snorm
+    sig.res.key <- spark_key
   }
-  p.genes <- as.character(sig.res.key$Gene[which(sig.res.key$Category == type)])
+  if(type == "random"){
+    index <- sample(1:200000, 100, replace = F)
+    p.genes <- as.character(rownames(abuntable)[index])
+  }else if(type == "abundant"){
+    index <- 1:100
+    p.genes <- as.character(sig.res.key$Gene[index])
+  }
+  else{
+    p.genes <- as.character(sig.res.key$Gene[which(sig.res.key$Category == type)])
+  }
+  
   p.table <- abuntable[match(p.genes, rownames(abuntable)),]
   p.results <- rain(t(p.table), deltat = 4, period = 24, measure.sequence = table(metadata$Timepoint[match(colnames(p.table), metadata$Sample)]), verbose = T, adjp.method = "Bonferroni")
  # sig.p.table <- p.table[which(p.results$pVal < 0.05 & p.results$phase == 12), ]
@@ -121,10 +345,12 @@ phases <- c("4", "8", "12", "16", "20", "24")
 }
 
 cycle1 <- cycle_plot("Photosynthesis", "Mendota")
-#cycle2 <- cycle_plot("ROS", "Mendota")
-#cycle3 <- cycle_plot("Rhodopsin", "Mendota")
+cycle2 <- cycle_plot("Photosynthesis", "Sparkling")
+cycle3 <- cycle_plot("Photosynthesis", "Trout")
 
-save_plot(paste(path,"geodes/Manuscript/figures_and_tables/cyclic_trends.pdf", sep = ""),  cycle1, base_aspect_ratio = 2, base_height = 4)
+x <- plot_grid(cycle1, cycle2, cycle3, nrow = 3)
+
+save_plot(paste(path,"geodes/Manuscript/figures_and_tables/cyclic_trends.pdf", sep = ""),  x, base_aspect_ratio = 1, base_height = 8)
 ```
 
 
